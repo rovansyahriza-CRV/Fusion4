@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enroll Wajah Karyawan</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background:#f4f6f8; }
+  video, canvas { border-radius: 12px; }
+  #wrap { position: relative; width: 320px; margin: 0 auto; }
+  canvas { position: absolute; top: 0; left: 0; }
+  input, button { padding: 10px; font-size: 16px; margin-top: 10px; border-radius: 8px; border: 1px solid #ccc; }
+  button { background:#2b6cb0; color:#fff; border:none; cursor:pointer; }
+  button:disabled { background:#a0aec0; }
+  #status { margin-top: 10px; font-weight: bold; color:#2d3748; }
+  #shots { margin-top: 10px; }
+  .dot { display:inline-block; width:14px; height:14px; border-radius:50%; background:#cbd5e0; margin:2px; }
+  .dot.done { background:#38a169; }
+</style>
+</head>
+<body>
+
+<h2>📋 Enroll Wajah Karyawan</h2>
+<input type="text" id="qrCodeId" placeholder="QrCodeId (contoh: 1Agu12042025)" style="width:250px;"><br>
+<p id="namaPreview" style="color:#2b6cb0; font-weight:bold;"></p>
+
+<div id="wrap">
+  <video id="video" width="320" height="240" autoplay muted playsinline></video>
+  <canvas id="canvas" width="320" height="240"></canvas>
+</div>
+
+<p id="status">Memuat model...</p>
+<div id="shots">
+  <span class="dot" id="dot0"></span>
+  <span class="dot" id="dot1"></span>
+  <span class="dot" id="dot2"></span>
+  <span class="dot" id="dot3"></span>
+</div>
+
+<br>
+<button id="btnCapture" disabled>📸 Ambil Foto (Lurus)</button>
+<button id="btnSave" disabled>💾 Simpan ke Database</button>
+
+<script>
+// ============ KONFIGURASI ============
+// Ganti dengan URL Web App Apps Script kamu setelah deploy
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx3zeLLKtuj9gAX4u2cSpkpItDZlPGmrR1lNDclRRrAU1ajHmXmwN1s4vUbeZuCDSzroA/exec";
+
+const ANGLE_LABELS = [
+  "Lurus ke depan",
+  "Miring sedikit ke KIRI",
+  "Miring sedikit ke KANAN",
+  "Sedikit dongak / tunduk"
+];
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const status = document.getElementById('status');
+const btnCapture = document.getElementById('btnCapture');
+const btnSave = document.getElementById('btnSave');
+const qrInput = document.getElementById('qrCodeId');
+const namaPreview = document.getElementById('namaPreview');
+
+let descriptors = []; // menyimpan 4 descriptor sebelum di-average
+let shotIndex = 0;
+let masterData = [];
+
+async function loadMasterData() {
+  const res = await fetch(APPS_SCRIPT_URL);
+  masterData = await res.json();
+}
+
+qrInput.addEventListener('input', () => {
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
+  namaPreview.innerText = match ? `✅ ${match.nama}` : (qrInput.value.trim() ? "⚠️ QrCodeId tidak ditemukan" : "");
+});
+
+async function init() {
+  status.innerText = "Memuat model wajah & data karyawan...";
+  const MODEL_URL = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  await loadMasterData();
+
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+  video.srcObject = stream;
+
+  status.innerText = `Siap. Arahkan wajah: ${ANGLE_LABELS[0]}`;
+  btnCapture.disabled = false;
+}
+
+btnCapture.onclick = async () => {
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
+  if (!qrInput.value.trim() || !match) {
+    alert("Isi QrCodeId yang valid dulu ya!");
+    return;
+  }
+
+  btnCapture.disabled = true;
+  status.innerText = "Mendeteksi wajah...";
+
+  const detection = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!detection) {
+    status.innerText = "❌ Wajah tidak terdeteksi, coba lagi";
+    btnCapture.disabled = false;
+    return;
+  }
+
+  // gambar kotak deteksi sebagai feedback visual
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  faceapi.draw.drawDetections(canvas, [detection]);
+
+  descriptors.push(Array.from(detection.descriptor));
+  document.getElementById('dot' + shotIndex).classList.add('done');
+  shotIndex++;
+
+  if (shotIndex < 4) {
+    status.innerText = `✅ Foto ${shotIndex}/4 OK. Sekarang: ${ANGLE_LABELS[shotIndex]}`;
+    btnCapture.disabled = false;
+  } else {
+    status.innerText = "✅ Semua 4 foto selesai! Klik Simpan.";
+    btnSave.disabled = false;
+  }
+};
+
+btnSave.onclick = async () => {
+  btnSave.disabled = true;
+  status.innerText = "Menyimpan...";
+
+  // Rata-ratakan 4 descriptor jadi 1 (element-wise average)
+  const avgDescriptor = new Array(128).fill(0);
+  descriptors.forEach(desc => {
+    desc.forEach((val, i) => avgDescriptor[i] += val);
+  });
+  for (let i = 0; i < 128; i++) avgDescriptor[i] /= descriptors.length;
+
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        type: "enroll",
+        qrCodeId: qrInput.value.trim(),
+        descriptor: avgDescriptor
+      }),
+      headers: { "Content-Type": "text/plain" }
+    });
+    status.innerText = `✅ ${match ? match.nama : qrInput.value} berhasil didaftarkan!`;
+  } catch (e) {
+    status.innerText = "❌ Gagal menyimpan, cek koneksi/URL Apps Script";
+  }
+};
+
+init();
+</script>
+</body>
+</html>
