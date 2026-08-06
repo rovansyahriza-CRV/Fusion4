@@ -21,15 +21,29 @@
 <body>
 
 <h2>🧑‍💼 Verifikasi Wajah</h2>
-<p id="namaTarget" class="info">Memuat...</p>
 
-<div id="wrap">
+<div id="checkpointPicker" style="margin-bottom:16px;">
+  <label style="font-weight:bold; display:block; margin-bottom:6px;">Pilih jenis absen:</label>
+  <select id="checkpointSelect" style="padding:10px; font-size:16px; border-radius:8px; border:1px solid #ccc; width:250px;">
+    <option value="masuk1">🟢 Masuk</option>
+    <option value="istirahat">🍽️ Istirahat</option>
+    <option value="masuk2">🔄 Masuk Lagi (habis istirahat)</option>
+    <option value="pulang">🔴 Pulang</option>
+  </select>
+  <br><br>
+  <button id="btnStart" style="background:#2b6cb0; color:#fff; border:none; padding:10px 24px; font-size:16px; border-radius:8px; cursor:pointer;">Mulai Verifikasi</button>
+</div>
+
+<p id="namaTarget" class="info" style="display:none;">Memuat...</p>
+
+<div id="wrap" style="display:none;">
   <video id="video" width="320" height="240" autoplay muted playsinline></video>
   <canvas id="canvas" width="320" height="240"></canvas>
 </div>
 
-<p id="status">Menyiapkan kamera...</p>
-<button id="btnSwitchCam" style="background:#718096; color:#fff; border:none; padding:10px 20px; font-size:16px; border-radius:8px; cursor:pointer;">🔄 Ganti Kamera</button>
+<p id="status" style="display:none;">Menyiapkan kamera...</p>
+<button id="btnSwitchCam" style="display:none; background:#718096; color:#fff; border:none; padding:10px 20px; font-size:16px; border-radius:8px; cursor:pointer;">🔄 Ganti Kamera</button>
+<button id="btnScan" style="display:none; background:#2f855a; color:#fff; border:none; padding:12px 28px; font-size:17px; font-weight:bold; border-radius:8px; cursor:pointer; margin-top:8px;">📸 Scan Sekarang</button>
 <button id="retryBtn">🔁 Coba Lagi</button>
 
 <script>
@@ -49,6 +63,24 @@ const retryBtn = document.getElementById('retryBtn');
 let masterData = [];
 let running = false;
 let currentFacingMode = "user"; // "user" = depan, "environment" = belakang
+let selectedCheckpoint = "masuk1";
+
+const CHECKPOINT_LABELS = {
+  masuk1: "Masuk",
+  istirahat: "Istirahat",
+  masuk2: "Masuk Lagi",
+  pulang: "Pulang"
+};
+
+document.getElementById('btnStart').onclick = () => {
+  selectedCheckpoint = document.getElementById('checkpointSelect').value;
+  document.getElementById('checkpointPicker').style.display = "none";
+  document.getElementById('wrap').style.display = "block";
+  document.getElementById('status').style.display = "block";
+  document.getElementById('btnSwitchCam').style.display = "inline-block";
+  namaTarget.style.display = "block";
+  init();
+};
 
 async function startCamera() {
   if (video.srcObject) {
@@ -102,19 +134,26 @@ async function init() {
       namaTarget.className = "fail";
       return;
     }
-    namaTarget.innerText = "Arahkan wajah ke kamera untuk absen";
+    namaTarget.innerText = `Arahkan wajah ke kamera untuk absen ${CHECKPOINT_LABELS[selectedCheckpoint]}`;
     namaTarget.className = "info";
 
     await startCamera();
 
-    setStatus("👁️ Silakan kedipkan mata untuk verifikasi hidup...", "info");
-    running = true;
-    runLivenessAndMatch();
+    setStatus("Posisikan wajah di kamera, lalu tekan tombol Scan.", "info");
+    document.getElementById('btnScan').style.display = "inline-block";
   } catch (err) {
     setStatus("❌ ERROR: " + err.message, "fail");
     console.error(err);
   }
 }
+
+document.getElementById('btnScan').onclick = () => {
+  document.getElementById('btnScan').disabled = true;
+  document.getElementById('btnScan').style.display = "none";
+  setStatus(REQUIRE_LIVENESS ? "👁️ Silakan kedipkan mata untuk verifikasi hidup..." : "Memproses...", "info");
+  running = true;
+  runLivenessAndMatch();
+};
 
 async function runLivenessAndMatch() {
   let blinkDetected = !REQUIRE_LIVENESS; // kalau liveness dimatikan, anggap lolos otomatis
@@ -189,7 +228,7 @@ async function runLivenessAndMatch() {
 
   if (matched) {
     namaTarget.innerText = `Terdeteksi: ${best.nama}`;
-    setStatus(`✅ Cocok! Mencatat absensi masuk untuk ${best.nama}...`, "ok");
+    setStatus(`✅ Cocok! Mencatat absensi ${CHECKPOINT_LABELS[selectedCheckpoint]} untuk ${best.nama}...`, "ok");
   } else {
     namaTarget.innerText = "Wajah tidak dikenali";
     setStatus(`❌ Wajah tidak dikenali di data manapun (jarak terdekat: ${bestDistance.toFixed(3)}). Absen ditolak.`, "fail");
@@ -204,9 +243,12 @@ async function runLivenessAndMatch() {
   }
 
   if (result && result.status === "duplicate") {
-    setStatus(`⚠️ ${best.nama} sudah absen masuk hari ini.`, "fail");
+    setStatus(`⚠️ ${best.nama} sudah absen ${CHECKPOINT_LABELS[selectedCheckpoint]} hari ini.`, "fail");
   } else if (result && result.status === "ok") {
-    setStatus(`✅ Absensi masuk ${best.nama} berhasil dicatat.`, "ok");
+    setStatus(`✅ Absensi ${CHECKPOINT_LABELS[selectedCheckpoint]} ${best.nama} berhasil dicatat.`, "ok");
+  } else if (result && result.status === "error") {
+    setStatus(`❌ ${result.message}`, "fail");
+    stopAndRetry();
   } else {
     setStatus(`⚠️ Wajah cocok tapi gagal menyimpan ke sheet. Coba lagi.`, "fail");
     stopAndRetry();
@@ -229,7 +271,8 @@ async function sendAttendance(qrCodeId, faceMatched, distance, lokasi) {
     const res = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
       body: JSON.stringify({
-        type: "attendance_masuk",
+        type: "attendance",
+        checkpoint: selectedCheckpoint,
         qrCodeId: qrCodeId,
         faceMatched: faceMatched,
         distance: distance,
@@ -254,7 +297,6 @@ retryBtn.onclick = () => {
   location.reload();
 };
 
-init();
 </script>
 </body>
 </html>
