@@ -3,223 +3,168 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Verifikasi Wajah Absensi</title>
+<title>Enroll Wajah Karyawan</title>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <style>
   body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background:#f4f6f8; }
-  #wrap { position: relative; width: 320px; margin: 0 auto; }
   video, canvas { border-radius: 12px; }
+  #wrap { position: relative; width: 320px; margin: 0 auto; }
   canvas { position: absolute; top: 0; left: 0; }
-  #status { margin-top: 14px; font-weight: bold; font-size: 17px; min-height: 50px; }
-  .ok { color: #2f855a; }
-  .fail { color: #c53030; }
-  .info { color: #2b6cb0; }
-  #retryBtn { display:none; margin-top:10px; padding:10px 20px; font-size:16px;
-              background:#2b6cb0; color:#fff; border:none; border-radius:8px; cursor:pointer; }
+  input, button { padding: 10px; font-size: 16px; margin-top: 10px; border-radius: 8px; border: 1px solid #ccc; }
+  button { background:#2b6cb0; color:#fff; border:none; cursor:pointer; }
+  button:disabled { background:#a0aec0; }
+  #status { margin-top: 10px; font-weight: bold; color:#2d3748; }
+  #shots { margin-top: 10px; }
+  .dot { display:inline-block; width:14px; height:14px; border-radius:50%; background:#cbd5e0; margin:2px; }
+  .dot.done { background:#38a169; }
 </style>
 </head>
 <body>
 
-<h2>🧑‍💼 Verifikasi Wajah</h2>
-<p id="namaTarget" class="info">Memuat...</p>
+<h2>📋 Enroll Wajah Karyawan</h2>
+<input type="text" id="qrCodeId" placeholder="QrCodeId (contoh: 1Agu12042025)" style="width:250px;"><br>
+<p id="namaPreview" style="color:#2b6cb0; font-weight:bold;"></p>
 
 <div id="wrap">
   <video id="video" width="320" height="240" autoplay muted playsinline></video>
   <canvas id="canvas" width="320" height="240"></canvas>
 </div>
 
-<p id="status">Menyiapkan kamera...</p>
-<button id="retryBtn">🔁 Coba Lagi</button>
+<p id="status">Memuat model...</p>
+<div id="shots">
+  <span class="dot" id="dot0"></span>
+  <span class="dot" id="dot1"></span>
+  <span class="dot" id="dot2"></span>
+  <span class="dot" id="dot3"></span>
+</div>
+
+<br>
+<button id="btnCapture" disabled>📸 Ambil Foto (Lurus)</button>
+<button id="btnSave" disabled>💾 Simpan ke Database</button>
 
 <script>
 // ============ KONFIGURASI ============
+// Ganti dengan URL Web App Apps Script kamu setelah deploy
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx3zeLLKtuj9gAX4u2cSpkpItDZlPGmrR1lNDclRRrAU1ajHmXmwN1s4vUbeZuCDSzroA/exec";
-const MATCH_THRESHOLD = 0.55; // makin kecil = makin ketat. 0.5-0.6 disarankan
-const EAR_BLINK_THRESHOLD = 0.23; // di bawah ini dianggap mata tertutup
+
+const ANGLE_LABELS = [
+  "Lurus ke depan",
+  "Miring sedikit ke KIRI",
+  "Miring sedikit ke KANAN",
+  "Sedikit dongak / tunduk"
+];
 
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const status = document.getElementById('status');
-const namaTarget = document.getElementById('namaTarget');
-const retryBtn = document.getElementById('retryBtn');
+const btnCapture = document.getElementById('btnCapture');
+const btnSave = document.getElementById('btnSave');
+const qrInput = document.getElementById('qrCodeId');
+const namaPreview = document.getElementById('namaPreview');
 
-// Tidak butuh param QR lagi — identitas ditentukan dari hasil cocok wajah
+let descriptors = []; // menyimpan 4 descriptor sebelum di-average
+let shotIndex = 0;
 let masterData = [];
-let running = false;
-
-function setStatus(text, cls) {
-  status.innerText = text;
-  status.className = cls || "";
-}
-
-function eyeAspectRatio(eye) {
-  // eye = array 6 titik landmark mata
-  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const vertical = (dist(eye[1], eye[5]) + dist(eye[2], eye[4])) / 2;
-  const horizontal = dist(eye[0], eye[3]);
-  return vertical / horizontal;
-}
 
 async function loadMasterData() {
   const res = await fetch(APPS_SCRIPT_URL);
   masterData = await res.json();
 }
 
+qrInput.addEventListener('input', () => {
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
+  namaPreview.innerText = match ? `✅ ${match.nama}` : (qrInput.value.trim() ? "⚠️ QrCodeId tidak ditemukan" : "");
+});
+
 async function init() {
-  setStatus("Memuat model & data karyawan...");
-  const MODEL_URL = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
-  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-  await loadMasterData();
+  try {
+    status.innerText = "Memuat model wajah...";
+    const MODEL_URL = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    status.innerText = "Model 1/3 OK. Memuat model 2...";
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    status.innerText = "Model 2/3 OK. Memuat model 3...";
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    status.innerText = "Semua model OK. Memuat data karyawan...";
+    await loadMasterData();
+    status.innerText = "Data karyawan OK. Membuka kamera...";
 
-  const enrolledCount = masterData.filter(m => m.descriptor).length;
-  if (enrolledCount === 0) {
-    namaTarget.innerText = "❌ Belum ada data wajah terdaftar di Face_data";
-    namaTarget.className = "fail";
-    return;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    video.srcObject = stream;
+
+    status.innerText = `Siap. Arahkan wajah: ${ANGLE_LABELS[0]}`;
+    btnCapture.disabled = false;
+  } catch (err) {
+    status.innerText = "❌ ERROR: " + err.message;
+    console.error(err);
   }
-  namaTarget.innerText = "Arahkan wajah ke kamera untuk absen";
-  namaTarget.className = "info";
-
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-  video.srcObject = stream;
-
-  setStatus("👁️ Silakan kedipkan mata untuk verifikasi hidup...", "info");
-  running = true;
-  runLivenessAndMatch();
 }
 
-async function runLivenessAndMatch() {
-  let earHistory = [];
-  let blinkDetected = false;
-  let attempts = 0;
-  const maxAttempts = 150; // ~ batas waktu percobaan (sekitar 15-20 detik tergantung interval)
-
-  while (running && attempts < maxAttempts && !blinkDetected) {
-    attempts++;
-    const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-      .withFaceLandmarks();
-
-    if (detection) {
-      const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye());
-      const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye());
-      const avgEAR = (leftEAR + rightEAR) / 2;
-      earHistory.push(avgEAR);
-      if (earHistory.length > 10) earHistory.shift();
-
-      // deteksi pola: buka -> tertutup -> buka (bukan foto statis)
-      if (earHistory.length >= 5) {
-        const hadOpen = earHistory.some(v => v > EAR_BLINK_THRESHOLD + 0.05);
-        const hadClosed = earHistory.some(v => v < EAR_BLINK_THRESHOLD);
-        if (hadOpen && hadClosed) {
-          blinkDetected = true;
-        }
-      }
-    }
-    await new Promise(r => setTimeout(r, 120));
-  }
-
-  if (!blinkDetected) {
-    setStatus("❌ Tidak terdeteksi kedipan (kemungkinan foto statis). Absen ditolak.", "fail");
-    stopAndRetry();
+btnCapture.onclick = async () => {
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
+  if (!qrInput.value.trim() || !match) {
+    alert("Isi QrCodeId yang valid dulu ya!");
     return;
   }
 
-  setStatus("✅ Liveness OK. Mencari kecocokan wajah...", "info");
+  btnCapture.disabled = true;
+  status.innerText = "Mendeteksi wajah...";
 
-  // ambil 1 frame segar untuk descriptor final
-  const finalDetection = await faceapi
+  const detection = await faceapi
     .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
     .withFaceLandmarks()
     .withFaceDescriptor();
 
-  if (!finalDetection) {
-    setStatus("❌ Wajah tidak terdeteksi saat pengambilan akhir. Coba lagi.", "fail");
-    stopAndRetry();
+  if (!detection) {
+    status.innerText = "❌ Wajah tidak terdeteksi, coba lagi";
+    btnCapture.disabled = false;
     return;
   }
 
-  // cari kandidat terdekat dari SEMUA data di Face_data yang SUDAH enroll (1:N)
-  let best = null;
-  let bestDistance = Infinity;
-  masterData.forEach(person => {
-    if (!person.descriptor) return; // skip yang belum enroll wajah
-    const d = faceapi.euclideanDistance(finalDetection.descriptor, person.descriptor);
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = person;
-    }
-  });
+  // gambar kotak deteksi sebagai feedback visual
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  faceapi.draw.drawDetections(canvas, [detection]);
 
-  const matched = best && bestDistance <= MATCH_THRESHOLD;
+  descriptors.push(Array.from(detection.descriptor));
+  document.getElementById('dot' + shotIndex).classList.add('done');
+  shotIndex++;
 
-  if (matched) {
-    namaTarget.innerText = `Terdeteksi: ${best.nama}`;
-    setStatus(`✅ Cocok! Mencatat absensi masuk untuk ${best.nama}...`, "ok");
+  if (shotIndex < 4) {
+    status.innerText = `✅ Foto ${shotIndex}/4 OK. Sekarang: ${ANGLE_LABELS[shotIndex]}`;
+    btnCapture.disabled = false;
   } else {
-    namaTarget.innerText = "Wajah tidak dikenali";
-    setStatus(`❌ Wajah tidak dikenali di data manapun (jarak terdekat: ${bestDistance.toFixed(3)}). Absen ditolak.`, "fail");
+    status.innerText = "✅ Semua 4 foto selesai! Klik Simpan.";
+    btnSave.disabled = false;
   }
+};
 
-  const lokasi = await getLokasi();
-  const result = matched ? await sendAttendance(best.qrCodeId, matched, bestDistance, lokasi) : null;
+btnSave.onclick = async () => {
+  btnSave.disabled = true;
+  status.innerText = "Menyimpan...";
 
-  if (!matched) {
-    stopAndRetry();
-    return;
-  }
-
-  if (result && result.status === "duplicate") {
-    setStatus(`⚠️ ${best.nama} sudah absen masuk hari ini.`, "fail");
-  } else if (result && result.status === "ok") {
-    setStatus(`✅ Absensi masuk ${best.nama} berhasil dicatat.`, "ok");
-  } else {
-    setStatus(`⚠️ Wajah cocok tapi gagal menyimpan ke sheet. Coba lagi.`, "fail");
-    stopAndRetry();
-  }
-}
-
-function getLokasi() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) { resolve(""); return; }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve(`${pos.coords.latitude.toFixed(5)},${pos.coords.longitude.toFixed(5)}`),
-      () => resolve(""), // kalau ditolak/gagal, tetap lanjut tanpa lokasi
-      { timeout: 5000 }
-    );
+  // Rata-ratakan 4 descriptor jadi 1 (element-wise average)
+  const avgDescriptor = new Array(128).fill(0);
+  descriptors.forEach(desc => {
+    desc.forEach((val, i) => avgDescriptor[i] += val);
   });
-}
+  for (let i = 0; i < 128; i++) avgDescriptor[i] /= descriptors.length;
 
-async function sendAttendance(qrCodeId, faceMatched, distance, lokasi) {
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
   try {
-    const res = await fetch(APPS_SCRIPT_URL, {
+    await fetch(APPS_SCRIPT_URL, {
       method: "POST",
       body: JSON.stringify({
-        type: "attendance_masuk",
-        qrCodeId: qrCodeId,
-        faceMatched: faceMatched,
-        distance: distance,
-        lokasi: lokasi
+        type: "enroll",
+        qrCodeId: qrInput.value.trim(),
+        descriptor: avgDescriptor
       }),
       headers: { "Content-Type": "text/plain" }
     });
-    return await res.json();
+    status.innerText = `✅ ${match ? match.nama : qrInput.value} berhasil didaftarkan!`;
   } catch (e) {
-    console.error("Gagal kirim absensi:", e);
-    return null;
+    status.innerText = "❌ Gagal menyimpan, cek koneksi/URL Apps Script";
   }
-}
-
-function stopAndRetry() {
-  running = false;
-  retryBtn.style.display = "inline-block";
-}
-
-retryBtn.onclick = () => {
-  retryBtn.style.display = "none";
-  location.reload();
 };
 
 init();
