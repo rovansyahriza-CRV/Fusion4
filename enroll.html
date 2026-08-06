@@ -86,6 +86,7 @@ async function startCamera() {
   }
   const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } });
   video.srcObject = stream;
+  await video.play();
 }
 
 document.getElementById('btnSwitchCam').onclick = async () => {
@@ -132,7 +133,7 @@ btnCapture.onclick = async () => {
   status.innerText = "Mendeteksi wajah...";
 
   const detection = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
 
