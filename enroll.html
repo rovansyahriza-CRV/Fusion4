@@ -172,6 +172,10 @@ btnSave.onclick = async () => {
   });
   for (let i = 0; i < 128; i++) avgDescriptor[i] /= descriptors.length;
 
+  // Bulatkan ke 5 desimal -- cukup presisi buat matching, tapi ukuran teks jauh lebih kecil
+  // (mengurangi ukuran data ~2-3x, jadi loading attendance.html lebih cepat)
+  const compactDescriptor = avgDescriptor.map(v => Math.round(v * 100000) / 100000);
+
   const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
   try {
     await fetch(APPS_SCRIPT_URL, {
@@ -179,7 +183,7 @@ btnSave.onclick = async () => {
       body: JSON.stringify({
         type: "enroll",
         qrCodeId: qrInput.value.trim(),
-        descriptor: avgDescriptor
+        descriptor: compactDescriptor
       }),
       headers: { "Content-Type": "text/plain" }
     });
