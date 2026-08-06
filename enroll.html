@@ -39,6 +39,8 @@
 </div>
 
 <br>
+<button id="btnSwitchCam" style="background:#718096;">🔄 Ganti Kamera</button>
+<br>
 <button id="btnCapture" disabled>📸 Ambil Foto (Lurus)</button>
 <button id="btnSave" disabled>💾 Simpan ke Database</button>
 
@@ -76,6 +78,26 @@ qrInput.addEventListener('input', () => {
   namaPreview.innerText = match ? `✅ ${match.nama}` : (qrInput.value.trim() ? "⚠️ QrCodeId tidak ditemukan" : "");
 });
 
+let currentFacingMode = "user"; // "user" = depan, "environment" = belakang
+
+async function startCamera() {
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } });
+  video.srcObject = stream;
+}
+
+document.getElementById('btnSwitchCam').onclick = async () => {
+  currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+  try {
+    await startCamera();
+    status.innerText = `Kamera diganti ke: ${currentFacingMode === "user" ? "Depan" : "Belakang"}`;
+  } catch (err) {
+    status.innerText = "❌ Gagal ganti kamera: " + err.message;
+  }
+};
+
 async function init() {
   try {
     status.innerText = "Memuat model wajah...";
@@ -89,8 +111,7 @@ async function init() {
     await loadMasterData();
     status.innerText = "Data karyawan OK. Membuka kamera...";
 
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-    video.srcObject = stream;
+    await startCamera();
 
     status.innerText = `Siap. Arahkan wajah: ${ANGLE_LABELS[0]}`;
     btnCapture.disabled = false;
