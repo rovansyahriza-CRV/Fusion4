@@ -79,7 +79,7 @@ qrInput.addEventListener('input', () => {
 async function init() {
   try {
     status.innerText = "Memuat model wajah...";
-    const MODEL_URL = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
+    const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
     status.innerText = "Model 1/3 OK. Memuat model 2...";
     await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
