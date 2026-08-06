@@ -8,13 +8,11 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
   body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background:#f4f6f8; }
-  video, canvas { border-radius: 12px; }
-  #wrap { position: relative; width: 100%; max-width: 420px; margin: 0 auto; }
-  video { width: 100%; height: auto; display: block; }
-  canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  #wrap { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1 / 1; margin: 0 auto; overflow: hidden; border-radius: 12px; background:#000; }
+  video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
   #qrGuide {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 65%; aspect-ratio: 1 / 1;
+    width: 70%; aspect-ratio: 1 / 1;
     border: 4px dashed #38a169; border-radius: 12px;
     display: none; pointer-events: none;
     box-shadow: 0 0 0 999px rgba(0,0,0,0.25);
@@ -124,9 +122,22 @@ async function scanQRLoop() {
         qrScanning = false;
         btnScanQR.innerText = "📷 Scan QR";
         document.getElementById('qrGuide').style.display = "none";
-        qrInput.value = code.data.trim();
+
+        // QR bisa berisi teks polos ("3Har08032026") ATAU URL lengkap
+        // (".../exec?QrCodeId=3Har08032026") -- ekstrak ID-nya di kedua kasus
+        const rawData = code.data.trim();
+        let extractedId = rawData;
+        try {
+          const url = new URL(rawData);
+          const paramId = url.searchParams.get('QrCodeId') || url.searchParams.get('qrCodeId') || url.searchParams.get('qrcodeid');
+          if (paramId) extractedId = paramId;
+        } catch (e) {
+          // bukan URL valid, berarti memang teks ID polos -> pakai apa adanya
+        }
+
+        qrInput.value = extractedId;
         qrInput.dispatchEvent(new Event('input')); // trigger pengecekan nama
-        status.innerText = `✅ QR terbaca: ${code.data.trim()}`;
+        status.innerText = `✅ QR terbaca: ${extractedId}`;
         return;
       }
     }
