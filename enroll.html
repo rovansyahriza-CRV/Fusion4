@@ -108,7 +108,7 @@ btnScanQR.onclick = () => {
   qrScanning = true;
   btnScanQR.innerText = "⏹️ Batal Scan";
   document.getElementById('qrGuide').style.display = "block";
-  status.innerText = "Posisikan QR Code di dalam kotak hijau...";
+  status.innerText = `Posisikan QR di kotak hijau... (kamera: ${video.videoWidth}x${video.videoHeight})`;
   scanQRLoop();
 };
 
@@ -119,7 +119,7 @@ async function scanQRLoop() {
       qrCanvas.height = video.videoHeight;
       qrCtx.drawImage(video, 0, 0, qrCanvas.width, qrCanvas.height);
       const imageData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
       if (code && code.data) {
         qrScanning = false;
         btnScanQR.innerText = "📷 Scan QR";
@@ -130,7 +130,7 @@ async function scanQRLoop() {
         return;
       }
     }
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 100));
   }
 }
 
@@ -152,6 +152,7 @@ async function startCamera() {
   // samakan resolusi internal canvas dengan video asli, biar kotak deteksi wajah tetap presisi
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
+  console.log(`Resolusi kamera aktual: ${video.videoWidth}x${video.videoHeight}`);
 }
 
 document.getElementById('btnSwitchCam').onclick = async () => {
