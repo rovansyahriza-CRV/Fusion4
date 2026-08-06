@@ -77,18 +77,27 @@ qrInput.addEventListener('input', () => {
 });
 
 async function init() {
-  status.innerText = "Memuat model wajah & data karyawan...";
-  const MODEL_URL = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
-  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-  await loadMasterData();
+  try {
+    status.innerText = "Memuat model wajah...";
+    const MODEL_URL = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    status.innerText = "Model 1/3 OK. Memuat model 2...";
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    status.innerText = "Model 2/3 OK. Memuat model 3...";
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    status.innerText = "Semua model OK. Memuat data karyawan...";
+    await loadMasterData();
+    status.innerText = "Data karyawan OK. Membuka kamera...";
 
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-  video.srcObject = stream;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    video.srcObject = stream;
 
-  status.innerText = `Siap. Arahkan wajah: ${ANGLE_LABELS[0]}`;
-  btnCapture.disabled = false;
+    status.innerText = `Siap. Arahkan wajah: ${ANGLE_LABELS[0]}`;
+    btnCapture.disabled = false;
+  } catch (err) {
+    status.innerText = "❌ ERROR: " + err.message;
+    console.error(err);
+  }
 }
 
 btnCapture.onclick = async () => {
