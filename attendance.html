@@ -29,6 +29,7 @@
 </div>
 
 <p id="status">Menyiapkan kamera...</p>
+<button id="btnSwitchCam" style="background:#718096; color:#fff; border:none; padding:10px 20px; font-size:16px; border-radius:8px; cursor:pointer;">🔄 Ganti Kamera</button>
 <button id="retryBtn">🔁 Coba Lagi</button>
 
 <script>
@@ -46,6 +47,26 @@ const retryBtn = document.getElementById('retryBtn');
 // Tidak butuh param QR lagi — identitas ditentukan dari hasil cocok wajah
 let masterData = [];
 let running = false;
+let currentFacingMode = "user"; // "user" = depan, "environment" = belakang
+
+async function startCamera() {
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } });
+  video.srcObject = stream;
+  await video.play();
+}
+
+document.getElementById('btnSwitchCam').onclick = async () => {
+  currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+  try {
+    await startCamera();
+    setStatus(`Kamera diganti ke: ${currentFacingMode === "user" ? "Depan" : "Belakang"}`, "info");
+  } catch (err) {
+    setStatus("❌ Gagal ganti kamera: " + err.message, "fail");
+  }
+};
 
 function setStatus(text, cls) {
   status.innerText = text;
@@ -66,28 +87,32 @@ async function loadMasterData() {
 }
 
 async function init() {
-  setStatus("Memuat model & data karyawan...");
-  const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
-  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-  await loadMasterData();
+  try {
+    setStatus("Memuat model & data karyawan...");
+    const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    await loadMasterData();
 
-  const enrolledCount = masterData.filter(m => m.descriptor).length;
-  if (enrolledCount === 0) {
-    namaTarget.innerText = "❌ Belum ada data wajah terdaftar di Face_data";
-    namaTarget.className = "fail";
-    return;
+    const enrolledCount = masterData.filter(m => m.descriptor).length;
+    if (enrolledCount === 0) {
+      namaTarget.innerText = "❌ Belum ada data wajah terdaftar di Face_data";
+      namaTarget.className = "fail";
+      return;
+    }
+    namaTarget.innerText = "Arahkan wajah ke kamera untuk absen";
+    namaTarget.className = "info";
+
+    await startCamera();
+
+    setStatus("👁️ Silakan kedipkan mata untuk verifikasi hidup...", "info");
+    running = true;
+    runLivenessAndMatch();
+  } catch (err) {
+    setStatus("❌ ERROR: " + err.message, "fail");
+    console.error(err);
   }
-  namaTarget.innerText = "Arahkan wajah ke kamera untuk absen";
-  namaTarget.className = "info";
-
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-  video.srcObject = stream;
-
-  setStatus("👁️ Silakan kedipkan mata untuk verifikasi hidup...", "info");
-  running = true;
-  runLivenessAndMatch();
 }
 
 async function runLivenessAndMatch() {
@@ -99,7 +124,7 @@ async function runLivenessAndMatch() {
   while (running && attempts < maxAttempts && !blinkDetected) {
     attempts++;
     const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
       .withFaceLandmarks();
 
     if (detection) {
@@ -131,7 +156,7 @@ async function runLivenessAndMatch() {
 
   // ambil 1 frame segar untuk descriptor final
   const finalDetection = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
 
