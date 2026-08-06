@@ -73,7 +73,8 @@ async function init() {
   await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
   await loadMasterData();
 
-  if (masterData.length === 0) {
+  const enrolledCount = masterData.filter(m => m.descriptor).length;
+  if (enrolledCount === 0) {
     namaTarget.innerText = "❌ Belum ada data wajah terdaftar di Face_data";
     namaTarget.className = "fail";
     return;
@@ -140,10 +141,11 @@ async function runLivenessAndMatch() {
     return;
   }
 
-  // cari kandidat terdekat dari SEMUA data di Face_data (1:N)
+  // cari kandidat terdekat dari SEMUA data di Face_data yang SUDAH enroll (1:N)
   let best = null;
   let bestDistance = Infinity;
   masterData.forEach(person => {
+    if (!person.descriptor) return; // skip yang belum enroll wajah
     const d = faceapi.euclideanDistance(finalDetection.descriptor, person.descriptor);
     if (d < bestDistance) {
       bestDistance = d;
