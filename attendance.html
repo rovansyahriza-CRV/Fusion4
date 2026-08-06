@@ -37,6 +37,7 @@
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx3zeLLKtuj9gAX4u2cSpkpItDZlPGmrR1lNDclRRrAU1ajHmXmwN1s4vUbeZuCDSzroA/exec";
 const MATCH_THRESHOLD = 0.55; // makin kecil = makin ketat. 0.5-0.6 disarankan
 const EAR_BLINK_THRESHOLD = 0.23; // di bawah ini dianggap mata tertutup
+const REQUIRE_LIVENESS = false; // set true kalau sudah siap production (wajib kedip)
 
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
@@ -116,34 +117,40 @@ async function init() {
 }
 
 async function runLivenessAndMatch() {
-  let earHistory = [];
-  let blinkDetected = false;
-  let attempts = 0;
-  const maxAttempts = 150; // ~ batas waktu percobaan (sekitar 15-20 detik tergantung interval)
+  let blinkDetected = !REQUIRE_LIVENESS; // kalau liveness dimatikan, anggap lolos otomatis
 
-  while (running && attempts < maxAttempts && !blinkDetected) {
-    attempts++;
-    const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
-      .withFaceLandmarks();
+  if (REQUIRE_LIVENESS) {
+    let earHistory = [];
+    let attempts = 0;
+    const maxAttempts = 150; // ~ batas waktu percobaan (sekitar 15-20 detik tergantung interval)
 
-    if (detection) {
-      const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye());
-      const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye());
-      const avgEAR = (leftEAR + rightEAR) / 2;
-      earHistory.push(avgEAR);
-      if (earHistory.length > 10) earHistory.shift();
+    while (running && attempts < maxAttempts && !blinkDetected) {
+      attempts++;
+      const detection = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+        .withFaceLandmarks();
 
-      // deteksi pola: buka -> tertutup -> buka (bukan foto statis)
-      if (earHistory.length >= 5) {
-        const hadOpen = earHistory.some(v => v > EAR_BLINK_THRESHOLD + 0.05);
-        const hadClosed = earHistory.some(v => v < EAR_BLINK_THRESHOLD);
-        if (hadOpen && hadClosed) {
-          blinkDetected = true;
+      if (detection) {
+        const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye());
+        const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye());
+        const avgEAR = (leftEAR + rightEAR) / 2;
+        earHistory.push(avgEAR);
+        if (earHistory.length > 10) earHistory.shift();
+
+        // deteksi pola: buka -> tertutup -> buka (bukan foto statis)
+        if (earHistory.length >= 5) {
+          const hadOpen = earHistory.some(v => v > EAR_BLINK_THRESHOLD + 0.05);
+          const hadClosed = earHistory.some(v => v < EAR_BLINK_THRESHOLD);
+          if (hadOpen && hadClosed) {
+            blinkDetected = true;
+          }
         }
       }
+      await new Promise(r => setTimeout(r, 120));
     }
-    await new Promise(r => setTimeout(r, 120));
+  } else {
+    setStatus("⚠️ Mode testing: liveness check dinonaktifkan sementara", "info");
+    await new Promise(r => setTimeout(r, 800)); // jeda kecil biar sempat kebaca statusnya
   }
 
   if (!blinkDetected) {
