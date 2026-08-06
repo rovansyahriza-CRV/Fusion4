@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="id"> 
+<html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Enroll Wajah Karyawan</title>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
   body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background:#f4f6f8; }
   video, canvas { border-radius: 12px; }
@@ -22,7 +23,9 @@
 <body>
 
 <h2>📋 Enroll Wajah Karyawan</h2>
-<input type="text" id="qrCodeId" placeholder="QrCodeId (contoh: 1Agu12042025)" style="width:250px;"><br>
+<input type="text" id="qrCodeId" placeholder="QrCodeId (contoh: 1Agu12042025)" style="width:220px;">
+<button id="btnScanQR" style="padding:10px 14px;">📷 Scan QR</button>
+<br>
 <p id="namaPreview" style="color:#2b6cb0; font-weight:bold;"></p>
 
 <div id="wrap">
@@ -78,6 +81,47 @@ qrInput.addEventListener('input', () => {
   namaPreview.innerText = match ? `✅ ${match.nama}` : (qrInput.value.trim() ? "⚠️ QrCodeId tidak ditemukan" : "");
 });
 
+// ============ SCAN QR CODE ============
+let qrScanning = false;
+const btnScanQR = document.getElementById('btnScanQR');
+const qrCanvas = document.createElement('canvas'); // canvas tersembunyi khusus buat baca QR
+const qrCtx = qrCanvas.getContext('2d', { willReadFrequently: true });
+
+btnScanQR.onclick = () => {
+  if (qrScanning) {
+    // lagi scan -> tombol berfungsi buat batalin
+    qrScanning = false;
+    btnScanQR.innerText = "📷 Scan QR";
+    status.innerText = "Scan QR dibatalkan.";
+    return;
+  }
+  qrScanning = true;
+  btnScanQR.innerText = "⏹️ Batal Scan";
+  status.innerText = "Arahkan kamera ke QR Code karyawan...";
+  scanQRLoop();
+};
+
+async function scanQRLoop() {
+  while (qrScanning) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+      qrCanvas.width = video.videoWidth;
+      qrCanvas.height = video.videoHeight;
+      qrCtx.drawImage(video, 0, 0, qrCanvas.width, qrCanvas.height);
+      const imageData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code && code.data) {
+        qrScanning = false;
+        btnScanQR.innerText = "📷 Scan QR";
+        qrInput.value = code.data.trim();
+        qrInput.dispatchEvent(new Event('input')); // trigger pengecekan nama
+        status.innerText = `✅ QR terbaca: ${code.data.trim()}`;
+        return;
+      }
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+}
+
 let currentFacingMode = "user"; // "user" = depan, "environment" = belakang
 
 async function startCamera() {
@@ -125,8 +169,14 @@ async function init() {
 btnCapture.onclick = async () => {
   const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
   if (!qrInput.value.trim() || !match) {
-    alert("Isi QrCodeId yang valid dulu ya!");
+    alert("Isi QrCodeId yang valid dulu ya! (bisa ketik manual atau klik Scan QR)");
     return;
+  }
+
+  // pastikan scan QR berhenti kalau masih jalan
+  if (qrScanning) {
+    qrScanning = false;
+    btnScanQR.innerText = "📷 Scan QR";
   }
 
   btnCapture.disabled = true;
