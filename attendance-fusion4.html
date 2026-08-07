@@ -112,6 +112,12 @@
     </div>
   </div>
 
+  <div id="entryCard" class="card" style="display:none;">
+    <p class="card-label">Absensi</p>
+    <button id="btnStartFaceFirst" class="btn-block btn-accent">📸 Scan Wajah</button>
+    <button id="btnShowQrOption" class="btn-block btn-secondary">📷 Atau Scan QR Code</button>
+  </div>
+
   <div id="qrCard" class="card" style="display:none;">
     <p class="card-label">Scan QR Badge Anda</p>
     <button id="btnStartQrScan" class="btn-block btn-primary">📷 Buka Kamera & Scan QR</button>
@@ -130,6 +136,7 @@
 
   <p id="status">Menyiapkan...</p>
   <button id="btnScanFace" class="btn-block btn-accent" style="display:none;">📸 Scan Wajah</button>
+  <button id="btnFallbackToQr" class="btn-block btn-secondary" style="display:none;">📷 Pakai QR Code Saja</button>
 
   <div id="passwordCard" class="card" style="display:none;">
     <p class="card-label">Password Otorisasi</p>
@@ -168,6 +175,8 @@ let activeLocation = "";
 let currentPerson = null;
 let refDescriptor = null;
 let faceVerified = false;
+let matchMode = "1:1"; // "1:1" (QR dulu, verifikasi ke 1 orang) atau "1:N" (wajah dulu, cari dari semua)
+let allFaceData = null; // cache daftar semua descriptor, buat mode 1:N
 
 const locBanner = document.getElementById('locBanner');
 const resultBanner = document.getElementById('resultBanner');
@@ -261,12 +270,11 @@ function handleLocationResult(result) {
     "🟢 Kelompok: " + activeLocation + " | Jarak: " + (result.Distance ?? "-") + "m | Radius: " + (result.Radius || "-") + "m",
     "ok");
 
-  if (!qrCodeId) {
-    setStatus("GPS siap. Menunggu QR Code di-scan...", "info");
-    setStatus("⚠️ Tidak ada QrCodeId di URL. Silakan scan QR Code karyawan dari awal.", "fail");
-    return;
-  }
-  proceedWithQr();
+  // Selalu munculkan pilihan Scan Wajah / Scan QR -- tidak ada lagi jalur
+  // otomatis langsung ke verifikasi 1:1, walau QrCodeId sudah terbawa dari
+  // redirect QR fisik (biar konsisten, user tetap yang pilih caranya).
+  setStatus("Pilih cara absen di bawah ini.", "info");
+  document.getElementById('entryCard').style.display = "block";
 }
 
 // ============ 2. AMBIL DATA PERSON ============
@@ -293,8 +301,68 @@ async function proceedWithQr() {
   }
 }
 
-// ============ 3. VERIFIKASI WAJAH ============
+// ============ 2b. ENTRY: PILIH FACE-FIRST (utama) ATAU QR (cadangan) ============
+document.getElementById('btnStartFaceFirst').onclick = async () => {
+  document.getElementById('entryCard').style.display = "none";
+  await startFaceOnlyCapture();
+};
+
+document.getElementById('btnShowQrOption').onclick = () => {
+  document.getElementById('entryCard').style.display = "none";
+  if (qrCodeId) {
+    // QrCodeId sudah ada (dari redirect QR fisik) -- nggak perlu scan ulang
+    proceedWithQr();
+  } else {
+    qrCard.style.display = "block";
+  }
+};
+
+// Mode 1:N -- scan wajah dulu, sistem cari sendiri orangnya dari SEMUA yang sudah enroll
+async function startFaceOnlyCapture() {
+  matchMode = "1:N";
+  setStatus("Memuat model wajah...", "info");
+  statusEl.style.display = "block";
+  try {
+    const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  } catch (e) {
+    setStatus("❌ Gagal memuat model wajah: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("Mengambil data wajah karyawan...", "info");
+  try {
+    allFaceData = await callApi("GET_ALL_FACE_DATA", {});
+  } catch (e) {
+    setStatus("❌ Gagal ambil data wajah: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+  if (!allFaceData || allFaceData.length === 0) {
+    setStatus("❌ Belum ada data wajah terdaftar sama sekali. Hubungi admin.", "fail");
+    showRetry();
+    return;
+  }
+
+  try {
+    await ensureCameraStream("user");
+  } catch (e) {
+    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
+  btnScanFace.style.display = "block";
+  btnScanFace.disabled = false;
+}
+
+// ============ 3. VERIFIKASI WAJAH (mode 1:1, identitas sudah pasti dari QR) ============
 async function startFaceVerification() {
+  matchMode = "1:1";
   setStatus("Memuat model wajah...", "info");
   try {
     const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
@@ -317,12 +385,7 @@ async function startFaceVerification() {
   refDescriptor = refResult.descriptor;
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    video.srcObject = stream;
-    await video.play();
-    wrap.style.display = "block";
+    await ensureCameraStream("user");
   } catch (e) {
     setStatus("❌ Gagal akses kamera: " + e.message, "fail");
     showRetry();
@@ -349,6 +412,45 @@ btnScanFace.onclick = async () => {
     return;
   }
 
+  if (matchMode === "1:N") {
+    // Cari kandidat terdekat dari SEMUA wajah yang sudah enroll
+    let best = null, bestDistance = Infinity;
+    allFaceData.forEach(p => {
+      const d = faceapi.euclideanDistance(detection.descriptor, p.descriptor);
+      if (d < bestDistance) { bestDistance = d; best = p; }
+    });
+    const matched = best && bestDistance <= FACE_MATCH_THRESHOLD;
+
+    if (!matched) {
+      setStatus(`❌ Wajah tidak dikenali (jarak terdekat: ${bestDistance.toFixed(3)}). Coba lagi, atau pakai QR Code sebagai cadangan.`, "fail");
+      btnScanFace.disabled = false;
+      document.getElementById('btnFallbackToQr').style.display = "block";
+      return;
+    }
+
+    qrCodeId = best.qrCodeId;
+    setStatus("✅ Wajah dikenali! Mengambil data karyawan...", "ok");
+    stopCamera();
+    faceVerified = true;
+
+    try {
+      const paketData = await callApi("GET_PERSON_DATA", { qrCodeId: qrCodeId });
+      if (!paketData || paketData.status === "NOT_FOUND" || paketData.status === "REJECTED" || !paketData.person) {
+        setStatus("❌ " + (paketData ? paketData.message : "Data karyawan tidak valid."), "fail");
+        showRetry();
+        return;
+      }
+      currentPerson = paketData.person;
+      currentPerson._needAuth = !!(paketData.authReq && paketData.authReq.needAuth);
+      checkIjinThenProceed();
+    } catch (e) {
+      setStatus("❌ Gagal ambil data: " + e.message, "fail");
+      showRetry();
+    }
+    return;
+  }
+
+  // ---- Mode 1:1 (identitas sudah pasti dari QR) ----
   const distance = faceapi.euclideanDistance(detection.descriptor, refDescriptor);
   const matched = distance <= FACE_MATCH_THRESHOLD;
 
@@ -362,6 +464,19 @@ btnScanFace.onclick = async () => {
   stopCamera();
   faceVerified = true;
   checkIjinThenProceed();
+};
+
+// Fallback: kalau mode 1:N gagal kenali wajah, tawarkan pindah ke QR
+// (kamera yang sama tetap dipakai, tidak perlu buka ulang)
+document.getElementById('btnFallbackToQr').onclick = async () => {
+  document.getElementById('btnFallbackToQr').style.display = "none";
+  btnScanFace.style.display = "none";
+  matchMode = "1:1";
+  qrGuide.style.display = "block";
+  document.getElementById('btnSwitchQrCam').style.display = "block";
+  setStatus("Arahkan QR badge Anda ke kamera...", "info");
+  qrScanning = true;
+  scanQRLoop();
 };
 
 async function checkIjinThenProceed() {
@@ -499,26 +614,36 @@ function showResultCard(text, kind) {
 }
 
 // ============ 0. SCAN QR (kalau belum ada QrCodeId dari URL) ============
-let currentFacingModeQR = "environment"; // default kamera belakang
+let currentFacingModeQR = "user"; // default kamera depan -- disamakan dengan fase wajah biar 1 sesi kamera nyambung terus
 
-async function startQrCamera() {
+async function ensureCameraStream(facingMode) {
   if (video.srcObject) {
-    video.srcObject.getTracks().forEach(t => t.stop());
+    // Kamera udah nyala (dari fase sebelumnya) -- pakai terus, jangan restart
+    wrap.style.display = "block";
+    return;
   }
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: currentFacingModeQR, width: { ideal: 1280 }, height: { ideal: 720 } }
+    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
   });
   video.srcObject = stream;
   await video.play();
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
+  wrap.style.display = "block";
+}
+
+async function restartCameraStream(facingMode) {
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  await ensureCameraStream(facingMode);
 }
 
 document.getElementById('btnStartQrScan').onclick = async () => {
   document.getElementById('btnStartQrScan').disabled = true;
   try {
-    await startQrCamera();
-    wrap.style.display = "block";
+    await ensureCameraStream(currentFacingModeQR);
     qrGuide.style.display = "block";
     document.getElementById('btnSwitchQrCam').style.display = "block";
     setStatus("Arahkan QR badge Anda ke kamera...", "info");
@@ -535,7 +660,7 @@ document.getElementById('btnStartQrScan').onclick = async () => {
 document.getElementById('btnSwitchQrCam').onclick = async () => {
   currentFacingModeQR = currentFacingModeQR === "environment" ? "user" : "environment";
   try {
-    await startQrCamera();
+    await restartCameraStream(currentFacingModeQR);
     setStatus(`Kamera diganti ke: ${currentFacingModeQR === "user" ? "Depan" : "Belakang"}. Arahkan QR ke kamera...`, "info");
   } catch (e) {
     setStatus("❌ Gagal ganti kamera: " + e.message, "fail");
@@ -565,11 +690,15 @@ async function scanQRLoop() {
         qrCodeId = extractedId.trim().toUpperCase();
         setStatus("✅ QR terbaca: " + qrCodeId, "ok");
 
-        if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-        wrap.style.display = "none";
+        // Kamera TIDAK dimatikan -- lanjut dipakai buat fase verifikasi wajah
         qrCard.style.display = "none";
+        document.getElementById('entryCard').style.display = "none";
 
-        initGPS();
+        if (activeLocation) {
+          proceedWithQr(); // GPS sudah terkunci sebelumnya (skenario fallback dari mode wajah) -> skip initGPS ulang
+        } else {
+          initGPS();
+        }
         return;
       }
     }
@@ -578,11 +707,10 @@ async function scanQRLoop() {
 }
 
 // ============ START ============
-if (qrCodeId) {
-  initGPS(); // sudah ada QrCodeId dari URL (misal dari redirect scan QR fisik) -> langsung jalan
-} else {
-  qrCard.style.display = "block"; // belum ada -> minta scan QR dulu di browser
-}
+// GPS selalu dikunci duluan (baik lewat redirect QR fisik maupun buka langsung).
+// Setelah lokasi valid, handleLocationResult() yang nentuin lanjut otomatis
+// (kalau qrCodeId sudah ada dari URL) atau munculin pilihan Face-First/QR.
+initGPS();
 </script>
 </body>
 </html>
