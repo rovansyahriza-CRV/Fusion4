@@ -144,6 +144,7 @@
   </div>
 
   <div id="locBanner" class="banner-info">🔄 Mengunci lokasi GPS...</div>
+  <div id="matchInfo" class="banner-ok" style="display:none;"></div>
   <div id="resultBanner"></div>
 
   <div id="wrap">
@@ -157,6 +158,7 @@
 
   <p id="status">Menyiapkan...</p>
   <button id="btnScanFace" class="btn-block btn-accent" style="display:none;">📸 Scan Wajah</button>
+  <button id="btnSwitchFaceCam" class="btn-block btn-secondary" style="display:none;">🔄 Ganti Kamera</button>
   <button id="btnFallbackToQr" class="btn-block btn-secondary" style="display:none;">📷 Pakai QR Code Saja</button>
 
   <div id="passwordCard" class="card" style="display:none;">
@@ -216,6 +218,19 @@ const faceGuideHint = document.getElementById('faceGuideHint');
 let qrScanning = false;
 let guideLoopActive = false;
 let lastGuideOk = false;
+let currentFacingModeFace = "user"; // default depan buat wajah sendiri
+
+document.getElementById('btnSwitchFaceCam').onclick = async () => {
+  currentFacingModeFace = currentFacingModeFace === "user" ? "environment" : "user";
+  stopGuideLoop();
+  try {
+    await restartCameraStream(currentFacingModeFace);
+    guideLoop();
+    setStatus(`Kamera diganti ke: ${currentFacingModeFace === "user" ? "Depan" : "Belakang"}`, "info");
+  } catch (e) {
+    setStatus("❌ Gagal ganti kamera: " + e.message, "fail");
+  }
+};
 
 function evaluateFaceBox(box) {
   if (!video.videoWidth || !video.videoHeight) return { ok: false, reason: "Kamera belum siap" };
@@ -258,6 +273,7 @@ function stopGuideLoop() {
   guideLoopActive = false;
   faceGuideOval.style.display = "none";
   faceGuideHint.style.display = "none";
+  document.getElementById("btnSwitchFaceCam").style.display = "none";
 }
 
 function showBanner(el, text, kind) {
@@ -416,7 +432,7 @@ async function startFaceOnlyCapture() {
   }
 
   try {
-    await ensureCameraStream("user");
+    await ensureCameraStream(currentFacingModeFace);
   } catch (e) {
     setStatus("❌ Gagal akses kamera: " + e.message, "fail");
     showRetry();
@@ -427,6 +443,7 @@ async function startFaceOnlyCapture() {
   btnScanFace.style.display = "block";
   btnScanFace.disabled = false;
   guideLoop();
+  document.getElementById("btnSwitchFaceCam").style.display = "block";
 }
 
 // ============ 3. VERIFIKASI WAJAH (mode 1:1, identitas sudah pasti dari QR) ============
@@ -454,7 +471,7 @@ async function startFaceVerification() {
   refDescriptor = refResult.descriptor;
 
   try {
-    await ensureCameraStream("user");
+    await ensureCameraStream(currentFacingModeFace);
   } catch (e) {
     setStatus("❌ Gagal akses kamera: " + e.message, "fail");
     showRetry();
@@ -465,6 +482,7 @@ async function startFaceVerification() {
   btnScanFace.style.display = "block";
   btnScanFace.disabled = false;
   guideLoop();
+  document.getElementById("btnSwitchFaceCam").style.display = "block";
 }
 
 btnScanFace.onclick = async () => {
@@ -491,16 +509,28 @@ btnScanFace.onclick = async () => {
   }
 
   if (matchMode === "1:N") {
-    // Cari kandidat terdekat dari SEMUA wajah yang sudah enroll
-    let best = null, bestDistance = Infinity;
-    allFaceData.forEach(p => {
-      const d = faceapi.euclideanDistance(detection.descriptor, p.descriptor);
-      if (d < bestDistance) { bestDistance = d; best = p; }
-    });
-    const matched = best && bestDistance <= FACE_MATCH_THRESHOLD;
+    // Cari 2 kandidat terdekat -- bukan cuma yang #1, biar bisa deteksi "ragu-ragu"
+    let sorted = allFaceData.map(p => ({
+      qrCodeId: p.qrCodeId,
+      distance: faceapi.euclideanDistance(detection.descriptor, p.descriptor)
+    })).sort((a, b) => a.distance - b.distance);
 
-    if (!matched) {
-      setStatus(`❌ Wajah tidak dikenali (jarak terdekat: ${bestDistance.toFixed(3)}). Coba lagi, atau pakai QR Code sebagai cadangan.`, "fail");
+    const best = sorted[0];
+    const secondBest = sorted[1];
+    const AMBIGUITY_MARGIN = 0.08; // selisih minimal antara kandidat #1 dan #2 biar dianggap yakin
+
+    const withinThreshold = best && best.distance <= FACE_MATCH_THRESHOLD;
+    const isAmbiguous = secondBest && (secondBest.distance - best.distance) < AMBIGUITY_MARGIN;
+
+    if (!withinThreshold) {
+      setStatus(`❌ Wajah tidak dikenali (jarak terdekat: ${best.distance.toFixed(3)}). Coba lagi, atau pakai QR Code sebagai cadangan.`, "fail");
+      btnScanFace.disabled = false;
+      document.getElementById('btnFallbackToQr').style.display = "block";
+      return;
+    }
+
+    if (isAmbiguous) {
+      setStatus(`⚠️ Wajah mirip dengan lebih dari satu orang terdaftar (selisih: ${(secondBest.distance - best.distance).toFixed(3)}). Demi keamanan, silakan pakai QR Code untuk kepastian.`, "fail");
       btnScanFace.disabled = false;
       document.getElementById('btnFallbackToQr').style.display = "block";
       return;
@@ -521,6 +551,11 @@ btnScanFace.onclick = async () => {
       }
       currentPerson = paketData.person;
       currentPerson._needAuth = !!(paketData.authReq && paketData.authReq.needAuth);
+
+      const matchInfoEl = document.getElementById('matchInfo');
+      matchInfoEl.style.display = "block";
+      matchInfoEl.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
+
       checkIjinThenProceed();
     } catch (e) {
       setStatus("❌ Gagal ambil data: " + e.message, "fail");
@@ -543,6 +578,11 @@ btnScanFace.onclick = async () => {
   stopGuideLoop();
   stopCamera();
   faceVerified = true;
+
+  const matchInfoEl1to1 = document.getElementById('matchInfo');
+  matchInfoEl1to1.style.display = "block";
+  matchInfoEl1to1.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
+
   checkIjinThenProceed();
 };
 
