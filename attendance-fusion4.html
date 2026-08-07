@@ -115,6 +115,7 @@
   <div id="qrCard" class="card" style="display:none;">
     <p class="card-label">Scan QR Badge Anda</p>
     <button id="btnStartQrScan" class="btn-block btn-primary">📷 Buka Kamera & Scan QR</button>
+    <button id="btnSwitchQrCam" class="btn-block btn-secondary" style="display:none;">🔄 Ganti Kamera</button>
   </div>
 
   <div id="locBanner" class="banner-info">🔄 Mengunci lokasi GPS...</div>
@@ -498,18 +499,28 @@ function showResultCard(text, kind) {
 }
 
 // ============ 0. SCAN QR (kalau belum ada QrCodeId dari URL) ============
+let currentFacingModeQR = "environment"; // default kamera belakang
+
+async function startQrCamera() {
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: currentFacingModeQR, width: { ideal: 1280 }, height: { ideal: 720 } }
+  });
+  video.srcObject = stream;
+  await video.play();
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+}
+
 document.getElementById('btnStartQrScan').onclick = async () => {
   document.getElementById('btnStartQrScan').disabled = true;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    video.srcObject = stream;
-    await video.play();
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    await startQrCamera();
     wrap.style.display = "block";
     qrGuide.style.display = "block";
+    document.getElementById('btnSwitchQrCam').style.display = "block";
     setStatus("Arahkan QR badge Anda ke kamera...", "info");
     statusEl.style.display = "block";
     qrScanning = true;
@@ -518,6 +529,16 @@ document.getElementById('btnStartQrScan').onclick = async () => {
     setStatus("❌ Gagal akses kamera: " + e.message, "fail");
     statusEl.style.display = "block";
     document.getElementById('btnStartQrScan').disabled = false;
+  }
+};
+
+document.getElementById('btnSwitchQrCam').onclick = async () => {
+  currentFacingModeQR = currentFacingModeQR === "environment" ? "user" : "environment";
+  try {
+    await startQrCamera();
+    setStatus(`Kamera diganti ke: ${currentFacingModeQR === "user" ? "Depan" : "Belakang"}. Arahkan QR ke kamera...`, "info");
+  } catch (e) {
+    setStatus("❌ Gagal ganti kamera: " + e.message, "fail");
   }
 };
 
@@ -531,6 +552,7 @@ async function scanQRLoop() {
       if (code && code.data) {
         qrScanning = false;
         qrGuide.style.display = "none";
+        document.getElementById('btnSwitchQrCam').style.display = "none";
 
         const rawData = code.data.trim();
         let extractedId = rawData;
