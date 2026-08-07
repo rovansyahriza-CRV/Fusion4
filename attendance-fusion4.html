@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fusion4 - Absensi</title>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -80,6 +81,11 @@
   .reticle span:nth-child(2){ top:0; right:0; border-left:none; border-bottom:none; border-top-right-radius:6px; }
   .reticle span:nth-child(3){ bottom:0; left:0; border-right:none; border-top:none; border-bottom-left-radius:6px; }
   .reticle span:nth-child(4){ bottom:0; right:0; border-left:none; border-top:none; border-bottom-right-radius:6px; }
+  #qrGuide {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 68%; aspect-ratio: 1/1; border: 3px dashed var(--accent); border-radius: 12px;
+    display: none; pointer-events: none; box-shadow: 0 0 0 999px rgba(0,0,0,.35);
+  }
 
   #status { font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text);
     background:var(--surface-2); border-left:3px solid var(--steel-light); border-radius:0 8px 8px 0;
@@ -106,6 +112,11 @@
     </div>
   </div>
 
+  <div id="qrCard" class="card" style="display:none;">
+    <p class="card-label">Scan QR Badge Anda</p>
+    <button id="btnStartQrScan" class="btn-block btn-primary">📷 Buka Kamera & Scan QR</button>
+  </div>
+
   <div id="locBanner" class="banner-info">🔄 Mengunci lokasi GPS...</div>
   <div id="resultBanner"></div>
 
@@ -113,6 +124,7 @@
     <video id="video" width="320" height="320" autoplay muted playsinline></video>
     <canvas id="canvas" width="320" height="320" style="display:none;"></canvas>
     <div class="reticle"><span></span><span></span><span></span><span></span></div>
+    <div id="qrGuide"></div>
   </div>
 
   <p id="status">Menyiapkan...</p>
@@ -161,10 +173,14 @@ const resultBanner = document.getElementById('resultBanner');
 const statusEl = document.getElementById('status');
 const wrap = document.getElementById('wrap');
 const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const qrGuide = document.getElementById('qrGuide');
+const qrCard = document.getElementById('qrCard');
 const btnScanFace = document.getElementById('btnScanFace');
 const passwordCard = document.getElementById('passwordCard');
 const voucherCard = document.getElementById('voucherCard');
 const btnRetry = document.getElementById('btnRetry');
+let qrScanning = false;
 
 function showBanner(el, text, kind) {
   el.style.display = "block";
@@ -481,8 +497,70 @@ function showResultCard(text, kind) {
   resultBanner.parentNode.insertBefore(btnDone, resultBanner.nextSibling);
 }
 
+// ============ 0. SCAN QR (kalau belum ada QrCodeId dari URL) ============
+document.getElementById('btnStartQrScan').onclick = async () => {
+  document.getElementById('btnStartQrScan').disabled = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    await video.play();
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    wrap.style.display = "block";
+    qrGuide.style.display = "block";
+    setStatus("Arahkan QR badge Anda ke kamera...", "info");
+    statusEl.style.display = "block";
+    qrScanning = true;
+    scanQRLoop();
+  } catch (e) {
+    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
+    statusEl.style.display = "block";
+    document.getElementById('btnStartQrScan').disabled = false;
+  }
+};
+
+async function scanQRLoop() {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  while (qrScanning) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+      if (code && code.data) {
+        qrScanning = false;
+        qrGuide.style.display = "none";
+
+        const rawData = code.data.trim();
+        let extractedId = rawData;
+        try {
+          const url = new URL(rawData);
+          const paramId = url.searchParams.get('QrCodeId') || url.searchParams.get('qrCodeId') || url.searchParams.get('qrcodeid');
+          if (paramId) extractedId = paramId;
+        } catch (e) { /* bukan URL, pakai apa adanya */ }
+
+        qrCodeId = extractedId.trim().toUpperCase();
+        setStatus("✅ QR terbaca: " + qrCodeId, "ok");
+
+        if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+        wrap.style.display = "none";
+        qrCard.style.display = "none";
+
+        initGPS();
+        return;
+      }
+    }
+    await new Promise(r => setTimeout(r, 120));
+  }
+}
+
 // ============ START ============
-initGPS();
+if (qrCodeId) {
+  initGPS(); // sudah ada QrCodeId dari URL (misal dari redirect scan QR fisik) -> langsung jalan
+} else {
+  qrCard.style.display = "block"; // belum ada -> minta scan QR dulu di browser
+}
 </script>
 </body>
 </html>
