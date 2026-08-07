@@ -251,21 +251,29 @@ async function guideLoop() {
   faceGuideHint.style.display = "block";
   guideLoopActive = true;
 
+  // Jeda kecil dulu sebelum mulai -- kasih waktu iOS Safari "settle" abis
+  // proses kamera/QR sebelumnya, biar WebGL nggak keburu-buru dipaksa jalan.
+  await new Promise(r => setTimeout(r, 300));
+
   while (guideLoopActive) {
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }));
-      if (detection) {
-        const evalResult = evaluateFaceBox(detection.box);
-        lastGuideOk = evalResult.ok;
-        faceGuideOval.className = evalResult.ok ? "ok" : "warn";
-        faceGuideHint.innerText = evalResult.ok ? "✅ Posisi bagus, tekan Scan Wajah" : evalResult.reason;
-      } else {
-        lastGuideOk = false;
-        faceGuideOval.className = "";
-        faceGuideHint.innerText = "Wajah belum terdeteksi";
+      try {
+        const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }));
+        if (detection) {
+          const evalResult = evaluateFaceBox(detection.box);
+          lastGuideOk = evalResult.ok;
+          faceGuideOval.className = evalResult.ok ? "ok" : "warn";
+          faceGuideHint.innerText = evalResult.ok ? "✅ Posisi bagus, tekan Scan Wajah" : evalResult.reason;
+        } else {
+          lastGuideOk = false;
+          faceGuideOval.className = "";
+          faceGuideHint.innerText = "Wajah belum terdeteksi";
+        }
+      } catch (e) {
+        console.warn("guideLoop detection error (diabaikan):", e.message);
       }
     }
-    await new Promise(r => setTimeout(r, 250));
+    await new Promise(r => setTimeout(r, 600));
   }
 }
 
@@ -487,6 +495,8 @@ async function startFaceVerification() {
 
 btnScanFace.onclick = async () => {
   btnScanFace.disabled = true;
+  guideLoopActive = false; // hentikan loop ringan dulu, jangan sampai rebutan WebGL
+  await new Promise(r => setTimeout(r, 300)); // kasih waktu WebGL "beres-beres" di iOS Safari
   setStatus("Mendeteksi wajah...", "info");
 
   const detection = await faceapi
@@ -497,6 +507,7 @@ btnScanFace.onclick = async () => {
   if (!detection) {
     setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
     btnScanFace.disabled = false;
+    guideLoop();
     return;
   }
 
@@ -505,6 +516,7 @@ btnScanFace.onclick = async () => {
   if (!posCheck.ok) {
     setStatus(`❌ ${posCheck.reason}. Sesuaikan posisi, lalu coba lagi.`, "fail");
     btnScanFace.disabled = false;
+    guideLoop();
     return;
   }
 
