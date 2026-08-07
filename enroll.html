@@ -6,54 +6,313 @@
 <title>Enroll Wajah Karyawan</title>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
-  body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background:#f4f6f8; }
-  #wrap { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1 / 1; margin: 0 auto; overflow: hidden; border-radius: 12px; background:#000; }
-  video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+  :root {
+    --bg: #ECEEF1;
+    --surface: #FFFFFF;
+    --surface-2: #F5F6F8;
+    --text: #12161C;
+    --text-muted: #5B6472;
+    --border: #DEE2E7;
+    --accent: #D9312E;
+    --accent-dark: #B32220;
+    --accent-bg: #FBEAEA;
+    --steel: #243463;
+    --steel-light: #3C5089;
+    --success: #178A4C;
+    --success-bg: #E5F6EC;
+    --danger: #D6362B;
+    --danger-bg: #FCEAE8;
+    --radius-lg: 18px;
+    --radius-md: 12px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 24px 16px 56px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .page { max-width: 440px; margin: 0 auto; }
+
+  .brand-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .brand-logo {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .brand-fallback {
+    background: var(--steel);
+    color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: 0.02em;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel-light);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 8px; height: 8px;
+    background: var(--accent);
+    display: inline-block;
+  }
+
+  h1.title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    font-size: 34px;
+    line-height: 1;
+    margin: 0 0 20px;
+    color: var(--steel);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    margin-bottom: 14px;
+  }
+
+  .card-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+  }
+
+  .qr-row { display: flex; gap: 8px; }
+
+  input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    padding: 13px 14px;
+    border-radius: var(--radius-md);
+    border: 1.5px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+  input[type="text"]::placeholder { color: #9AA3AD; }
+
+  button {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: transform 0.05s ease, opacity 0.15s ease;
+  }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-icon {
+    padding: 13px 16px;
+    background: var(--steel);
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .btn-block {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    margin-top: 10px;
+  }
+  .btn-primary { background: var(--steel); color: #fff; }
+  .btn-primary:disabled { background: #C6CBD1; opacity: 1; }
+  .btn-secondary { background: var(--surface-2); color: var(--steel); border: 1.5px solid var(--border); }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:disabled { background: #C6CBD1; opacity: 1; }
+
+  #namaPreview {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    margin: 10px 0 0;
+    padding: 9px 12px;
+    border-radius: 8px;
+    display: none;
+  }
+  #namaPreview.show { display: block; }
+  #namaPreview.ok { background: var(--success-bg); color: var(--success); }
+  #namaPreview.warn { background: var(--danger-bg); color: var(--danger); }
+
+  /* ===== Kamera: viewfinder bergaya scanner lapangan ===== */
+  #wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto 14px;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: #0B0D10;
+  }
+  video, canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+
+  /* bracket sudut ala reticle kamera scanner */
+  .reticle {
+    position: absolute; inset: 22px;
+    pointer-events: none;
+  }
+  .reticle span {
+    position: absolute;
+    width: 26px; height: 26px;
+    border: 3px solid var(--accent);
+  }
+  .reticle span:nth-child(1) { top: 0; left: 0; border-right: none; border-bottom: none; border-top-left-radius: 6px; }
+  .reticle span:nth-child(2) { top: 0; right: 0; border-left: none; border-bottom: none; border-top-right-radius: 6px; }
+  .reticle span:nth-child(3) { bottom: 0; left: 0; border-right: none; border-top: none; border-bottom-left-radius: 6px; }
+  .reticle span:nth-child(4) { bottom: 0; right: 0; border-left: none; border-top: none; border-bottom-right-radius: 6px; }
+
   #qrGuide {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 70%; aspect-ratio: 1 / 1;
-    border: 4px dashed #38a169; border-radius: 12px;
-    display: none; pointer-events: none;
-    box-shadow: 0 0 0 999px rgba(0,0,0,0.25);
+    width: 68%; aspect-ratio: 1 / 1;
+    border: 3px dashed var(--accent);
+    border-radius: 12px;
+    display: none;
+    pointer-events: none;
+    box-shadow: 0 0 0 999px rgba(0,0,0,0.35);
   }
-  input, button { padding: 10px; font-size: 16px; margin-top: 10px; border-radius: 8px; border: 1px solid #ccc; }
-  button { background:#2b6cb0; color:#fff; border:none; cursor:pointer; }
-  button:disabled { background:#a0aec0; }
-  #status { margin-top: 10px; font-weight: bold; color:#2d3748; }
-  #shots { margin-top: 10px; }
-  .dot { display:inline-block; width:14px; height:14px; border-radius:50%; background:#cbd5e0; margin:2px; }
-  .dot.done { background:#38a169; }
+
+  .step-chip {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(11,13,16,0.72);
+    color: #fff;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    padding: 6px 14px;
+    border-radius: 999px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .step-chip .n { color: var(--accent); font-weight: 700; }
+
+  /* ===== status readout, gaya terminal lapangan ===== */
+  #status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--surface-2);
+    border-left: 3px solid var(--steel-light);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 12px;
+    margin: 0 0 14px;
+    line-height: 1.5;
+  }
+
+  #shots { display: flex; gap: 8px; justify-content: center; margin: 4px 0 16px; }
+  .dot {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px; font-weight: 500;
+    color: var(--text-muted);
+  }
+  .dot.done { background: var(--success); border-color: var(--success); color: #fff; }
+
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row button { flex: 1; }
+
+  footer.hint {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 20px;
+    line-height: 1.5;
+  }
 </style>
 </head>
 <body>
+<div class="page">
 
-<h2>📋 Enroll Wajah Karyawan</h2>
-<input type="text" id="qrCodeId" placeholder="QrCodeId (contoh: 1Agu12042025)" style="width:220px;">
-<button id="btnScanQR" style="padding:10px 14px;">📷 Scan QR</button>
-<br>
-<p id="namaPreview" style="color:#2b6cb0; font-weight:bold;"></p>
+  <div class="brand-row">
+    <img src="logo.png" alt="Logo" class="brand-logo" id="brandLogo" onerror="this.style.display='none'; document.getElementById('brandFallback').style.display='flex';">
+    <div class="brand-logo brand-fallback" id="brandFallback" style="display:none;">FW</div>
+    <div>
+      <div class="eyebrow" style="margin-bottom:0;">Field Workforce ID</div>
+      <h1 class="title" style="margin-bottom:0;">Enroll Wajah</h1>
+    </div>
+  </div>
 
-<div id="wrap">
-  <video id="video" width="320" height="240" autoplay muted playsinline></video>
-  <canvas id="canvas" width="320" height="240"></canvas>
-  <div id="qrGuide"></div>
+  <div class="card">
+    <p class="card-label">Identitas karyawan (QrCodeId)</p>
+    <div class="qr-row">
+      <input type="text" id="qrCodeId" placeholder="cth: 1Agu12042025">
+      <button id="btnScanQR" class="btn-icon">📷 Scan QR</button>
+    </div>
+    <p id="namaPreview"></p>
+  </div>
+
+  <div id="wrap">
+    <video id="video" width="320" height="240" autoplay muted playsinline></video>
+    <canvas id="canvas" width="320" height="240"></canvas>
+    <div id="qrGuide"></div>
+    <div class="reticle"><span></span><span></span><span></span><span></span></div>
+    <div class="step-chip" id="stepChip" style="display:none;"><span class="n"></span><span class="l"></span></div>
+  </div>
+
+  <p id="status">Memuat model...</p>
+
+  <div id="shots">
+    <span class="dot" id="dot0">1</span>
+    <span class="dot" id="dot1">2</span>
+    <span class="dot" id="dot2">3</span>
+    <span class="dot" id="dot3">4</span>
+  </div>
+
+  <div class="btn-row">
+    <button id="btnSwitchCam" class="btn-secondary">🔄 Ganti Kamera</button>
+  </div>
+  <button id="btnCapture" class="btn-block btn-primary" disabled>📸 Ambil Foto (Lurus)</button>
+  <button id="btnSave" class="btn-block btn-success" disabled>💾 Simpan ke Database</button>
+
+  <footer class="hint">Pastikan wajah dan QR Code terlihat jelas di dalam bingkai kamera.</footer>
+
 </div>
-
-<p id="status">Memuat model...</p>
-<div id="shots">
-  <span class="dot" id="dot0"></span>
-  <span class="dot" id="dot1"></span>
-  <span class="dot" id="dot2"></span>
-  <span class="dot" id="dot3"></span>
-</div>
-
-<br>
-<button id="btnSwitchCam" style="background:#718096;">🔄 Ganti Kamera</button>
-<br>
-<button id="btnCapture" disabled>📸 Ambil Foto (Lurus)</button>
-<button id="btnSave" disabled>💾 Simpan ke Database</button>
-
 <script>
 // ============ KONFIGURASI ============
 // Ganti dengan URL Web App Apps Script kamu setelah deploy
@@ -73,6 +332,17 @@ const btnCapture = document.getElementById('btnCapture');
 const btnSave = document.getElementById('btnSave');
 const qrInput = document.getElementById('qrCodeId');
 const namaPreview = document.getElementById('namaPreview');
+const stepChip = document.getElementById('stepChip');
+
+function updateStepChip(index) {
+  if (index >= ANGLE_LABELS.length) {
+    stepChip.style.display = "none";
+    return;
+  }
+  stepChip.style.display = "flex";
+  stepChip.querySelector('.n').innerText = `${index + 1}/4`;
+  stepChip.querySelector('.l').innerText = ANGLE_LABELS[index];
+}
 
 let descriptors = []; // menyimpan 4 descriptor sebelum di-average
 let shotIndex = 0;
@@ -85,7 +355,16 @@ async function loadMasterData() {
 
 qrInput.addEventListener('input', () => {
   const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
-  namaPreview.innerText = match ? `✅ ${match.nama}` : (qrInput.value.trim() ? "⚠️ QrCodeId tidak ditemukan" : "");
+  if (!qrInput.value.trim()) {
+    namaPreview.className = "";
+    namaPreview.innerText = "";
+  } else if (match) {
+    namaPreview.className = "show ok";
+    namaPreview.innerText = `✅ ${match.nama}`;
+  } else {
+    namaPreview.className = "show warn";
+    namaPreview.innerText = "⚠️ QrCodeId tidak ditemukan";
+  }
 });
 
 // ============ SCAN QR CODE ============
@@ -192,6 +471,7 @@ async function init() {
     await startCamera();
 
     status.innerText = `Siap. Arahkan wajah: ${ANGLE_LABELS[0]}`;
+    updateStepChip(0);
     btnCapture.disabled = false;
   } catch (err) {
     status.innerText = "❌ ERROR: " + err.message;
@@ -237,9 +517,11 @@ btnCapture.onclick = async () => {
 
   if (shotIndex < 4) {
     status.innerText = `✅ Foto ${shotIndex}/4 OK. Sekarang: ${ANGLE_LABELS[shotIndex]}`;
+    updateStepChip(shotIndex);
     btnCapture.disabled = false;
   } else {
     status.innerText = "✅ Semua 4 foto selesai! Klik Simpan.";
+    updateStepChip(4);
     btnSave.disabled = false;
   }
 };
