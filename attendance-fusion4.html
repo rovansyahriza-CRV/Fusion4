@@ -81,6 +81,25 @@
   .reticle span:nth-child(2){ top:0; right:0; border-left:none; border-bottom:none; border-top-right-radius:6px; }
   .reticle span:nth-child(3){ bottom:0; left:0; border-right:none; border-top:none; border-bottom-left-radius:6px; }
   .reticle span:nth-child(4){ bottom:0; right:0; border-left:none; border-top:none; border-bottom-right-radius:6px; }
+
+  #faceGuideOval {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 58%; height: 74%;
+    border: 4px solid var(--steel-light);
+    border-radius: 50%;
+    display: none;
+    pointer-events: none;
+    transition: border-color 0.15s ease;
+  }
+  #faceGuideOval.warn { border-color: #D97706; }
+  #faceGuideOval.ok { border-color: var(--success); }
+  #faceGuideHint {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(11,13,16,0.72); color: #fff;
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+    padding: 5px 12px; border-radius: 999px;
+    display: none; white-space: nowrap;
+  }
   #qrGuide {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 68%; aspect-ratio: 1/1; border: 3px dashed var(--accent); border-radius: 12px;
@@ -131,6 +150,8 @@
     <video id="video" width="320" height="320" autoplay muted playsinline></video>
     <canvas id="canvas" width="320" height="320" style="display:none;"></canvas>
     <div class="reticle"><span></span><span></span><span></span><span></span></div>
+    <div id="faceGuideOval"></div>
+    <div id="faceGuideHint"></div>
     <div id="qrGuide"></div>
   </div>
 
@@ -190,7 +211,54 @@ const btnScanFace = document.getElementById('btnScanFace');
 const passwordCard = document.getElementById('passwordCard');
 const voucherCard = document.getElementById('voucherCard');
 const btnRetry = document.getElementById('btnRetry');
+const faceGuideOval = document.getElementById('faceGuideOval');
+const faceGuideHint = document.getElementById('faceGuideHint');
 let qrScanning = false;
+let guideLoopActive = false;
+let lastGuideOk = false;
+
+function evaluateFaceBox(box) {
+  if (!video.videoWidth || !video.videoHeight) return { ok: false, reason: "Kamera belum siap" };
+  const widthRatio = box.width / video.videoWidth;
+  const centerX = box.x + box.width / 2;
+  const centerY = box.y + box.height / 2;
+  const offsetX = Math.abs(centerX - video.videoWidth / 2) / video.videoWidth;
+  const offsetY = Math.abs(centerY - video.videoHeight / 2) / video.videoHeight;
+
+  if (widthRatio < 0.28) return { ok: false, reason: "Terlalu jauh, dekatkan wajah" };
+  if (widthRatio > 0.68) return { ok: false, reason: "Terlalu dekat, jauhkan sedikit" };
+  if (offsetX > 0.18 || offsetY > 0.18) return { ok: false, reason: "Geser wajah ke tengah" };
+  return { ok: true, reason: "Posisi bagus" };
+}
+
+async function guideLoop() {
+  faceGuideOval.style.display = "block";
+  faceGuideHint.style.display = "block";
+  guideLoopActive = true;
+
+  while (guideLoopActive) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }));
+      if (detection) {
+        const evalResult = evaluateFaceBox(detection.box);
+        lastGuideOk = evalResult.ok;
+        faceGuideOval.className = evalResult.ok ? "ok" : "warn";
+        faceGuideHint.innerText = evalResult.ok ? "✅ Posisi bagus, tekan Scan Wajah" : evalResult.reason;
+      } else {
+        lastGuideOk = false;
+        faceGuideOval.className = "";
+        faceGuideHint.innerText = "Wajah belum terdeteksi";
+      }
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+}
+
+function stopGuideLoop() {
+  guideLoopActive = false;
+  faceGuideOval.style.display = "none";
+  faceGuideHint.style.display = "none";
+}
 
 function showBanner(el, text, kind) {
   el.style.display = "block";
@@ -358,6 +426,7 @@ async function startFaceOnlyCapture() {
   setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
   btnScanFace.style.display = "block";
   btnScanFace.disabled = false;
+  guideLoop();
 }
 
 // ============ 3. VERIFIKASI WAJAH (mode 1:1, identitas sudah pasti dari QR) ============
@@ -395,6 +464,7 @@ async function startFaceVerification() {
   setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
   btnScanFace.style.display = "block";
   btnScanFace.disabled = false;
+  guideLoop();
 }
 
 btnScanFace.onclick = async () => {
@@ -408,6 +478,14 @@ btnScanFace.onclick = async () => {
 
   if (!detection) {
     setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
+    btnScanFace.disabled = false;
+    return;
+  }
+
+  // Validasi posisi/ukuran -- tolak kalau wajah terlalu jauh/dekat/nggak di tengah
+  const posCheck = evaluateFaceBox(detection.box);
+  if (!posCheck.ok) {
+    setStatus(`❌ ${posCheck.reason}. Sesuaikan posisi, lalu coba lagi.`, "fail");
     btnScanFace.disabled = false;
     return;
   }
@@ -430,6 +508,7 @@ btnScanFace.onclick = async () => {
 
     qrCodeId = best.qrCodeId;
     setStatus("✅ Wajah dikenali! Mengambil data karyawan...", "ok");
+    stopGuideLoop();
     stopCamera();
     faceVerified = true;
 
@@ -461,6 +540,7 @@ btnScanFace.onclick = async () => {
   }
 
   setStatus("✅ Wajah cocok! Melanjutkan absensi...", "ok");
+  stopGuideLoop();
   stopCamera();
   faceVerified = true;
   checkIjinThenProceed();
@@ -471,6 +551,7 @@ btnScanFace.onclick = async () => {
 document.getElementById('btnFallbackToQr').onclick = async () => {
   document.getElementById('btnFallbackToQr').style.display = "none";
   btnScanFace.style.display = "none";
+  stopGuideLoop();
   matchMode = "1:1";
   qrGuide.style.display = "block";
   document.getElementById('btnSwitchQrCam').style.display = "block";
