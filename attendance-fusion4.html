@@ -220,6 +220,17 @@ let guideLoopActive = false;
 let lastGuideOk = false;
 let currentFacingModeFace = "user"; // default depan buat wajah sendiri
 
+// Helper: kasih batas waktu ke promise yang berpotensi hang (mis. WebGL macet di iOS Safari)
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)
+    )
+  ]);
+}
+let faceDetectFailCount = 0; // hitung kegagalan beruntun buat trigger restart kamera
+
 document.getElementById('btnSwitchFaceCam').onclick = async () => {
   currentFacingModeFace = currentFacingModeFace === "user" ? "environment" : "user";
   stopGuideLoop();
@@ -493,16 +504,50 @@ async function startFaceVerification() {
   document.getElementById("btnSwitchFaceCam").style.display = "block";
 }
 
+// ============ SCAN WAJAH (dengan try/catch + timeout + auto-recovery WebGL) ============
 btnScanFace.onclick = async () => {
   btnScanFace.disabled = true;
   guideLoopActive = false; // hentikan loop ringan dulu, jangan sampai rebutan WebGL
   await new Promise(r => setTimeout(r, 300)); // kasih waktu WebGL "beres-beres" di iOS Safari
   setStatus("Mendeteksi wajah...", "info");
 
-  const detection = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
-    .withFaceLandmarks()
-    .withFaceDescriptor();
+  let detection;
+  try {
+    detection = await withTimeout(
+      faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor(),
+      8000, // 8 detik cukup untuk TinyFaceDetector di HP modern; kalau lewat, kemungkinan besar WebGL macet
+      "Deteksi wajah"
+    );
+  } catch (e) {
+    console.error("Scan wajah gagal/timeout:", e);
+    faceDetectFailCount++;
+
+    if (faceDetectFailCount >= 2) {
+      // Sudah gagal 2x -- kemungkinan besar WebGL context di iOS Safari beneran corrupt.
+      // Solusi paling andal: restart total kamera + stream (bukan cuma retry deteksi).
+      setStatus("❌ Kamera/deteksi bermasalah (kemungkinan WebGL iOS Safari). Me-restart kamera...", "fail");
+      try {
+        await restartCameraStream(currentFacingModeFace);
+        faceDetectFailCount = 0;
+        setStatus("Kamera direstart. Posisikan wajah lagi, lalu tekan Scan Wajah.", "info");
+      } catch (e2) {
+        setStatus("❌ Gagal restart kamera: " + e2.message + ". Coba tekan Ulangi.", "fail");
+        showRetry();
+      }
+    } else {
+      setStatus("❌ Deteksi wajah gagal/timeout. Coba tekan Scan Wajah sekali lagi.", "fail");
+    }
+
+    btnScanFace.disabled = false;
+    guideLoop();
+    return;
+  }
+
+  // Deteksi berhasil dapat respons (bisa null kalau memang gak ada wajah)
+  faceDetectFailCount = 0;
 
   if (!detection) {
     setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
