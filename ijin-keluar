@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fusion4 - Ijin Keluar</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#ECEEF1; --surface:#FFFFFF; --surface-2:#F5F6F8; --text:#12161C; --text-muted:#5B6472;
+    --border:#DEE2E7; --accent:#D9312E; --accent-dark:#B32220; --steel:#243463; --steel-light:#3C5089;
+    --success:#178A4C; --success-bg:#E5F6EC; --danger:#D9312E; --danger-bg:#FCEAE8;
+    --warn:#B8860B; --warn-bg:#FBF3DC; --radius-lg:18px; --radius-md:12px;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); margin:0; padding:24px 16px 56px; }
+  .page { max-width:440px; margin:0 auto; }
+  .brand-row { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+  .brand-logo { width:44px; height:44px; border-radius:10px; object-fit:contain; flex-shrink:0; }
+  .brand-fallback { background:var(--steel); color:var(--accent); display:flex; align-items:center; justify-content:center; font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:17px; }
+  .eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--steel-light); display:flex; align-items:center; gap:8px; }
+  .eyebrow::before { content:""; width:8px; height:8px; background:var(--accent); display:inline-block; }
+  h1.title { font-family:'Barlow Condensed',sans-serif; font-weight:700; text-transform:uppercase; font-size:28px; line-height:1; margin:0; color:var(--steel); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; margin-bottom:14px; }
+  .card-label { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); margin:0 0 10px; }
+  button { font-family:'Inter',sans-serif; font-weight:600; font-size:15px; border:none; border-radius:var(--radius-md); cursor:pointer; }
+  button:active { transform:scale(.98); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-block { display:block; width:100%; padding:15px; margin-top:10px; }
+  .btn-primary { background:var(--steel); color:#fff; }
+  .btn-accent { background:var(--accent); color:#fff; }
+  .btn-secondary { background:var(--surface-2); color:var(--steel); border:1.5px solid var(--border); }
+
+  #banner { font-family:'IBM Plex Mono',monospace; font-size:13px; padding:12px 14px; border-radius:var(--radius-md); margin-bottom:14px; line-height:1.5; display:none; }
+  .banner-info { background:var(--surface-2); color:var(--steel); border-left:3px solid var(--steel-light); }
+  .banner-ok { background:var(--success-bg); color:var(--success); border-left:3px solid var(--success); }
+  .banner-fail { background:var(--danger-bg); color:var(--danger); border-left:3px solid var(--danger); }
+  .banner-warn { background:var(--warn-bg); color:var(--warn); border-left:3px solid var(--warn); }
+
+  .stage-badge {
+    display:inline-block; font-family:'Barlow Condensed',sans-serif; font-weight:700; text-transform:uppercase;
+    letter-spacing:.04em; font-size:15px; padding:6px 16px; border-radius:999px; margin-bottom:14px;
+  }
+  .stage-checkout { background:var(--warn-bg); color:var(--warn); }
+  .stage-checkin { background:var(--success-bg); color:var(--success); }
+
+  #wrap { position:relative; width:100%; aspect-ratio:1/1; margin:0 auto 14px; overflow:hidden; border-radius:var(--radius-lg); background:#0B0D10; display:none; }
+  video, canvas { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+  .reticle { position:absolute; inset:22px; pointer-events:none; }
+  .reticle span { position:absolute; width:26px; height:26px; border:3px solid var(--accent); }
+  .reticle span:nth-child(1){top:0;left:0;border-right:none;border-bottom:none;border-top-left-radius:6px;}
+  .reticle span:nth-child(2){top:0;right:0;border-left:none;border-bottom:none;border-top-right-radius:6px;}
+  .reticle span:nth-child(3){bottom:0;left:0;border-right:none;border-top:none;border-bottom-left-radius:6px;}
+  .reticle span:nth-child(4){bottom:0;right:0;border-left:none;border-top:none;border-bottom-right-radius:6px;}
+  #qrGuide { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:68%; aspect-ratio:1/1; border:3px dashed var(--accent); border-radius:12px; display:none; pointer-events:none; box-shadow:0 0 0 999px rgba(0,0,0,.35); }
+
+  #status { font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--text); background:var(--surface-2); border-left:3px solid var(--steel-light); border-radius:0 8px 8px 0; padding:10px 12px; margin:0 0 14px; line-height:1.5; display:none; }
+  #status.ok { border-left-color:var(--success); }
+  #status.fail { border-left-color:var(--danger); }
+
+  footer.hint { text-align:center; font-size:12px; color:var(--text-muted); margin-top:20px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="brand-row">
+    <img src="logo.png" alt="Logo" class="brand-logo" id="brandLogo" onerror="this.style.display='none'; document.getElementById('brandFallback').style.display='flex';">
+    <div class="brand-logo brand-fallback" id="brandFallback" style="display:none;">FW</div>
+    <div>
+      <div class="eyebrow">Fusion 4 Engine</div>
+      <h1 class="title">Ijin Keluar</h1>
+    </div>
+  </div>
+
+  <div id="banner" class="banner-info">Memuat...</div>
+
+  <!-- Step 1: scan QR badge sendiri -->
+  <div id="qrCard" class="card">
+    <p class="card-label">Scan QR Badge Anda</p>
+    <div id="wrap">
+      <video id="video" width="320" height="320" autoplay muted playsinline></video>
+      <canvas id="canvas" width="320" height="320" style="display:none;"></canvas>
+      <div class="reticle"><span></span><span></span><span></span><span></span></div>
+      <div id="qrGuide"></div>
+    </div>
+    <button id="btnStartCamera" class="btn-block btn-primary">📷 Buka Kamera</button>
+  </div>
+
+  <div id="stageArea" style="display:none;">
+    <div id="stageBadge" class="stage-badge stage-checkout">🚪 IJIN PULANG MENDADAK</div>
+    <div class="card">
+      <p class="card-label">Kode Ijin dari HRD/Supervisor</p>
+      <input type="text" id="txtKodeIjin" placeholder="Contoh: IJIN-A7X2" style="width:100%; font-family:'IBM Plex Mono',monospace; font-size:16px; padding:13px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); text-transform:uppercase;">
+    </div>
+  </div>
+
+  <p id="status">Menyiapkan...</p>
+  <button id="btnFaceScan" class="btn-block btn-accent" style="display:none;">📸 Scan Wajah</button>
+  <button id="btnConfirm" class="btn-block btn-accent" style="display:none;"></button>
+  <button id="btnRetry" class="btn-block btn-secondary" style="display:none;">🔁 Ulangi dari Awal</button>
+
+  <footer class="hint">Gunakan halaman ini hanya jika sudah punya Kode Ijin dari HRD/Supervisor untuk pulang lebih awal.</footer>
+
+</div>
+
+<script>
+// ============ KONFIGURASI ============
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
+const FACE_MATCH_THRESHOLD = 0.55;
+
+let qrCodeId = "";
+let currentLokasi = "";
+let currentGPS = null;
+let qrScanning = false;
+let faceModelsLoaded = false;
+
+const banner = document.getElementById('banner');
+const statusEl = document.getElementById('status');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const wrap = document.getElementById('wrap');
+const qrGuide = document.getElementById('qrGuide');
+const btnStartCamera = document.getElementById('btnStartCamera');
+const btnFaceScan = document.getElementById('btnFaceScan');
+const btnConfirm = document.getElementById('btnConfirm');
+const btnRetry = document.getElementById('btnRetry');
+const stageArea = document.getElementById('stageArea');
+const stageBadge = document.getElementById('stageBadge');
+
+function showBanner(text, kind) { banner.style.display="block"; banner.className="banner-"+kind; banner.innerText=text; }
+function setStatus(text, kind) { statusEl.style.display="block"; statusEl.className=kind||""; statusEl.innerText=text; }
+function showRetry() { btnRetry.style.display="block"; }
+btnRetry.onclick = () => location.reload();
+
+async function callApi(action, extra) {
+  const body = Object.assign({ action: action }, extra || {});
+  const res = await fetch(APPS_SCRIPT_URL, { method:"POST", body:JSON.stringify(body), headers:{"Content-Type":"text/plain"} });
+  return await res.json();
+}
+
+// ============ STEP 1: BUKA KAMERA + SCAN QR BADGE ============
+btnStartCamera.onclick = async () => {
+  btnStartCamera.disabled = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:"user", width:{ideal:1280}, height:{ideal:720} }
+    });
+    video.srcObject = stream;
+    await video.play();
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    wrap.style.display = "block";
+    btnStartCamera.style.display = "none";
+    qrGuide.style.display = "block";
+    setStatus("Arahkan QR badge Anda ke kamera...", "info");
+    qrScanning = true;
+    scanQRLoop();
+  } catch (e) {
+    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
+    btnStartCamera.disabled = false;
+  }
+};
+
+async function scanQRLoop() {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  while (qrScanning) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts:"attemptBoth" });
+      if (code && code.data) {
+        qrScanning = false;
+        qrGuide.style.display = "none";
+
+        const rawData = code.data.trim();
+        let extractedId = rawData;
+        try {
+          const url = new URL(rawData);
+          const paramId = url.searchParams.get('QrCodeId') || url.searchParams.get('qrCodeId') || url.searchParams.get('qrcodeid');
+          if (paramId) extractedId = paramId;
+        } catch (e) { /* bukan URL, pakai apa adanya */ }
+
+        qrCodeId = extractedId.trim().toUpperCase();
+        setStatus("✅ QR terbaca: " + qrCodeId, "ok");
+        stopCamera();
+        await afterQrScanned();
+        return;
+      }
+    }
+    await new Promise(r => setTimeout(r, 120));
+  }
+}
+
+function stopCamera() {
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  wrap.style.display = "none";
+}
+
+// ============ STEP 2: CEK GPS LALU LANJUT VERIFIKASI WAJAH ============
+async function afterQrScanned() {
+  setStatus("Mengunci lokasi GPS...", "info");
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    currentGPS = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    try {
+      const lokasiResult = await callApi("FIND_NEAREST_LOCATION", { lat: currentGPS.lat, lng: currentGPS.lng });
+      if (!lokasiResult || !lokasiResult.IsInsideRadius) {
+        setStatus("🔴 Di luar area lokasi manapun (" + (lokasiResult ? lokasiResult.NamaLokasi : "-") + ")", "fail");
+        showRetry();
+        return;
+      }
+      currentLokasi = String(lokasiResult.NamaLokasi || "").trim();
+      showBanner("Lokasi terkunci: " + currentLokasi, "info");
+      stageArea.style.display = "block";
+
+      startFaceVerification();
+    } catch (e) {
+      setStatus("❌ Gagal cek lokasi: " + e.message, "fail");
+      showRetry();
+    }
+  }, (err) => {
+    setStatus("🔴 Gagal kunci GPS: " + err.message, "fail");
+    showRetry();
+  }, { enableHighAccuracy:true, timeout:10000, maximumAge:0 });
+}
+
+// ============ STEP 3: VERIFIKASI WAJAH ============
+async function startFaceVerification() {
+  setStatus("Memuat model wajah...", "info");
+  try {
+    if (!faceModelsLoaded) {
+      const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      faceModelsLoaded = true;
+    }
+  } catch (e) {
+    setStatus("❌ Gagal memuat model: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  const refResult = await callApi("GET_FACE_DESCRIPTOR", { qrCodeId: qrCodeId });
+  if (!refResult || !refResult.found) {
+    setStatus("❌ " + (refResult ? refResult.message : "Wajah belum terdaftar.") + " Hubungi admin.", "fail");
+    showRetry();
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:"user", width:{ideal:1280}, height:{ideal:720}} });
+    video.srcObject = stream;
+    await video.play();
+    wrap.style.display = "block";
+  } catch (e) {
+    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
+  btnFaceScan.style.display = "block";
+  btnFaceScan.disabled = false;
+
+  btnFaceScan.onclick = async () => {
+    btnFaceScan.disabled = true;
+    setStatus("Mendeteksi wajah...", "info");
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize:416, scoreThreshold:0.3 }))
+      .withFaceLandmarks().withFaceDescriptor();
+
+    if (!detection) {
+      setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
+      btnFaceScan.disabled = false;
+      return;
+    }
+    const distance = faceapi.euclideanDistance(detection.descriptor, refResult.descriptor);
+    if (distance > FACE_MATCH_THRESHOLD) {
+      setStatus("❌ Wajah tidak cocok (jarak: " + distance.toFixed(3) + ").", "fail");
+      showRetry();
+      return;
+    }
+
+    setStatus("✅ Wajah cocok!", "ok");
+    stopCamera();
+    btnFaceScan.style.display = "none";
+    showConfirmStep();
+  };
+}
+
+// ============ STEP 4: INPUT KODE IJIN + KONFIRMASI ============
+function showConfirmStep() {
+  btnConfirm.style.display = "block";
+  btnConfirm.innerText = "🚪 Konfirmasi Ijin Pulang";
+  setStatus("Masukkan kode Ijin dari HRD/Supervisor, lalu tekan konfirmasi.", "ok");
+
+  btnConfirm.onclick = async () => {
+    const kodeIjin = document.getElementById('txtKodeIjin').value.trim();
+    if (!kodeIjin) { alert("Kode Ijin tidak boleh kosong!"); return; }
+
+    btnConfirm.disabled = true;
+    setStatus("Memvalidasi kode & menyimpan...", "info");
+    try {
+      const res = await callApi("SUBMIT_IJIN_KELUAR", { qrCodeId: qrCodeId, lokasi: currentLokasi, kodeIjin: kodeIjin });
+      if (res.status === "SUCCESS") {
+        showBanner("✅ " + res.message, "ok");
+        setStatus("", "");
+        statusEl.style.display = "none";
+        btnConfirm.style.display = "none";
+        stageArea.style.display = "none";
+      } else {
+        showBanner("❌ " + res.message, "fail");
+        setStatus("", "");
+        statusEl.style.display = "none";
+        btnConfirm.disabled = false;
+      }
+    } catch (e) {
+      setStatus("❌ Gagal submit: " + e.message, "fail");
+      btnConfirm.disabled = false;
+    }
+  };
+}
+</script>
+</body>
+</html>
