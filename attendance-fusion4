@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fusion4 - Absensi</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ECEEF1; --surface: #FFFFFF; --surface-2: #F5F6F8;
+    --text: #12161C; --text-muted: #5B6472; --border: #DEE2E7;
+    --accent: #D9312E; --accent-dark: #B32220; --accent-bg: #FBEAEA;
+    --steel: #243463; --steel-light: #3C5089;
+    --success: #178A4C; --success-bg: #E5F6EC;
+    --danger: #D9312E; --danger-bg: #FCEAE8;
+    --warn: #B8860B; --warn-bg: #FBF3DC;
+    --radius-lg: 18px; --radius-md: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
+    margin: 0; padding: 24px 16px 56px; -webkit-tap-highlight-color: transparent;
+  }
+  .page { max-width: 440px; margin: 0 auto; }
+  .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .brand-logo { width: 44px; height: 44px; border-radius: 10px; object-fit: contain; flex-shrink: 0; }
+  .brand-fallback {
+    background: var(--steel); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 17px;
+  }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--steel-light);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow::before { content: ""; width: 8px; height: 8px; background: var(--accent); display: inline-block; }
+  h1.title {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; text-transform: uppercase;
+    font-size: 30px; line-height: 1; margin: 0; color: var(--steel);
+  }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; margin-bottom: 14px; }
+  .card-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 10px; }
+  input[type="text"], input[type="password"] {
+    width: 100%; font-family: 'IBM Plex Mono', monospace; font-size: 16px;
+    padding: 13px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border);
+    background: var(--surface-2); color: var(--text);
+  }
+  input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+  button {
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 15px;
+    border: none; border-radius: var(--radius-md); cursor: pointer;
+  }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-block { display: block; width: 100%; padding: 15px; margin-top: 10px; }
+  .btn-primary { background: var(--steel); color: #fff; }
+  .btn-accent { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface-2); color: var(--steel); border: 1.5px solid var(--border); }
+
+  #locBanner, #resultBanner {
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 12px 14px;
+    border-radius: var(--radius-md); margin-bottom: 14px; line-height: 1.5; display: none;
+  }
+  .banner-info { background: var(--surface-2); color: var(--steel); border-left: 3px solid var(--steel-light); }
+  .banner-ok { background: var(--success-bg); color: var(--success); border-left: 3px solid var(--success); }
+  .banner-fail { background: var(--danger-bg); color: var(--danger); border-left: 3px solid var(--danger); }
+  .banner-warn { background: var(--warn-bg); color: var(--warn); border-left: 3px solid var(--warn); }
+
+  #wrap {
+    position: relative; width: 100%; aspect-ratio: 1/1; margin: 0 auto 14px;
+    overflow: hidden; border-radius: var(--radius-lg); background: #0B0D10; display: none;
+  }
+  video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+  .reticle { position: absolute; inset: 22px; pointer-events: none; }
+  .reticle span { position: absolute; width: 26px; height: 26px; border: 3px solid var(--accent); }
+  .reticle span:nth-child(1){ top:0; left:0; border-right:none; border-bottom:none; border-top-left-radius:6px; }
+  .reticle span:nth-child(2){ top:0; right:0; border-left:none; border-bottom:none; border-top-right-radius:6px; }
+  .reticle span:nth-child(3){ bottom:0; left:0; border-right:none; border-top:none; border-bottom-left-radius:6px; }
+  .reticle span:nth-child(4){ bottom:0; right:0; border-left:none; border-top:none; border-bottom-right-radius:6px; }
+
+  #status { font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text);
+    background:var(--surface-2); border-left:3px solid var(--steel-light); border-radius:0 8px 8px 0;
+    padding:10px 12px; margin:0 0 14px; line-height:1.5; display:none; }
+  #status.ok { border-left-color: var(--success); }
+  #status.fail { border-left-color: var(--danger); }
+
+  .badge { display:inline-block; padding:8px 20px; border-radius:999px; color:#fff; font-weight:700; font-size:16px; }
+  .badge-masuk1{ background:#22c55e; } .badge-istirahat{ background:#f59e0b; }
+  .badge-masuk2{ background:#2563eb; } .badge-pulang{ background:#ef4444; }
+
+  footer.hint { text-align:center; font-size:12px; color:var(--text-muted); margin-top:20px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="brand-row">
+    <img src="logo.png" alt="Logo" class="brand-logo" id="brandLogo" onerror="this.style.display='none'; document.getElementById('brandFallback').style.display='flex';">
+    <div class="brand-logo brand-fallback" id="brandFallback" style="display:none;">FW</div>
+    <div>
+      <div class="eyebrow">Fusion 4 Engine</div>
+      <h1 class="title">Absensi</h1>
+    </div>
+  </div>
+
+  <div id="locBanner" class="banner-info">🔄 Mengunci lokasi GPS...</div>
+  <div id="resultBanner"></div>
+
+  <div id="wrap">
+    <video id="video" width="320" height="320" autoplay muted playsinline></video>
+    <canvas id="canvas" width="320" height="320" style="display:none;"></canvas>
+    <div class="reticle"><span></span><span></span><span></span><span></span></div>
+  </div>
+
+  <p id="status">Menyiapkan...</p>
+  <button id="btnScanFace" class="btn-block btn-accent" style="display:none;">📸 Scan Wajah</button>
+
+  <div id="passwordCard" class="card" style="display:none;">
+    <p class="card-label">Password Otorisasi</p>
+    <input type="password" id="txtPassword" placeholder="Masukkan password">
+    <button id="btnSubmitPassword" class="btn-block btn-primary">Konfirmasi</button>
+  </div>
+
+  <div id="ijinCard" class="card" style="display:none; border-color: var(--warn);">
+    <p class="card-label">🚪 Ijin Pulang Tersedia</p>
+    <p id="ijinAlasanText" style="margin:0 0 12px; font-size:14px; color:var(--text);"></p>
+    <button id="btnPakaiIjin" class="btn-block btn-accent">Ya, Pulang Sekarang</button>
+    <button id="btnLewatiIjin" class="btn-block btn-secondary">Tidak, Absen Biasa</button>
+  </div>
+
+  <div id="voucherCard" class="card" style="display:none;">
+    <p class="card-label">Voucher PIN Lembur (SPKL)</p>
+    <input type="text" id="txtVoucherPIN" placeholder="Contoh: SPKL-MAJU" style="text-transform:uppercase;">
+    <button id="btnSubmitVoucher" class="btn-block btn-accent">Mulai Lembur</button>
+  </div>
+
+  <button id="btnRetry" class="btn-block btn-secondary" style="display:none;">🔁 Ulangi</button>
+
+  <footer class="hint">Pastikan GPS aktif dan wajah terlihat jelas di kamera.</footer>
+
+</div>
+
+<script>
+// ============ KONFIGURASI ============
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
+const FACE_MATCH_THRESHOLD = 0.55;
+
+const params = new URLSearchParams(window.location.search);
+let qrCodeId = (params.get('QrCodeId') || params.get('qrCodeId') || params.get('qrcodeid') || "").trim().toUpperCase();
+
+let activeLocation = "";
+let currentPerson = null;
+let refDescriptor = null;
+let faceVerified = false;
+
+const locBanner = document.getElementById('locBanner');
+const resultBanner = document.getElementById('resultBanner');
+const statusEl = document.getElementById('status');
+const wrap = document.getElementById('wrap');
+const video = document.getElementById('video');
+const btnScanFace = document.getElementById('btnScanFace');
+const passwordCard = document.getElementById('passwordCard');
+const voucherCard = document.getElementById('voucherCard');
+const btnRetry = document.getElementById('btnRetry');
+
+function showBanner(el, text, kind) {
+  el.style.display = "block";
+  el.className = "banner-" + kind;
+  el.innerText = text;
+}
+function setStatus(text, kind) {
+  statusEl.style.display = "block";
+  statusEl.className = kind || "";
+  statusEl.innerText = text;
+}
+function showRetry() {
+  btnRetry.style.display = "block";
+}
+btnRetry.onclick = () => location.reload();
+
+async function callApi(action, extra) {
+  const body = Object.assign({ action: action }, extra || {});
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "text/plain" }
+  });
+  return await res.json();
+}
+
+// SUBMIT_ABSENSI tidak pakai "action" khusus -- itu jalur default doPost
+async function submitAbsensiCall(qrCodeId, lokasi, password) {
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    body: JSON.stringify({ qrCodeId: qrCodeId, lokasi: lokasi, voucherPIN: password || "" }),
+    headers: { "Content-Type": "text/plain" }
+  });
+  return await res.json();
+}
+
+// ============ 1. GPS ============
+async function initGPS() {
+  if (!navigator.geolocation) {
+    showBanner(locBanner, "❌ Browser tidak mendukung GPS.", "fail");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      showBanner(locBanner, "🟢 GPS terkunci. Menyelaraskan dengan server...", "info");
+      try {
+        const result = await callApi("FIND_NEAREST_LOCATION", { lat: lat, lng: lng });
+        handleLocationResult(result);
+      } catch (e) {
+        showBanner(locBanner, "❌ Gagal terhubung ke server: " + e.message, "fail");
+      }
+    },
+    (err) => {
+      let pesan = "Gagal memproses lokasi.";
+      if (err.code === err.PERMISSION_DENIED) pesan = "Akses lokasi GPS ditolak. Aktifkan izin lokasi di HP.";
+      else if (err.code === err.POSITION_UNAVAILABLE) pesan = "Sinyal GPS tidak tersedia.";
+      else if (err.code === err.TIMEOUT) pesan = "Waktu pencarian lokasi habis.";
+      showBanner(locBanner, "🔴 " + pesan, "fail");
+      showRetry();
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+
+function handleLocationResult(result) {
+  if (!result || typeof result !== 'object') {
+    showBanner(locBanner, "🔴 Lokasi tidak ditemukan.", "fail");
+    return;
+  }
+  if (!result.IsInsideRadius) {
+    showBanner(locBanner, "🔴 Di luar area absensi (" + (result.NamaLokasi || "Unmapped") + ")", "fail");
+    return;
+  }
+  activeLocation = String(result.NamaLokasi || "").trim();
+  showBanner(locBanner,
+    "🟢 Kelompok: " + activeLocation + " | Jarak: " + (result.Distance ?? "-") + "m | Radius: " + (result.Radius || "-") + "m",
+    "ok");
+
+  if (!qrCodeId) {
+    setStatus("GPS siap. Menunggu QR Code di-scan...", "info");
+    setStatus("⚠️ Tidak ada QrCodeId di URL. Silakan scan QR Code karyawan dari awal.", "fail");
+    return;
+  }
+  proceedWithQr();
+}
+
+// ============ 2. AMBIL DATA PERSON ============
+async function proceedWithQr() {
+  setStatus("Mengambil data karyawan...", "info");
+  try {
+    const paketData = await callApi("GET_PERSON_DATA", { qrCodeId: qrCodeId });
+    if (!paketData || paketData.status === "NOT_FOUND" || paketData.status === "REJECTED") {
+      setStatus("❌ " + (paketData ? paketData.message : "Karyawan tidak ditemukan."), "fail");
+      showRetry();
+      return;
+    }
+    if (!paketData.person) {
+      setStatus("❌ Data profil tidak valid.", "fail");
+      showRetry();
+      return;
+    }
+    currentPerson = paketData.person;
+    currentPerson._needAuth = !!(paketData.authReq && paketData.authReq.needAuth);
+    startFaceVerification();
+  } catch (e) {
+    setStatus("❌ Gagal ambil data: " + e.message, "fail");
+    showRetry();
+  }
+}
+
+// ============ 3. VERIFIKASI WAJAH ============
+async function startFaceVerification() {
+  setStatus("Memuat model wajah...", "info");
+  try {
+    const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  } catch (e) {
+    setStatus("❌ Gagal memuat model wajah: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("Mengambil data referensi wajah...", "info");
+  const refResult = await callApi("GET_FACE_DESCRIPTOR", { qrCodeId: qrCodeId });
+  if (!refResult || !refResult.found) {
+    setStatus("❌ " + (refResult ? refResult.message : "Wajah belum terdaftar.") + " Hubungi admin untuk enroll wajah.", "fail");
+    showRetry();
+    return;
+  }
+  refDescriptor = refResult.descriptor;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    await video.play();
+    wrap.style.display = "block";
+  } catch (e) {
+    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
+  btnScanFace.style.display = "block";
+  btnScanFace.disabled = false;
+}
+
+btnScanFace.onclick = async () => {
+  btnScanFace.disabled = true;
+  setStatus("Mendeteksi wajah...", "info");
+
+  const detection = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!detection) {
+    setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
+    btnScanFace.disabled = false;
+    return;
+  }
+
+  const distance = faceapi.euclideanDistance(detection.descriptor, refDescriptor);
+  const matched = distance <= FACE_MATCH_THRESHOLD;
+
+  if (!matched) {
+    setStatus("❌ Wajah tidak cocok (jarak: " + distance.toFixed(3) + "). Absen ditolak.", "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("✅ Wajah cocok! Melanjutkan absensi...", "ok");
+  stopCamera();
+  faceVerified = true;
+  checkIjinThenProceed();
+};
+
+async function checkIjinThenProceed() {
+  setStatus("Mengecek status ijin...", "info");
+  try {
+    const ijinResult = await callApi("CHECK_IJIN_PENDING", { qrCodeId: qrCodeId });
+    if (ijinResult && ijinResult.hasPending) {
+      statusEl.style.display = "none";
+      document.getElementById('ijinAlasanText').innerText = "Alasan: " + (ijinResult.alasan || "-");
+      document.getElementById('ijinCard').style.display = "block";
+
+      document.getElementById('btnPakaiIjin').onclick = async () => {
+        document.getElementById('ijinCard').style.display = "none";
+        setStatus("Memproses ijin pulang...", "info");
+        const res = await callApi("SUBMIT_IJIN_KELUAR", { qrCodeId: qrCodeId, lokasi: activeLocation, kodeIjin: ijinResult.kodeIjin });
+        if (res.status === "SUCCESS") {
+          showResultCard(res.message, "ok");
+        } else {
+          showResultCard("❌ " + res.message, "fail");
+        }
+      };
+      document.getElementById('btnLewatiIjin').onclick = () => {
+        document.getElementById('ijinCard').style.display = "none";
+        proceedAfterFaceVerified();
+      };
+      return;
+    }
+  } catch (e) {
+    console.warn("Gagal cek ijin (lanjut absen normal):", e.message);
+  }
+  proceedAfterFaceVerified();
+}
+
+function stopCamera() {
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  wrap.style.display = "none";
+  btnScanFace.style.display = "none";
+}
+
+// ============ 4. LANJUT KE ABSENSI (setelah wajah cocok) ============
+async function proceedAfterFaceVerified() {
+  if (currentPerson.AuthorizedBy && currentPerson.AuthorizedBy !== "") {
+    // anggota kelompok -> langsung submit, tanpa password
+    doSubmitAbsensi("");
+  } else if (currentPerson._needAuth) {
+    // Supervisor / independen -> perlu password dulu
+    setStatus("Verifikasi wajah selesai. Masukkan password otorisasi.", "ok");
+    passwordCard.style.display = "block";
+  } else {
+    doSubmitAbsensi("");
+  }
+}
+
+document.getElementById('btnSubmitPassword').onclick = () => {
+  const pw = document.getElementById('txtPassword').value.trim();
+  if (!pw) { alert("Password tidak boleh kosong!"); return; }
+  passwordCard.style.display = "none";
+  doSubmitAbsensi(pw);
+};
+
+async function doSubmitAbsensi(password) {
+  setStatus("Mengirim data absensi...", "info");
+  try {
+    const response = await submitAbsensiCall(qrCodeId, activeLocation, password);
+    handleAbsensiResponse(response);
+  } catch (e) {
+    setStatus("❌ Gagal submit absensi: " + e.message, "fail");
+    showRetry();
+  }
+}
+
+function handleAbsensiResponse(response) {
+  let statusBersih = "", pesanBersih = "";
+  if (response && typeof response === 'object') {
+    statusBersih = String(response.status || "").toUpperCase().trim();
+    pesanBersih = response.message || response.pesan || JSON.stringify(response);
+  } else {
+    let strRaw = String(response || "").trim();
+    statusBersih = strRaw.toUpperCase().indexOf("SUKSES") !== -1 ? "SUKSES" : strRaw;
+    pesanBersih = strRaw;
+  }
+
+  if (pesanBersih === "BUTUH_PASSWORD" || pesanBersih === "BUTUH_PASSWORD_CHECKOUT") {
+    setStatus("Diperlukan password otorisasi.", "info");
+    passwordCard.style.display = "block";
+    return;
+  }
+
+  if (pesanBersih === "BUTUH_SPKL" || statusBersih === "NEED_VOUCHER") {
+    setStatus("Sesi reguler sudah CLOSED. Masukkan Voucher PIN untuk lembur.", "info");
+    voucherCard.style.display = "block";
+    return;
+  }
+
+  // Hasil akhir (SUKSES / REJECTED / lainnya)
+  setStatus("", "");
+  statusEl.style.display = "none";
+  let bersih = pesanBersih.replace("REGULER_SUKSES:", "");
+  let kind = bersih.toUpperCase().indexOf("SUKSES") !== -1 ? "ok" : "fail";
+  showResultCard(bersih, kind);
+}
+
+document.getElementById('btnSubmitVoucher').onclick = async () => {
+  const pin = document.getElementById('txtVoucherPIN').value.trim();
+  if (!pin) { alert("Voucher PIN tidak boleh kosong!"); return; }
+  voucherCard.style.display = "none";
+  setStatus("Memproses voucher lembur...", "info");
+  try {
+    const res = await callApi("SUBMIT_LEMBUR", { qrCodeId: qrCodeId, lokasi: activeLocation, pinVoucher: pin });
+    if (res.status === "SUCCESS" || res.status === "SUKSES") {
+      showResultCard(res.message || "✅ Lembur berhasil tercatat!", "ok");
+    } else if (res.status === "NEED_VOUCHER" || res.status === "BUTUH_SPKL") {
+      setStatus("PIN belum aktif / salah. Coba lagi.", "fail");
+      voucherCard.style.display = "block";
+    } else {
+      showResultCard("❌ " + (res.message || "Lembur ditolak."), "fail");
+    }
+  } catch (e) {
+    setStatus("❌ Gagal submit lembur: " + e.message, "fail");
+    showRetry();
+  }
+};
+
+function showResultCard(text, kind) {
+  const badgeMap = { masuk1:"badge-masuk1", istirahat:"badge-istirahat", masuk2:"badge-masuk2", pulang:"badge-pulang" };
+  resultBanner.style.display = "block";
+  resultBanner.className = kind === "ok" ? "banner-ok" : "banner-fail";
+  resultBanner.innerHTML = (kind === "ok" ? "✅ " : "❌ ") + text;
+
+  const btnDone = document.createElement('button');
+  btnDone.className = "btn-block btn-primary";
+  btnDone.innerText = "Selesai";
+  btnDone.onclick = () => location.href = location.pathname;
+  resultBanner.parentNode.insertBefore(btnDone, resultBanner.nextSibling);
+}
+
+// ============ START ============
+initGPS();
+</script>
+</body>
+</html>
