@@ -220,17 +220,6 @@ let guideLoopActive = false;
 let lastGuideOk = false;
 let currentFacingModeFace = "user"; // default depan buat wajah sendiri
 
-// Helper: kasih batas waktu ke promise yang berpotensi hang (mis. WebGL macet di iOS Safari)
-function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)
-    )
-  ]);
-}
-let faceDetectFailCount = 0; // hitung kegagalan beruntun buat trigger restart kamera
-
 document.getElementById('btnSwitchFaceCam').onclick = async () => {
   currentFacingModeFace = currentFacingModeFace === "user" ? "environment" : "user";
   stopGuideLoop();
@@ -257,35 +246,15 @@ function evaluateFaceBox(box) {
   return { ok: true, reason: "Posisi bagus" };
 }
 
-async function guideLoop() {
+function guideLoop() {
+  // Guide statis -- TIDAK ada deteksi berulang (matiin sumber WebGL rebutan
+  // yang bikin iOS Safari hang). Oval cuma jadi panduan visual posisi,
+  // validasi sebenarnya jalan sekali pas tombol Scan ditekan.
   faceGuideOval.style.display = "block";
+  faceGuideOval.className = "";
   faceGuideHint.style.display = "block";
+  faceGuideHint.innerText = "Posisikan wajah di dalam oval, lalu tekan Scan Wajah";
   guideLoopActive = true;
-
-  // Jeda kecil dulu sebelum mulai -- kasih waktu iOS Safari "settle" abis
-  // proses kamera/QR sebelumnya, biar WebGL nggak keburu-buru dipaksa jalan.
-  await new Promise(r => setTimeout(r, 300));
-
-  while (guideLoopActive) {
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      try {
-        const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }));
-        if (detection) {
-          const evalResult = evaluateFaceBox(detection.box);
-          lastGuideOk = evalResult.ok;
-          faceGuideOval.className = evalResult.ok ? "ok" : "warn";
-          faceGuideHint.innerText = evalResult.ok ? "✅ Posisi bagus, tekan Scan Wajah" : evalResult.reason;
-        } else {
-          lastGuideOk = false;
-          faceGuideOval.className = "";
-          faceGuideHint.innerText = "Wajah belum terdeteksi";
-        }
-      } catch (e) {
-        console.warn("guideLoop detection error (diabaikan):", e.message);
-      }
-    }
-    await new Promise(r => setTimeout(r, 600));
-  }
 }
 
 function stopGuideLoop() {
@@ -421,15 +390,49 @@ document.getElementById('btnShowQrOption').onclick = () => {
 };
 
 // Mode 1:N -- scan wajah dulu, sistem cari sendiri orangnya dari SEMUA yang sudah enroll
+let faceModelsAlreadyLoaded = false;
+
+async function loadFaceModelsWithBackendFix() {
+  if (faceModelsAlreadyLoaded) return;
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  if (isIOS && faceapi.tf && faceapi.tf.setBackend) {
+    try {
+      // WebGL di banyak iOS Safari sering hang untuk model face-recognition
+      // yang lebih berat -- paksa pakai CPU khusus di iOS, lebih lambat
+      // dikit tapi jauh lebih stabil (tidak nge-hang).
+      await faceapi.tf.setBackend('cpu');
+      await faceapi.tf.ready();
+      console.log("iOS terdeteksi -> backend TensorFlow dipaksa CPU");
+    } catch (e) {
+      console.warn("Gagal set backend CPU, lanjut pakai default:", e.message);
+    }
+  }
+
+  const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  faceModelsAlreadyLoaded = true;
+}
+
+// Bungkus promise dengan batas waktu -- kalau lebih dari `ms` belum selesai,
+// dianggap gagal (daripada macet selamanya tanpa kejelasan ke user).
+function withTimeout(promise, ms, timeoutMessage) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms))
+  ]);
+}
+
 async function startFaceOnlyCapture() {
   matchMode = "1:N";
   setStatus("Memuat model wajah...", "info");
   statusEl.style.display = "block";
   try {
-    const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
-    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    await withTimeout(loadFaceModelsWithBackendFix(), 15000, "Timeout memuat model (15 detik). Coba refresh halaman.");
   } catch (e) {
     setStatus("❌ Gagal memuat model wajah: " + e.message, "fail");
     showRetry();
@@ -470,10 +473,7 @@ async function startFaceVerification() {
   matchMode = "1:1";
   setStatus("Memuat model wajah...", "info");
   try {
-    const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
-    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    await withTimeout(loadFaceModelsWithBackendFix(), 15000, "Timeout memuat model (15 detik). Coba refresh halaman.");
   } catch (e) {
     setStatus("❌ Gagal memuat model wajah: " + e.message, "fail");
     showRetry();
@@ -504,7 +504,6 @@ async function startFaceVerification() {
   document.getElementById("btnSwitchFaceCam").style.display = "block";
 }
 
-// ============ SCAN WAJAH (dengan try/catch + timeout + auto-recovery WebGL) ============
 btnScanFace.onclick = async () => {
   btnScanFace.disabled = true;
   guideLoopActive = false; // hentikan loop ringan dulu, jangan sampai rebutan WebGL
@@ -514,40 +513,18 @@ btnScanFace.onclick = async () => {
   let detection;
   try {
     detection = await withTimeout(
-      faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+      faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
         .withFaceLandmarks()
         .withFaceDescriptor(),
-      8000, // 8 detik cukup untuk TinyFaceDetector di HP modern; kalau lewat, kemungkinan besar WebGL macet
-      "Deteksi wajah"
+      15000,
+      "Deteksi wajah timeout (15 detik). Kamera/browser mungkin bermasalah, coba refresh halaman."
     );
   } catch (e) {
-    console.error("Scan wajah gagal/timeout:", e);
-    faceDetectFailCount++;
-
-    if (faceDetectFailCount >= 2) {
-      // Sudah gagal 2x -- kemungkinan besar WebGL context di iOS Safari beneran corrupt.
-      // Solusi paling andal: restart total kamera + stream (bukan cuma retry deteksi).
-      setStatus("❌ Kamera/deteksi bermasalah (kemungkinan WebGL iOS Safari). Me-restart kamera...", "fail");
-      try {
-        await restartCameraStream(currentFacingModeFace);
-        faceDetectFailCount = 0;
-        setStatus("Kamera direstart. Posisikan wajah lagi, lalu tekan Scan Wajah.", "info");
-      } catch (e2) {
-        setStatus("❌ Gagal restart kamera: " + e2.message + ". Coba tekan Ulangi.", "fail");
-        showRetry();
-      }
-    } else {
-      setStatus("❌ Deteksi wajah gagal/timeout. Coba tekan Scan Wajah sekali lagi.", "fail");
-    }
-
+    setStatus("❌ " + e.message, "fail");
     btnScanFace.disabled = false;
-    guideLoop();
+    showRetry();
     return;
   }
-
-  // Deteksi berhasil dapat respons (bisa null kalau memang gak ada wajah)
-  faceDetectFailCount = 0;
 
   if (!detection) {
     setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
