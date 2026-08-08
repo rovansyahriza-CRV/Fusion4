@@ -443,10 +443,12 @@ btnScanQR.onclick = () => {
     btnScanQR.innerText = "📷 Scan QR";
     document.getElementById('qrGuide').style.display = "none";
     status.innerText = "Scan QR dibatalkan.";
+    guideLoop(); // balikin oval wajah, kita nggak lagi di mode QR
     return;
   }
   qrScanning = true;
   btnScanQR.innerText = "⏹️ Batal Scan";
+  stopGuideLoop(); // sembunyikan oval wajah dulu, kita lagi mode QR sekarang
   document.getElementById('qrGuide').style.display = "block";
   status.innerText = `Posisikan QR di kotak hijau... (kamera: ${video.videoWidth}x${video.videoHeight})`;
   scanQRLoop();
@@ -480,6 +482,7 @@ async function scanQRLoop() {
         qrInput.value = extractedId;
         qrInput.dispatchEvent(new Event('input')); // trigger pengecekan nama
         status.innerText = `✅ QR terbaca: ${extractedId}`;
+        guideLoop(); // balikin oval wajah, QR udah kebaca, lanjut ke capture wajah
         return;
       }
     }
