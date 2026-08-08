@@ -189,7 +189,7 @@
 <script>
 // ============ KONFIGURASI ============
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
-const FACE_MATCH_THRESHOLD = 0.55;
+const FACE_MATCH_THRESHOLD = 0.45; // diperketat dari 0.55 -- kurangi resiko salah kenali orang
 
 const params = new URLSearchParams(window.location.search);
 let qrCodeId = (params.get('QrCodeId') || params.get('qrCodeId') || params.get('qrcodeid') || "").trim().toUpperCase();
@@ -575,7 +575,7 @@ btnScanFace.onclick = async () => {
 
     const best = sorted[0];
     const secondBest = sorted[1];
-    const AMBIGUITY_MARGIN = 0.08; // selisih minimal antara kandidat #1 dan #2 biar dianggap yakin
+    const AMBIGUITY_MARGIN = 0.12; // diperketat dari 0.08 -- lebih gampang dianggap "ragu-ragu", minta QR
 
     const withinThreshold = best && best.distance <= FACE_MATCH_THRESHOLD;
     const isAmbiguous = secondBest && (secondBest.distance - best.distance) < AMBIGUITY_MARGIN;
