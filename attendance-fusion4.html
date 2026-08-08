@@ -135,6 +135,7 @@
     <p class="card-label">Absensi</p>
     <button id="btnStartFaceFirst" class="btn-block btn-accent">📸 Scan Wajah</button>
     <button id="btnShowQrOption" class="btn-block btn-secondary">📷 Atau Scan QR Code</button>
+    <button id="btnGoPindahLokasi" class="btn-block btn-secondary" style="margin-top:16px; border-top:1px solid var(--border); padding-top:15px;">🚚 Pindah Lokasi (Checkout)</button>
   </div>
 
   <div id="qrCard" class="card" style="display:none;">
@@ -395,6 +396,10 @@ document.getElementById('btnShowQrOption').onclick = () => {
   } else {
     qrCard.style.display = "block";
   }
+};
+
+document.getElementById('btnGoPindahLokasi').onclick = () => {
+  window.location.href = "pindah-lokasi.html";
 };
 
 // Mode 1:N -- scan wajah dulu, sistem cari sendiri orangnya dari SEMUA yang sudah enroll
