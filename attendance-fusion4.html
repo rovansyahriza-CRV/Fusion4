@@ -395,21 +395,10 @@ let faceModelsAlreadyLoaded = false;
 async function loadFaceModelsWithBackendFix() {
   if (faceModelsAlreadyLoaded) return;
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-  if (isIOS && faceapi.tf && faceapi.tf.setBackend) {
-    try {
-      // WebGL di banyak iOS Safari sering hang untuk model face-recognition
-      // yang lebih berat -- paksa pakai CPU khusus di iOS, lebih lambat
-      // dikit tapi jauh lebih stabil (tidak nge-hang).
-      await faceapi.tf.setBackend('cpu');
-      await faceapi.tf.ready();
-      console.log("iOS terdeteksi -> backend TensorFlow dipaksa CPU");
-    } catch (e) {
-      console.warn("Gagal set backend CPU, lanjut pakai default:", e.message);
-    }
-  }
+  // CATATAN: sempat dicoba paksa backend CPU khusus iOS, ternyata itu
+  // yang bikin lebih parah (bukan solusi) -- WebGL default terbukti
+  // pernah jalan normal sebelumnya. Jadi TIDAK dipaksa lagi, biarkan
+  // browser pakai default (WebGL kalau tersedia).
 
   const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
   await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
