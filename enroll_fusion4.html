@@ -3,85 +3,209 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fusion4 - Absensi</title>
+<title>Enroll Wajah Karyawan</title>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #ECEEF1; --surface: #FFFFFF; --surface-2: #F5F6F8;
-    --text: #12161C; --text-muted: #5B6472; --border: #DEE2E7;
-    --accent: #D9312E; --accent-dark: #B32220; --accent-bg: #FBEAEA;
-    --steel: #243463; --steel-light: #3C5089;
-    --success: #178A4C; --success-bg: #E5F6EC;
-    --danger: #D9312E; --danger-bg: #FCEAE8;
-    --warn: #B8860B; --warn-bg: #FBF3DC;
-    --radius-lg: 18px; --radius-md: 12px;
+    --bg: #ECEEF1;
+    --surface: #FFFFFF;
+    --surface-2: #F5F6F8;
+    --text: #12161C;
+    --text-muted: #5B6472;
+    --border: #DEE2E7;
+    --accent: #D9312E;
+    --accent-dark: #B32220;
+    --accent-bg: #FBEAEA;
+    --steel: #243463;
+    --steel-light: #3C5089;
+    --success: #178A4C;
+    --success-bg: #E5F6EC;
+    --danger: #D6362B;
+    --danger-bg: #FCEAE8;
+    --radius-lg: 18px;
+    --radius-md: 12px;
   }
+
   * { box-sizing: border-box; }
+
   body {
-    font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
-    margin: 0; padding: 24px 16px 56px; -webkit-tap-highlight-color: transparent;
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 24px 16px 56px;
+    -webkit-tap-highlight-color: transparent;
   }
+
   .page { max-width: 440px; margin: 0 auto; }
-  .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-  .brand-logo { width: 44px; height: 44px; border-radius: 10px; object-fit: contain; flex-shrink: 0; }
+
+  .brand-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .brand-logo {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
   .brand-fallback {
-    background: var(--steel); color: var(--accent);
+    background: var(--steel);
+    color: var(--accent);
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 17px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: 0.02em;
   }
+
   .eyebrow {
-    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-    letter-spacing: 0.14em; text-transform: uppercase; color: var(--steel-light);
-    display: flex; align-items: center; gap: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel-light);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
   }
-  .eyebrow::before { content: ""; width: 8px; height: 8px; background: var(--accent); display: inline-block; }
+  .eyebrow::before {
+    content: "";
+    width: 8px; height: 8px;
+    background: var(--accent);
+    display: inline-block;
+  }
+
   h1.title {
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; text-transform: uppercase;
-    font-size: 30px; line-height: 1; margin: 0; color: var(--steel);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    font-size: 34px;
+    line-height: 1;
+    margin: 0 0 20px;
+    color: var(--steel);
   }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; margin-bottom: 14px; }
-  .card-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 10px; }
-  input[type="text"], input[type="password"] {
-    width: 100%; font-family: 'IBM Plex Mono', monospace; font-size: 16px;
-    padding: 13px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border);
-    background: var(--surface-2); color: var(--text);
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    margin-bottom: 14px;
   }
-  input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+
+  .card-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+  }
+
+  .qr-row { display: flex; gap: 8px; }
+
+  input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    padding: 13px 14px;
+    border-radius: var(--radius-md);
+    border: 1.5px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+  input[type="text"]::placeholder { color: #9AA3AD; }
+
   button {
-    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 15px;
-    border: none; border-radius: var(--radius-md); cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: transform 0.05s ease, opacity 0.15s ease;
   }
   button:active { transform: scale(0.98); }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-block { display: block; width: 100%; padding: 15px; margin-top: 10px; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-icon {
+    padding: 13px 16px;
+    background: var(--steel);
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .btn-block {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    margin-top: 10px;
+  }
   .btn-primary { background: var(--steel); color: #fff; }
-  .btn-accent { background: var(--accent); color: #fff; }
+  .btn-primary:disabled { background: #C6CBD1; opacity: 1; }
   .btn-secondary { background: var(--surface-2); color: var(--steel); border: 1.5px solid var(--border); }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:disabled { background: #C6CBD1; opacity: 1; }
 
-  #locBanner, #resultBanner {
-    font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 12px 14px;
-    border-radius: var(--radius-md); margin-bottom: 14px; line-height: 1.5; display: none;
+  #namaPreview {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    margin: 10px 0 0;
+    padding: 9px 12px;
+    border-radius: 8px;
+    display: none;
   }
-  .banner-info { background: var(--surface-2); color: var(--steel); border-left: 3px solid var(--steel-light); }
-  .banner-ok { background: var(--success-bg); color: var(--success); border-left: 3px solid var(--success); }
-  .banner-fail { background: var(--danger-bg); color: var(--danger); border-left: 3px solid var(--danger); }
-  .banner-warn { background: var(--warn-bg); color: var(--warn); border-left: 3px solid var(--warn); }
+  #namaPreview.show { display: block; }
+  #namaPreview.ok { background: var(--success-bg); color: var(--success); }
+  #namaPreview.warn { background: var(--danger-bg); color: var(--danger); }
 
+  /* ===== Kamera: viewfinder bergaya scanner lapangan ===== */
   #wrap {
-    position: relative; width: 100%; aspect-ratio: 1/1; margin: 0 auto 14px;
-    overflow: hidden; border-radius: var(--radius-lg); background: #0B0D10; display: none;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto 14px;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: #0B0D10;
   }
-  video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-  .reticle { position: absolute; inset: 22px; pointer-events: none; }
-  .reticle span { position: absolute; width: 26px; height: 26px; border: 3px solid var(--accent); }
-  .reticle span:nth-child(1){ top:0; left:0; border-right:none; border-bottom:none; border-top-left-radius:6px; }
-  .reticle span:nth-child(2){ top:0; right:0; border-left:none; border-bottom:none; border-top-right-radius:6px; }
-  .reticle span:nth-child(3){ bottom:0; left:0; border-right:none; border-top:none; border-bottom-left-radius:6px; }
-  .reticle span:nth-child(4){ bottom:0; right:0; border-left:none; border-top:none; border-bottom-right-radius:6px; }
+  video, canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
 
+  /* bracket sudut ala reticle kamera scanner */
+  .reticle {
+    position: absolute; inset: 22px;
+    pointer-events: none;
+  }
+  .reticle span {
+    position: absolute;
+    width: 26px; height: 26px;
+    border: 3px solid var(--accent);
+  }
+  .reticle span:nth-child(1) { top: 0; left: 0; border-right: none; border-bottom: none; border-top-left-radius: 6px; }
+  .reticle span:nth-child(2) { top: 0; right: 0; border-left: none; border-bottom: none; border-top-right-radius: 6px; }
+  .reticle span:nth-child(3) { bottom: 0; left: 0; border-right: none; border-top: none; border-bottom-left-radius: 6px; }
+  .reticle span:nth-child(4) { bottom: 0; right: 0; border-left: none; border-top: none; border-bottom-right-radius: 6px; }
+
+  /* ===== Guide oval wajah -- warna berubah sesuai posisi live ===== */
   #faceGuideOval {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 58%; height: 74%;
@@ -100,23 +224,66 @@
     padding: 5px 12px; border-radius: 999px;
     display: none; white-space: nowrap;
   }
+
   #qrGuide {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 68%; aspect-ratio: 1/1; border: 3px dashed var(--accent); border-radius: 12px;
-    display: none; pointer-events: none; box-shadow: 0 0 0 999px rgba(0,0,0,.35);
+    width: 68%; aspect-ratio: 1 / 1;
+    border: 3px dashed var(--accent);
+    border-radius: 12px;
+    display: none;
+    pointer-events: none;
+    box-shadow: 0 0 0 999px rgba(0,0,0,0.35);
   }
 
-  #status { font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text);
-    background:var(--surface-2); border-left:3px solid var(--steel-light); border-radius:0 8px 8px 0;
-    padding:10px 12px; margin:0 0 14px; line-height:1.5; display:none; }
-  #status.ok { border-left-color: var(--success); }
-  #status.fail { border-left-color: var(--danger); }
+  .step-chip {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(11,13,16,0.72);
+    color: #fff;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    padding: 6px 14px;
+    border-radius: 999px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .step-chip .n { color: var(--accent); font-weight: 700; }
 
-  .badge { display:inline-block; padding:8px 20px; border-radius:999px; color:#fff; font-weight:700; font-size:16px; }
-  .badge-masuk1{ background:#22c55e; } .badge-istirahat{ background:#f59e0b; }
-  .badge-masuk2{ background:#2563eb; } .badge-pulang{ background:#ef4444; }
+  /* ===== status readout, gaya terminal lapangan ===== */
+  #status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--surface-2);
+    border-left: 3px solid var(--steel-light);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 12px;
+    margin: 0 0 14px;
+    line-height: 1.5;
+  }
 
-  footer.hint { text-align:center; font-size:12px; color:var(--text-muted); margin-top:20px; line-height:1.5; }
+  #shots { display: flex; gap: 8px; justify-content: center; margin: 4px 0 16px; }
+  .dot {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px; font-weight: 500;
+    color: var(--text-muted);
+  }
+  .dot.done { background: var(--success); border-color: var(--success); color: #fff; }
+
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row button { flex: 1; }
+
+  footer.hint {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 20px;
+    line-height: 1.5;
+  }
 </style>
 </head>
 <body>
@@ -126,111 +293,84 @@
     <img src="logo.png" alt="Logo" class="brand-logo" id="brandLogo" onerror="this.style.display='none'; document.getElementById('brandFallback').style.display='flex';">
     <div class="brand-logo brand-fallback" id="brandFallback" style="display:none;">FW</div>
     <div>
-      <div class="eyebrow">Fusion 4 Engine</div>
-      <h1 class="title">Absensi</h1>
+      <div class="eyebrow" style="margin-bottom:0;">Fusion 4 Engine</div>
+      <h1 class="title" style="margin-bottom:0;">Enroll Wajah</h1>
     </div>
   </div>
 
-  <div id="entryCard" class="card" style="display:none;">
-    <p class="card-label">Absensi</p>
-    <button id="btnStartFaceFirst" class="btn-block btn-accent">📸 Scan Wajah</button>
-    <button id="btnShowQrOption" class="btn-block btn-secondary">📷 Atau Scan QR Code</button>
+  <div class="card">
+    <p class="card-label">Identitas karyawan (QrCodeId)</p>
+    <div class="qr-row">
+      <input type="text" id="qrCodeId" placeholder="cth: 1Agu12042025">
+      <button id="btnScanQR" class="btn-icon">📷 Scan QR</button>
+    </div>
+    <p id="namaPreview"></p>
   </div>
-
-  <div id="qrCard" class="card" style="display:none;">
-    <p class="card-label">Scan QR Badge Anda</p>
-    <button id="btnStartQrScan" class="btn-block btn-primary">📷 Buka Kamera & Scan QR</button>
-    <button id="btnSwitchQrCam" class="btn-block btn-secondary" style="display:none;">🔄 Ganti Kamera</button>
-  </div>
-
-  <div id="locBanner" class="banner-info">🔄 Mengunci lokasi GPS...</div>
-  <div id="matchInfo" class="banner-ok" style="display:none;"></div>
-  <div id="resultBanner"></div>
 
   <div id="wrap">
-    <video id="video" width="320" height="320" autoplay muted playsinline></video>
-    <canvas id="canvas" width="320" height="320" style="display:none;"></canvas>
+    <video id="video" width="320" height="240" autoplay muted playsinline></video>
+    <canvas id="canvas" width="320" height="240"></canvas>
+    <div id="qrGuide"></div>
     <div class="reticle"><span></span><span></span><span></span><span></span></div>
     <div id="faceGuideOval"></div>
     <div id="faceGuideHint"></div>
-    <div id="qrGuide"></div>
+    <div class="step-chip" id="stepChip" style="display:none;"><span class="n"></span><span class="l"></span></div>
   </div>
 
-  <p id="status">Menyiapkan...</p>
-  <button id="btnScanFace" class="btn-block btn-accent" style="display:none;">📸 Scan Wajah</button>
-  <button id="btnSwitchFaceCam" class="btn-block btn-secondary" style="display:none;">🔄 Ganti Kamera</button>
-  <button id="btnFallbackToQr" class="btn-block btn-secondary" style="display:none;">📷 Pakai QR Code Saja</button>
+  <p id="status">Memuat model...</p>
 
-  <div id="passwordCard" class="card" style="display:none;">
-    <p class="card-label">Password Otorisasi</p>
-    <input type="password" id="txtPassword" placeholder="Masukkan password">
-    <button id="btnSubmitPassword" class="btn-block btn-primary">Konfirmasi</button>
+  <div id="shots">
+    <span class="dot" id="dot0">1</span>
+    <span class="dot" id="dot1">2</span>
+    <span class="dot" id="dot2">3</span>
+    <span class="dot" id="dot3">4</span>
   </div>
 
-  <div id="ijinCard" class="card" style="display:none; border-color: var(--warn);">
-    <p class="card-label">🚪 Ijin Pulang Tersedia</p>
-    <p id="ijinAlasanText" style="margin:0 0 12px; font-size:14px; color:var(--text);"></p>
-    <button id="btnPakaiIjin" class="btn-block btn-accent">Ya, Pulang Sekarang</button>
-    <button id="btnLewatiIjin" class="btn-block btn-secondary">Tidak, Absen Biasa</button>
+  <div class="btn-row">
+    <button id="btnSwitchCam" class="btn-secondary">🔄 Ganti Kamera</button>
   </div>
+  <button id="btnCapture" class="btn-block btn-primary" disabled>📸 Ambil Foto (Lurus)</button>
+  <button id="btnSave" class="btn-block btn-success" disabled>💾 Simpan ke Database</button>
 
-  <div id="voucherCard" class="card" style="display:none;">
-    <p class="card-label">Voucher PIN Lembur (SPKL)</p>
-    <input type="text" id="txtVoucherPIN" placeholder="Contoh: SPKL-MAJU" style="text-transform:uppercase;">
-    <button id="btnSubmitVoucher" class="btn-block btn-accent">Mulai Lembur</button>
-  </div>
-
-  <button id="btnRetry" class="btn-block btn-secondary" style="display:none;">🔁 Ulangi</button>
-
-  <footer class="hint">Pastikan GPS aktif dan wajah terlihat jelas di kamera.</footer>
+  <footer class="hint">Pastikan wajah dan QR Code terlihat jelas di dalam bingkai kamera.</footer>
 
 </div>
-
 <script>
 // ============ KONFIGURASI ============
+// Ganti dengan URL Web App Apps Script kamu setelah deploy
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
-const FACE_MATCH_THRESHOLD = 0.55;
 
-const params = new URLSearchParams(window.location.search);
-let qrCodeId = (params.get('QrCodeId') || params.get('qrCodeId') || params.get('qrcodeid') || "").trim().toUpperCase();
+const ANGLE_LABELS = [
+  "Lurus ke depan",
+  "Miring sedikit ke KIRI",
+  "Miring sedikit ke KANAN",
+  "Sedikit dongak / tunduk"
+];
 
-let activeLocation = "";
-let currentPerson = null;
-let refDescriptor = null;
-let faceVerified = false;
-let matchMode = "1:1"; // "1:1" (QR dulu, verifikasi ke 1 orang) atau "1:N" (wajah dulu, cari dari semua)
-let allFaceData = null; // cache daftar semua descriptor, buat mode 1:N
-
-const locBanner = document.getElementById('locBanner');
-const resultBanner = document.getElementById('resultBanner');
-const statusEl = document.getElementById('status');
-const wrap = document.getElementById('wrap');
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
-const qrGuide = document.getElementById('qrGuide');
-const qrCard = document.getElementById('qrCard');
-const btnScanFace = document.getElementById('btnScanFace');
-const passwordCard = document.getElementById('passwordCard');
-const voucherCard = document.getElementById('voucherCard');
-const btnRetry = document.getElementById('btnRetry');
+const status = document.getElementById('status');
+const btnCapture = document.getElementById('btnCapture');
+const btnSave = document.getElementById('btnSave');
+const qrInput = document.getElementById('qrCodeId');
+const namaPreview = document.getElementById('namaPreview');
+const stepChip = document.getElementById('stepChip');
+
+function updateStepChip(index) {
+  if (index >= ANGLE_LABELS.length) {
+    stepChip.style.display = "none";
+    return;
+  }
+  stepChip.style.display = "flex";
+  stepChip.querySelector('.n').innerText = `${index + 1}/4`;
+  stepChip.querySelector('.l').innerText = ANGLE_LABELS[index];
+}
+
+// ============ GUIDE OVAL WAJAH -- validasi ukuran & posisi real-time ============
 const faceGuideOval = document.getElementById('faceGuideOval');
 const faceGuideHint = document.getElementById('faceGuideHint');
-let qrScanning = false;
 let guideLoopActive = false;
-let lastGuideOk = false;
-let currentFacingModeFace = "user"; // default depan buat wajah sendiri
-
-document.getElementById('btnSwitchFaceCam').onclick = async () => {
-  currentFacingModeFace = currentFacingModeFace === "user" ? "environment" : "user";
-  stopGuideLoop();
-  try {
-    await restartCameraStream(currentFacingModeFace);
-    guideLoop();
-    setStatus(`Kamera diganti ke: ${currentFacingModeFace === "user" ? "Depan" : "Belakang"}`, "info");
-  } catch (e) {
-    setStatus("❌ Gagal ganti kamera: " + e.message, "fail");
-  }
-};
+let lastGuideOk = false; // status validasi terakhir, dipakai saat tombol Capture ditekan
 
 function evaluateFaceBox(box) {
   if (!video.videoWidth || !video.videoHeight) return { ok: false, reason: "Kamera belum siap" };
@@ -249,11 +389,11 @@ function evaluateFaceBox(box) {
 function guideLoop() {
   // Guide statis -- TIDAK ada deteksi berulang (matiin sumber WebGL rebutan
   // yang bikin iOS Safari hang). Oval cuma jadi panduan visual posisi,
-  // validasi sebenarnya jalan sekali pas tombol Scan ditekan.
+  // validasi sebenarnya jalan sekali pas tombol Ambil Foto ditekan.
   faceGuideOval.style.display = "block";
   faceGuideOval.className = "";
   faceGuideHint.style.display = "block";
-  faceGuideHint.innerText = "Posisikan wajah di dalam oval, lalu tekan Scan Wajah";
+  faceGuideHint.innerText = "Posisikan wajah di dalam oval, lalu tekan Ambil Foto";
   guideLoopActive = true;
 }
 
@@ -261,165 +401,139 @@ function stopGuideLoop() {
   guideLoopActive = false;
   faceGuideOval.style.display = "none";
   faceGuideHint.style.display = "none";
-  document.getElementById("btnSwitchFaceCam").style.display = "none";
 }
 
-function showBanner(el, text, kind) {
-  el.style.display = "block";
-  el.className = "banner-" + kind;
-  el.innerText = text;
-}
-function setStatus(text, kind) {
-  statusEl.style.display = "block";
-  statusEl.className = kind || "";
-  statusEl.innerText = text;
-}
-function showRetry() {
-  btnRetry.style.display = "block";
-}
-btnRetry.onclick = () => location.reload();
+let descriptors = []; // menyimpan 4 descriptor sebelum di-average
+let shotIndex = 0;
+let masterData = [];
 
-async function callApi(action, extra) {
-  const body = Object.assign({ action: action }, extra || {});
+async function loadMasterData() {
   const res = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({ action: "GET_KARYAWAN_LIST" }),
     headers: { "Content-Type": "text/plain" }
   });
-  return await res.json();
+  masterData = await res.json();
 }
 
-// SUBMIT_ABSENSI tidak pakai "action" khusus -- itu jalur default doPost
-async function submitAbsensiCall(qrCodeId, lokasi, password) {
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method: "POST",
-    body: JSON.stringify({ qrCodeId: qrCodeId, lokasi: lokasi, voucherPIN: password || "" }),
-    headers: { "Content-Type": "text/plain" }
-  });
-  return await res.json();
-}
-
-// ============ 1. GPS ============
-async function initGPS() {
-  if (!navigator.geolocation) {
-    showBanner(locBanner, "❌ Browser tidak mendukung GPS.", "fail");
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const lat = pos.coords.latitude, lng = pos.coords.longitude;
-      showBanner(locBanner, "🟢 GPS terkunci. Menyelaraskan dengan server...", "info");
-      try {
-        const result = await callApi("FIND_NEAREST_LOCATION", { lat: lat, lng: lng });
-        handleLocationResult(result);
-      } catch (e) {
-        showBanner(locBanner, "❌ Gagal terhubung ke server: " + e.message, "fail");
-      }
-    },
-    (err) => {
-      let pesan = "Gagal memproses lokasi.";
-      if (err.code === err.PERMISSION_DENIED) pesan = "Akses lokasi GPS ditolak. Aktifkan izin lokasi di HP.";
-      else if (err.code === err.POSITION_UNAVAILABLE) pesan = "Sinyal GPS tidak tersedia.";
-      else if (err.code === err.TIMEOUT) pesan = "Waktu pencarian lokasi habis.";
-      showBanner(locBanner, "🔴 " + pesan, "fail");
-      showRetry();
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
-}
-
-function handleLocationResult(result) {
-  if (!result || typeof result !== 'object') {
-    showBanner(locBanner, "🔴 Lokasi tidak ditemukan.", "fail");
-    return;
-  }
-  if (!result.IsInsideRadius) {
-    showBanner(locBanner, "🔴 Di luar area absensi (" + (result.NamaLokasi || "Unmapped") + ")", "fail");
-    return;
-  }
-  activeLocation = String(result.NamaLokasi || "").trim();
-  showBanner(locBanner,
-    "🟢 Kelompok: " + activeLocation + " | Jarak: " + (result.Distance ?? "-") + "m | Radius: " + (result.Radius || "-") + "m",
-    "ok");
-
-  // Selalu munculkan pilihan Scan Wajah / Scan QR -- tidak ada lagi jalur
-  // otomatis langsung ke verifikasi 1:1, walau QrCodeId sudah terbawa dari
-  // redirect QR fisik (biar konsisten, user tetap yang pilih caranya).
-  setStatus("Pilih cara absen di bawah ini.", "info");
-  document.getElementById('entryCard').style.display = "block";
-}
-
-// ============ 2. AMBIL DATA PERSON ============
-async function proceedWithQr() {
-  setStatus("Mengambil data karyawan...", "info");
-  try {
-    const paketData = await callApi("GET_PERSON_DATA", { qrCodeId: qrCodeId });
-    if (!paketData || paketData.status === "NOT_FOUND" || paketData.status === "REJECTED") {
-      setStatus("❌ " + (paketData ? paketData.message : "Karyawan tidak ditemukan."), "fail");
-      showRetry();
-      return;
-    }
-    if (!paketData.person) {
-      setStatus("❌ Data profil tidak valid.", "fail");
-      showRetry();
-      return;
-    }
-    currentPerson = paketData.person;
-    currentPerson._needAuth = !!(paketData.authReq && paketData.authReq.needAuth);
-    startFaceVerification();
-  } catch (e) {
-    setStatus("❌ Gagal ambil data: " + e.message, "fail");
-    showRetry();
-  }
-}
-
-// ============ 2b. ENTRY: PILIH FACE-FIRST (utama) ATAU QR (cadangan) ============
-document.getElementById('btnStartFaceFirst').onclick = async () => {
-  document.getElementById('entryCard').style.display = "none";
-  await startFaceOnlyCapture();
-};
-
-document.getElementById('btnShowQrOption').onclick = () => {
-  document.getElementById('entryCard').style.display = "none";
-  if (qrCodeId) {
-    // QrCodeId sudah ada (dari redirect QR fisik) -- nggak perlu scan ulang
-    proceedWithQr();
+qrInput.addEventListener('input', () => {
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
+  if (!qrInput.value.trim()) {
+    namaPreview.className = "";
+    namaPreview.innerText = "";
+  } else if (match) {
+    namaPreview.className = "show ok";
+    namaPreview.innerText = `✅ ${match.nama}`;
   } else {
-    qrCard.style.display = "block";
+    namaPreview.className = "show warn";
+    namaPreview.innerText = "⚠️ QrCodeId tidak ditemukan";
+  }
+});
+
+// ============ SCAN QR CODE ============
+let qrScanning = false;
+const btnScanQR = document.getElementById('btnScanQR');
+const qrCanvas = document.createElement('canvas'); // canvas tersembunyi khusus buat baca QR
+const qrCtx = qrCanvas.getContext('2d', { willReadFrequently: true });
+
+btnScanQR.onclick = () => {
+  if (qrScanning) {
+    // lagi scan -> tombol berfungsi buat batalin
+    qrScanning = false;
+    btnScanQR.innerText = "📷 Scan QR";
+    document.getElementById('qrGuide').style.display = "none";
+    status.innerText = "Scan QR dibatalkan.";
+    return;
+  }
+  qrScanning = true;
+  btnScanQR.innerText = "⏹️ Batal Scan";
+  document.getElementById('qrGuide').style.display = "block";
+  status.innerText = `Posisikan QR di kotak hijau... (kamera: ${video.videoWidth}x${video.videoHeight})`;
+  scanQRLoop();
+};
+
+async function scanQRLoop() {
+  while (qrScanning) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+      qrCanvas.width = video.videoWidth;
+      qrCanvas.height = video.videoHeight;
+      qrCtx.drawImage(video, 0, 0, qrCanvas.width, qrCanvas.height);
+      const imageData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+      if (code && code.data) {
+        qrScanning = false;
+        btnScanQR.innerText = "📷 Scan QR";
+        document.getElementById('qrGuide').style.display = "none";
+
+        // QR bisa berisi teks polos ("3Har08032026") ATAU URL lengkap
+        // (".../exec?QrCodeId=3Har08032026") -- ekstrak ID-nya di kedua kasus
+        const rawData = code.data.trim();
+        let extractedId = rawData;
+        try {
+          const url = new URL(rawData);
+          const paramId = url.searchParams.get('QrCodeId') || url.searchParams.get('qrCodeId') || url.searchParams.get('qrcodeid');
+          if (paramId) extractedId = paramId;
+        } catch (e) {
+          // bukan URL valid, berarti memang teks ID polos -> pakai apa adanya
+        }
+
+        qrInput.value = extractedId;
+        qrInput.dispatchEvent(new Event('input')); // trigger pengecekan nama
+        status.innerText = `✅ QR terbaca: ${extractedId}`;
+        return;
+      }
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+}
+
+let currentFacingMode = "user"; // "user" = depan, "environment" = belakang
+
+async function startCamera() {
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: currentFacingMode,
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    }
+  });
+  video.srcObject = stream;
+  await video.play();
+  // samakan resolusi internal canvas dengan video asli, biar kotak deteksi wajah tetap presisi
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  console.log(`Resolusi kamera aktual: ${video.videoWidth}x${video.videoHeight}`);
+}
+
+document.getElementById('btnSwitchCam').onclick = async () => {
+  currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+  try {
+    await startCamera();
+    status.innerText = `Kamera diganti ke: ${currentFacingMode === "user" ? "Depan" : "Belakang"}`;
+  } catch (err) {
+    status.innerText = "❌ Gagal ganti kamera: " + err.message;
   }
 };
 
-// Mode 1:N -- scan wajah dulu, sistem cari sendiri orangnya dari SEMUA yang sudah enroll
-let faceModelsAlreadyLoaded = false;
-
-async function loadFaceModelsWithBackendFix() {
-  if (faceModelsAlreadyLoaded) return;
-
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-  if (isIOS && faceapi.tf && faceapi.tf.setBackend) {
+let warmupDone = false;
+function warmupFaceModels() {
+  if (warmupDone) return;
+  (async () => {
     try {
-      // WebGL di banyak iOS Safari sering hang untuk model face-recognition
-      // yang lebih berat -- paksa pakai CPU khusus di iOS, lebih lambat
-      // dikit tapi jauh lebih stabil (tidak nge-hang).
-      await faceapi.tf.setBackend('cpu');
-      await faceapi.tf.ready();
-      console.log("iOS terdeteksi -> backend TensorFlow dipaksa CPU");
+      await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+      warmupDone = true;
+      console.log("✅ Warm-up model selesai.");
     } catch (e) {
-      console.warn("Gagal set backend CPU, lanjut pakai default:", e.message);
+      console.warn("Warm-up gagal (tidak masalah):", e.message);
     }
-  }
-
-  const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
-  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-  faceModelsAlreadyLoaded = true;
+  })();
 }
 
-// Bungkus promise dengan batas waktu -- kalau lebih dari `ms` belum selesai,
-// dianggap gagal (daripada macet selamanya tanpa kejelasan ke user).
 function withTimeout(promise, ms, timeoutMessage) {
   return Promise.race([
     promise,
@@ -427,108 +541,82 @@ function withTimeout(promise, ms, timeoutMessage) {
   ]);
 }
 
-async function startFaceOnlyCapture() {
-  matchMode = "1:N";
-  setStatus("Memuat model wajah...", "info");
-  statusEl.style.display = "block";
+async function init() {
   try {
-    await withTimeout(loadFaceModelsWithBackendFix(), 15000, "Timeout memuat model (15 detik). Coba refresh halaman.");
-  } catch (e) {
-    setStatus("❌ Gagal memuat model wajah: " + e.message, "fail");
-    showRetry();
-    return;
-  }
+    status.innerText = "Memuat model wajah...";
 
-  setStatus("Mengambil data wajah karyawan...", "info");
-  try {
-    allFaceData = await callApi("GET_ALL_FACE_DATA", {});
-  } catch (e) {
-    setStatus("❌ Gagal ambil data wajah: " + e.message, "fail");
-    showRetry();
-    return;
-  }
-  if (!allFaceData || allFaceData.length === 0) {
-    setStatus("❌ Belum ada data wajah terdaftar sama sekali. Hubungi admin.", "fail");
-    showRetry();
-    return;
-  }
+    // CATATAN: sempat dicoba paksa backend CPU, ternyata bikin lebih parah.
+    // WebGL default terbukti pernah jalan normal -- tidak dipaksa lagi.
 
-  try {
-    await ensureCameraStream(currentFacingModeFace);
-  } catch (e) {
-    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
-    showRetry();
-    return;
-  }
+    const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+    await withTimeout(faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL), 15000, "Timeout load model 1 (15 detik)");
+    status.innerText = "Model 1/3 OK. Memuat model 2...";
+    await withTimeout(faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL), 15000, "Timeout load model 2 (15 detik)");
+    status.innerText = "Model 2/3 OK. Memuat model 3...";
+    await withTimeout(faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL), 15000, "Timeout load model 3 (15 detik)");
+    status.innerText = "Semua model OK. Memuat data karyawan...";
+    await loadMasterData();
+    status.innerText = "Data karyawan OK. Membuka kamera...";
 
-  setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
-  btnScanFace.style.display = "block";
-  btnScanFace.disabled = false;
-  guideLoop();
-  document.getElementById("btnSwitchFaceCam").style.display = "block";
+    await startCamera();
+    guideLoop(); // tampilkan guide statis
+
+    status.innerText = `Siap. Arahkan wajah: ${ANGLE_LABELS[0]}`;
+    updateStepChip(0);
+    btnCapture.disabled = false;
+    warmupFaceModels(); // panasin model berat di background, tidak blocking UI
+  } catch (err) {
+    status.innerText = "❌ ERROR: " + err.message;
+    console.error(err);
+  }
 }
 
-// ============ 3. VERIFIKASI WAJAH (mode 1:1, identitas sudah pasti dari QR) ============
-async function startFaceVerification() {
-  matchMode = "1:1";
-  setStatus("Memuat model wajah...", "info");
-  try {
-    await withTimeout(loadFaceModelsWithBackendFix(), 15000, "Timeout memuat model (15 detik). Coba refresh halaman.");
-  } catch (e) {
-    setStatus("❌ Gagal memuat model wajah: " + e.message, "fail");
-    showRetry();
+btnCapture.onclick = async () => {
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
+  if (!qrInput.value.trim() || !match) {
+    alert("Isi QrCodeId yang valid dulu ya! (bisa ketik manual atau klik Scan QR)");
     return;
   }
 
-  setStatus("Mengambil data referensi wajah...", "info");
-  const refResult = await callApi("GET_FACE_DESCRIPTOR", { qrCodeId: qrCodeId });
-  if (!refResult || !refResult.found) {
-    setStatus("❌ " + (refResult ? refResult.message : "Wajah belum terdaftar.") + " Hubungi admin untuk enroll wajah.", "fail");
-    showRetry();
-    return;
-  }
-  refDescriptor = refResult.descriptor;
-
-  try {
-    await ensureCameraStream(currentFacingModeFace);
-  } catch (e) {
-    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
-    showRetry();
-    return;
+  // pastikan scan QR berhenti kalau masih jalan
+  if (qrScanning) {
+    qrScanning = false;
+    btnScanQR.innerText = "📷 Scan QR";
   }
 
-  setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
-  btnScanFace.style.display = "block";
-  btnScanFace.disabled = false;
-  guideLoop();
-  document.getElementById("btnSwitchFaceCam").style.display = "block";
-}
-
-btnScanFace.onclick = async () => {
-  btnScanFace.disabled = true;
+  btnCapture.disabled = true;
   guideLoopActive = false; // hentikan loop ringan dulu, jangan sampai rebutan WebGL
   await new Promise(r => setTimeout(r, 300)); // kasih waktu WebGL "beres-beres" di iOS Safari
-  setStatus("Mendeteksi wajah...", "info");
+  status.innerText = "Mendeteksi wajah...";
 
   let detection;
   try {
-    detection = await withTimeout(
-      faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
-        .withFaceLandmarks()
-        .withFaceDescriptor(),
-      15000,
-      "Deteksi wajah timeout (15 detik). Kamera/browser mungkin bermasalah, coba refresh halaman."
-    );
+    status.innerText = "Mendeteksi wajah (tahap 1/3: deteksi dasar)...";
+    const baseTask = faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }));
+    const baseResult = await withTimeout(baseTask, 8000, "STUCK di tahap 1 (deteksi dasar) -- kemungkinan model TinyFaceDetector.");
+    if (!baseResult) {
+      status.innerText = "❌ Wajah tidak terdeteksi, coba lagi";
+      btnCapture.disabled = false;
+      guideLoop();
+      return;
+    }
+
+    status.innerText = "Mendeteksi wajah (tahap 2/3: landmark)...";
+    const landmarkTask = baseTask.withFaceLandmarks();
+    await withTimeout(landmarkTask, 8000, "STUCK di tahap 2 (landmark 68 titik) -- kemungkinan model FaceLandmark68Net.");
+
+    status.innerText = "Mendeteksi wajah (tahap 3/3: descriptor wajah)...";
+    const descriptorTask = landmarkTask.withFaceDescriptor();
+    detection = await withTimeout(descriptorTask, 8000, "STUCK di tahap 3 (descriptor wajah) -- kemungkinan model FaceRecognitionNet, yang paling berat.");
   } catch (e) {
-    setStatus("❌ " + e.message, "fail");
-    btnScanFace.disabled = false;
-    showRetry();
+    status.innerText = "❌ " + e.message;
+    btnCapture.disabled = false;
     return;
   }
 
   if (!detection) {
-    setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
-    btnScanFace.disabled = false;
+    status.innerText = "❌ Wajah tidak terdeteksi, coba lagi";
+    btnCapture.disabled = false;
     guideLoop();
     return;
   }
@@ -536,336 +624,67 @@ btnScanFace.onclick = async () => {
   // Validasi posisi/ukuran -- tolak kalau wajah terlalu jauh/dekat/nggak di tengah
   const posCheck = evaluateFaceBox(detection.box);
   if (!posCheck.ok) {
-    setStatus(`❌ ${posCheck.reason}. Sesuaikan posisi, lalu coba lagi.`, "fail");
-    btnScanFace.disabled = false;
+    status.innerText = `❌ ${posCheck.reason}. Sesuaikan posisi, lalu coba lagi.`;
+    btnCapture.disabled = false;
     guideLoop();
     return;
   }
 
-  if (matchMode === "1:N") {
-    // Cari 2 kandidat terdekat -- bukan cuma yang #1, biar bisa deteksi "ragu-ragu"
-    let sorted = allFaceData.map(p => ({
-      qrCodeId: p.qrCodeId,
-      distance: faceapi.euclideanDistance(detection.descriptor, p.descriptor)
-    })).sort((a, b) => a.distance - b.distance);
+  // gambar kotak deteksi sebagai feedback visual
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  faceapi.draw.drawDetections(canvas, [detection]);
 
-    const best = sorted[0];
-    const secondBest = sorted[1];
-    const AMBIGUITY_MARGIN = 0.08; // selisih minimal antara kandidat #1 dan #2 biar dianggap yakin
+  descriptors.push(Array.from(detection.descriptor));
+  document.getElementById('dot' + shotIndex).classList.add('done');
+  shotIndex++;
 
-    const withinThreshold = best && best.distance <= FACE_MATCH_THRESHOLD;
-    const isAmbiguous = secondBest && (secondBest.distance - best.distance) < AMBIGUITY_MARGIN;
-
-    if (!withinThreshold) {
-      setStatus(`❌ Wajah tidak dikenali (jarak terdekat: ${best.distance.toFixed(3)}). Coba lagi, atau pakai QR Code sebagai cadangan.`, "fail");
-      btnScanFace.disabled = false;
-      document.getElementById('btnFallbackToQr').style.display = "block";
-      return;
-    }
-
-    if (isAmbiguous) {
-      setStatus(`⚠️ Wajah mirip dengan lebih dari satu orang terdaftar (selisih: ${(secondBest.distance - best.distance).toFixed(3)}). Demi keamanan, silakan pakai QR Code untuk kepastian.`, "fail");
-      btnScanFace.disabled = false;
-      document.getElementById('btnFallbackToQr').style.display = "block";
-      return;
-    }
-
-    qrCodeId = best.qrCodeId;
-    setStatus("✅ Wajah dikenali! Mengambil data karyawan...", "ok");
+  if (shotIndex < 4) {
+    status.innerText = `✅ Foto ${shotIndex}/4 OK. Sekarang: ${ANGLE_LABELS[shotIndex]}`;
+    updateStepChip(shotIndex);
+    btnCapture.disabled = false;
+  } else {
+    status.innerText = "✅ Semua 4 foto selesai! Klik Simpan.";
+    updateStepChip(4);
+    btnSave.disabled = false;
     stopGuideLoop();
-    stopCamera();
-    faceVerified = true;
-
-    try {
-      const paketData = await callApi("GET_PERSON_DATA", { qrCodeId: qrCodeId });
-      if (!paketData || paketData.status === "NOT_FOUND" || paketData.status === "REJECTED" || !paketData.person) {
-        setStatus("❌ " + (paketData ? paketData.message : "Data karyawan tidak valid."), "fail");
-        showRetry();
-        return;
-      }
-      currentPerson = paketData.person;
-      currentPerson._needAuth = !!(paketData.authReq && paketData.authReq.needAuth);
-
-      const matchInfoEl = document.getElementById('matchInfo');
-      matchInfoEl.style.display = "block";
-      matchInfoEl.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
-
-      checkIjinThenProceed();
-    } catch (e) {
-      setStatus("❌ Gagal ambil data: " + e.message, "fail");
-      showRetry();
-    }
-    return;
-  }
-
-  // ---- Mode 1:1 (identitas sudah pasti dari QR) ----
-  const distance = faceapi.euclideanDistance(detection.descriptor, refDescriptor);
-  const matched = distance <= FACE_MATCH_THRESHOLD;
-
-  if (!matched) {
-    setStatus("❌ Wajah tidak cocok (jarak: " + distance.toFixed(3) + "). Absen ditolak.", "fail");
-    showRetry();
-    return;
-  }
-
-  setStatus("✅ Wajah cocok! Melanjutkan absensi...", "ok");
-  stopGuideLoop();
-  stopCamera();
-  faceVerified = true;
-
-  const matchInfoEl1to1 = document.getElementById('matchInfo');
-  matchInfoEl1to1.style.display = "block";
-  matchInfoEl1to1.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
-
-  checkIjinThenProceed();
-};
-
-// Fallback: kalau mode 1:N gagal kenali wajah, tawarkan pindah ke QR
-// (kamera yang sama tetap dipakai, tidak perlu buka ulang)
-document.getElementById('btnFallbackToQr').onclick = async () => {
-  document.getElementById('btnFallbackToQr').style.display = "none";
-  btnScanFace.style.display = "none";
-  stopGuideLoop();
-  matchMode = "1:1";
-  qrGuide.style.display = "block";
-  document.getElementById('btnSwitchQrCam').style.display = "block";
-  setStatus("Arahkan QR badge Anda ke kamera...", "info");
-  qrScanning = true;
-  scanQRLoop();
-};
-
-async function checkIjinThenProceed() {
-  setStatus("Mengecek status ijin...", "info");
-  try {
-    const ijinResult = await callApi("CHECK_IJIN_PENDING", { qrCodeId: qrCodeId });
-    if (ijinResult && ijinResult.hasPending) {
-      statusEl.style.display = "none";
-      document.getElementById('ijinAlasanText').innerText = "Alasan: " + (ijinResult.alasan || "-");
-      document.getElementById('ijinCard').style.display = "block";
-
-      document.getElementById('btnPakaiIjin').onclick = async () => {
-        document.getElementById('ijinCard').style.display = "none";
-        setStatus("Memproses ijin pulang...", "info");
-        const res = await callApi("SUBMIT_IJIN_KELUAR", { qrCodeId: qrCodeId, lokasi: activeLocation, kodeIjin: ijinResult.kodeIjin });
-        if (res.status === "SUCCESS") {
-          showResultCard(res.message, "ok");
-        } else {
-          showResultCard("❌ " + res.message, "fail");
-        }
-      };
-      document.getElementById('btnLewatiIjin').onclick = () => {
-        document.getElementById('ijinCard').style.display = "none";
-        proceedAfterFaceVerified();
-      };
-      return;
-    }
-  } catch (e) {
-    console.warn("Gagal cek ijin (lanjut absen normal):", e.message);
-  }
-  proceedAfterFaceVerified();
-}
-
-function stopCamera() {
-  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-  wrap.style.display = "none";
-  btnScanFace.style.display = "none";
-}
-
-// ============ 4. LANJUT KE ABSENSI (setelah wajah cocok) ============
-async function proceedAfterFaceVerified() {
-  if (currentPerson.AuthorizedBy && currentPerson.AuthorizedBy !== "") {
-    // anggota kelompok -> langsung submit, tanpa password
-    doSubmitAbsensi("");
-  } else if (currentPerson._needAuth) {
-    // Supervisor / independen -> perlu password dulu
-    setStatus("Verifikasi wajah selesai. Masukkan password otorisasi.", "ok");
-    passwordCard.style.display = "block";
-  } else {
-    doSubmitAbsensi("");
-  }
-}
-
-document.getElementById('btnSubmitPassword').onclick = () => {
-  const pw = document.getElementById('txtPassword').value.trim();
-  if (!pw) { alert("Password tidak boleh kosong!"); return; }
-  passwordCard.style.display = "none";
-  doSubmitAbsensi(pw);
-};
-
-async function doSubmitAbsensi(password) {
-  setStatus("Mengirim data absensi...", "info");
-  try {
-    const response = await submitAbsensiCall(qrCodeId, activeLocation, password);
-    handleAbsensiResponse(response);
-  } catch (e) {
-    setStatus("❌ Gagal submit absensi: " + e.message, "fail");
-    showRetry();
-  }
-}
-
-function handleAbsensiResponse(response) {
-  let statusBersih = "", pesanBersih = "";
-  if (response && typeof response === 'object') {
-    statusBersih = String(response.status || "").toUpperCase().trim();
-    pesanBersih = response.message || response.pesan || JSON.stringify(response);
-  } else {
-    let strRaw = String(response || "").trim();
-    statusBersih = strRaw.toUpperCase().indexOf("SUKSES") !== -1 ? "SUKSES" : strRaw;
-    pesanBersih = strRaw;
-  }
-
-  if (pesanBersih === "BUTUH_PASSWORD" || pesanBersih === "BUTUH_PASSWORD_CHECKOUT") {
-    setStatus("Diperlukan password otorisasi.", "info");
-    passwordCard.style.display = "block";
-    return;
-  }
-
-  if (pesanBersih === "BUTUH_SPKL" || statusBersih === "NEED_VOUCHER") {
-    setStatus("Sesi reguler sudah CLOSED. Masukkan Voucher PIN untuk lembur.", "info");
-    voucherCard.style.display = "block";
-    return;
-  }
-
-  // Hasil akhir (SUKSES / REJECTED / lainnya)
-  setStatus("", "");
-  statusEl.style.display = "none";
-  let bersih = pesanBersih.replace("REGULER_SUKSES:", "");
-  let kind = bersih.toUpperCase().indexOf("SUKSES") !== -1 ? "ok" : "fail";
-  showResultCard(bersih, kind);
-}
-
-document.getElementById('btnSubmitVoucher').onclick = async () => {
-  const pin = document.getElementById('txtVoucherPIN').value.trim();
-  if (!pin) { alert("Voucher PIN tidak boleh kosong!"); return; }
-  voucherCard.style.display = "none";
-  setStatus("Memproses voucher lembur...", "info");
-  try {
-    const res = await callApi("SUBMIT_LEMBUR", { qrCodeId: qrCodeId, lokasi: activeLocation, pinVoucher: pin });
-    if (res.status === "SUCCESS" || res.status === "SUKSES") {
-      showResultCard(res.message || "✅ Lembur berhasil tercatat!", "ok");
-    } else if (res.status === "NEED_VOUCHER" || res.status === "BUTUH_SPKL") {
-      setStatus("PIN belum aktif / salah. Coba lagi.", "fail");
-      voucherCard.style.display = "block";
-    } else {
-      showResultCard("❌ " + (res.message || "Lembur ditolak."), "fail");
-    }
-  } catch (e) {
-    setStatus("❌ Gagal submit lembur: " + e.message, "fail");
-    showRetry();
   }
 };
 
-function showResultCard(text, kind) {
-  const badgeMap = { masuk1:"badge-masuk1", istirahat:"badge-istirahat", masuk2:"badge-masuk2", pulang:"badge-pulang" };
-  resultBanner.style.display = "block";
-  resultBanner.className = kind === "ok" ? "banner-ok" : "banner-fail";
-  resultBanner.innerHTML = (kind === "ok" ? "✅ " : "❌ ") + text;
+btnSave.onclick = async () => {
+  btnSave.disabled = true;
+  status.innerText = "Menyimpan...";
 
-  const btnDone = document.createElement('button');
-  btnDone.className = "btn-block btn-primary";
-  btnDone.innerText = "Selesai";
-  btnDone.onclick = () => location.href = location.pathname;
-  resultBanner.parentNode.insertBefore(btnDone, resultBanner.nextSibling);
-}
-
-// ============ 0. SCAN QR (kalau belum ada QrCodeId dari URL) ============
-let currentFacingModeQR = "user"; // default kamera depan -- disamakan dengan fase wajah biar 1 sesi kamera nyambung terus
-
-async function ensureCameraStream(facingMode) {
-  if (video.srcObject) {
-    // Kamera udah nyala (dari fase sebelumnya) -- pakai terus, jangan restart
-    wrap.style.display = "block";
-    return;
-  }
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+  // Rata-ratakan 4 descriptor jadi 1 (element-wise average)
+  const avgDescriptor = new Array(128).fill(0);
+  descriptors.forEach(desc => {
+    desc.forEach((val, i) => avgDescriptor[i] += val);
   });
-  video.srcObject = stream;
-  await video.play();
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  wrap.style.display = "block";
-}
+  for (let i = 0; i < 128; i++) avgDescriptor[i] /= descriptors.length;
 
-async function restartCameraStream(facingMode) {
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(t => t.stop());
-    video.srcObject = null;
-  }
-  await ensureCameraStream(facingMode);
-}
+  // Bulatkan ke 5 desimal -- cukup presisi buat matching, tapi ukuran teks jauh lebih kecil
+  // (mengurangi ukuran data ~2-3x, jadi loading attendance.html lebih cepat)
+  const compactDescriptor = avgDescriptor.map(v => Math.round(v * 100000) / 100000);
 
-document.getElementById('btnStartQrScan').onclick = async () => {
-  document.getElementById('btnStartQrScan').disabled = true;
+  const match = masterData.find(m => m.qrCodeId === qrInput.value.trim());
   try {
-    await ensureCameraStream(currentFacingModeQR);
-    qrGuide.style.display = "block";
-    document.getElementById('btnSwitchQrCam').style.display = "block";
-    setStatus("Arahkan QR badge Anda ke kamera...", "info");
-    statusEl.style.display = "block";
-    qrScanning = true;
-    scanQRLoop();
+    await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "ENROLL_FACE",
+        qrCodeId: qrInput.value.trim(),
+        nama: match ? match.nama : "",
+        descriptor: compactDescriptor
+      }),
+      headers: { "Content-Type": "text/plain" }
+    });
+    status.innerText = `✅ ${match ? match.nama : qrInput.value} berhasil didaftarkan!`;
   } catch (e) {
-    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
-    statusEl.style.display = "block";
-    document.getElementById('btnStartQrScan').disabled = false;
+    status.innerText = "❌ Gagal menyimpan, cek koneksi/URL Apps Script";
   }
 };
 
-document.getElementById('btnSwitchQrCam').onclick = async () => {
-  currentFacingModeQR = currentFacingModeQR === "environment" ? "user" : "environment";
-  try {
-    await restartCameraStream(currentFacingModeQR);
-    setStatus(`Kamera diganti ke: ${currentFacingModeQR === "user" ? "Depan" : "Belakang"}. Arahkan QR ke kamera...`, "info");
-  } catch (e) {
-    setStatus("❌ Gagal ganti kamera: " + e.message, "fail");
-  }
-};
-
-async function scanQRLoop() {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  while (qrScanning) {
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
-      if (code && code.data) {
-        qrScanning = false;
-        qrGuide.style.display = "none";
-        document.getElementById('btnSwitchQrCam').style.display = "none";
-
-        const rawData = code.data.trim();
-        let extractedId = rawData;
-        try {
-          const url = new URL(rawData);
-          const paramId = url.searchParams.get('QrCodeId') || url.searchParams.get('qrCodeId') || url.searchParams.get('qrcodeid');
-          if (paramId) extractedId = paramId;
-        } catch (e) { /* bukan URL, pakai apa adanya */ }
-
-        qrCodeId = extractedId.trim().toUpperCase();
-        setStatus("✅ QR terbaca: " + qrCodeId, "ok");
-
-        // Kamera TIDAK dimatikan -- lanjut dipakai buat fase verifikasi wajah
-        qrCard.style.display = "none";
-        document.getElementById('entryCard').style.display = "none";
-
-        if (activeLocation) {
-          proceedWithQr(); // GPS sudah terkunci sebelumnya (skenario fallback dari mode wajah) -> skip initGPS ulang
-        } else {
-          initGPS();
-        }
-        return;
-      }
-    }
-    await new Promise(r => setTimeout(r, 120));
-  }
-}
-
-// ============ START ============
-// GPS selalu dikunci duluan (baik lewat redirect QR fisik maupun buka langsung).
-// Setelah lokasi valid, handleLocationResult() yang nentuin lanjut otomatis
-// (kalau qrCodeId sudah ada dari URL) atau munculin pilihan Face-First/QR.
-initGPS();
+init();
 </script>
 </body>
 </html>
