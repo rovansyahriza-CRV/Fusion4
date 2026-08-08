@@ -167,6 +167,13 @@
     <button id="btnSubmitPassword" class="btn-block btn-primary">Konfirmasi</button>
   </div>
 
+  <div id="pindahCard" class="card" style="display:none; border-color: var(--steel-light);">
+    <p class="card-label">🚚 Checkin Pindah Lokasi Tersedia</p>
+    <p id="pindahInfoText" style="margin:0 0 12px; font-size:14px; color:var(--text);"></p>
+    <button id="btnPakaiPindah" class="btn-block btn-accent">Ya, Checkin Sekarang</button>
+    <button id="btnLewatiPindah" class="btn-block btn-secondary">Tidak, Lanjut Absen Biasa</button>
+  </div>
+
   <div id="ijinCard" class="card" style="display:none; border-color: var(--warn);">
     <p class="card-label">🚪 Ijin Pulang Tersedia</p>
     <p id="ijinAlasanText" style="margin:0 0 12px; font-size:14px; color:var(--text);"></p>
@@ -200,6 +207,7 @@ let refDescriptor = null;
 let faceVerified = false;
 let matchMode = "1:1"; // "1:1" (QR dulu, verifikasi ke 1 orang) atau "1:N" (wajah dulu, cari dari semua)
 let allFaceData = null; // cache daftar semua descriptor, buat mode 1:N
+let pendingPindahReminder = null; // diisi kalau user pilih "Lewati" checkin pindah lokasi
 
 const locBanner = document.getElementById('locBanner');
 const resultBanner = document.getElementById('resultBanner');
@@ -614,7 +622,7 @@ btnScanFace.onclick = async () => {
       matchInfoEl.style.display = "block";
       matchInfoEl.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
 
-      checkIjinThenProceed();
+      checkSpecialFlowsThenProceed();
     } catch (e) {
       setStatus("❌ Gagal ambil data: " + e.message, "fail");
       showRetry();
@@ -641,7 +649,7 @@ btnScanFace.onclick = async () => {
   matchInfoEl1to1.style.display = "block";
   matchInfoEl1to1.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
 
-  checkIjinThenProceed();
+  checkSpecialFlowsThenProceed();
 };
 
 // Fallback: kalau mode 1:N gagal kenali wajah, tawarkan pindah ke QR
@@ -657,6 +665,43 @@ document.getElementById('btnFallbackToQr').onclick = async () => {
   qrScanning = true;
   scanQRLoop();
 };
+
+async function checkSpecialFlowsThenProceed() {
+  await checkPindahThenProceed();
+}
+
+async function checkPindahThenProceed() {
+  setStatus("Mengecek status pindah lokasi...", "info");
+  try {
+    const pindahResult = await callApi("GET_PINDAH_STATUS", { qrCodeId: qrCodeId });
+    if (pindahResult && pindahResult.hasOpenTransfer) {
+      statusEl.style.display = "none";
+      document.getElementById('pindahInfoText').innerText =
+        `Anda checkout dari ${pindahResult.lokasiAsal} jam ${pindahResult.jamCheckout}. Checkin di ${activeLocation} sekarang?`;
+      document.getElementById('pindahCard').style.display = "block";
+
+      document.getElementById('btnPakaiPindah').onclick = async () => {
+        document.getElementById('pindahCard').style.display = "none";
+        setStatus("Memproses checkin pindah lokasi...", "info");
+        const res = await callApi("SUBMIT_PINDAH_LOKASI", { qrCodeId: qrCodeId, lokasi: activeLocation, tahap: "CHECKIN" });
+        if (res.status === "SUCCESS") {
+          showResultCard(res.message, "ok");
+        } else {
+          showResultCard("❌ " + res.message, "fail");
+        }
+      };
+      document.getElementById('btnLewatiPindah').onclick = () => {
+        document.getElementById('pindahCard').style.display = "none";
+        pendingPindahReminder = `⚠️ Anda masih punya checkout Pindah Lokasi dari ${pindahResult.lokasiAsal} (${pindahResult.jamCheckout}) yang belum di-checkin. Jangan lupa checkin nanti lewat halaman Pindah Lokasi.`;
+        checkIjinThenProceed();
+      };
+      return;
+    }
+  } catch (e) {
+    console.warn("Gagal cek status pindah lokasi (lanjut cek ijin):", e.message);
+  }
+  checkIjinThenProceed();
+}
 
 async function checkIjinThenProceed() {
   setStatus("Mengecek status ijin...", "info");
@@ -784,6 +829,15 @@ function showResultCard(text, kind) {
   resultBanner.style.display = "block";
   resultBanner.className = kind === "ok" ? "banner-ok" : "banner-fail";
   resultBanner.innerHTML = (kind === "ok" ? "✅ " : "❌ ") + text;
+
+  if (pendingPindahReminder) {
+    const reminderEl = document.createElement('div');
+    reminderEl.className = "banner-warn";
+    reminderEl.style.display = "block";
+    reminderEl.style.marginTop = "10px";
+    reminderEl.innerText = pendingPindahReminder;
+    resultBanner.parentNode.insertBefore(reminderEl, resultBanner.nextSibling);
+  }
 
   const btnDone = document.createElement('button');
   btnDone.className = "btn-block btn-primary";
