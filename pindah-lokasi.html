@@ -76,18 +76,25 @@
     </div>
   </div>
 
-  <div id="banner" class="banner-info">Memuat...</div>
+  <div id="banner" class="banner-info">🔄 Mengunci lokasi GPS...</div>
 
-  <!-- Step 1: scan QR badge sendiri -->
-  <div id="qrCard" class="card">
+  <div id="entryCard" class="card" style="display:none;">
+    <p class="card-label">Identifikasi Diri</p>
+    <button id="btnStartFaceFirst" class="btn-block btn-accent">📸 Scan Wajah</button>
+    <button id="btnShowQrOption" class="btn-block btn-secondary">📷 Atau Scan QR Code</button>
+  </div>
+
+  <div id="qrCard" class="card" style="display:none;">
     <p class="card-label">Scan QR Badge Anda</p>
-    <div id="wrap">
-      <video id="video" width="320" height="320" autoplay muted playsinline></video>
-      <canvas id="canvas" width="320" height="320" style="display:none;"></canvas>
-      <div class="reticle"><span></span><span></span><span></span><span></span></div>
-      <div id="qrGuide"></div>
-    </div>
-    <button id="btnStartCamera" class="btn-block btn-primary">📷 Buka Kamera</button>
+    <button id="btnStartCamera" class="btn-block btn-primary">📷 Buka Kamera & Scan QR</button>
+    <button id="btnSwitchCam" class="btn-block btn-secondary" style="display:none;">🔄 Ganti Kamera</button>
+  </div>
+
+  <div id="wrap">
+    <video id="video" width="320" height="320" autoplay muted playsinline></video>
+    <canvas id="canvas" width="320" height="320" style="display:none;"></canvas>
+    <div class="reticle"><span></span><span></span><span></span><span></span></div>
+    <div id="qrGuide"></div>
   </div>
 
   <div id="stageArea" style="display:none;">
@@ -100,6 +107,8 @@
 
   <p id="status">Menyiapkan...</p>
   <button id="btnFaceScan" class="btn-block btn-accent" style="display:none;">📸 Scan Wajah</button>
+  <button id="btnSwitchFaceCam" class="btn-block btn-secondary" style="display:none;">🔄 Ganti Kamera</button>
+  <button id="btnFallbackToQr" class="btn-block btn-secondary" style="display:none;">📷 Pakai QR Code Saja</button>
   <button id="btnConfirm" class="btn-block btn-accent" style="display:none;"></button>
   <button id="btnRetry" class="btn-block btn-secondary" style="display:none;">🔁 Ulangi dari Awal</button>
 
@@ -110,14 +119,19 @@
 <script>
 // ============ KONFIGURASI ============
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
-const FACE_MATCH_THRESHOLD = 0.45; // diperketat dari 0.55
+const FACE_MATCH_THRESHOLD = 0.45;
+const AMBIGUITY_MARGIN = 0.12;
 
 let qrCodeId = "";
 let currentLokasi = "";
 let currentGPS = null;
-let currentTahap = ""; // "CHECKOUT" atau "CHECKIN"
+let currentTahap = "";
 let qrScanning = false;
 let faceModelsLoaded = false;
+let allFaceData = null;
+let identifiedViaFace = false;
+let currentFacingModeQR = "environment";
+let currentFacingModeFace = "user";
 
 const banner = document.getElementById('banner');
 const statusEl = document.getElementById('status');
@@ -125,6 +139,8 @@ const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const wrap = document.getElementById('wrap');
 const qrGuide = document.getElementById('qrGuide');
+const qrCard = document.getElementById('qrCard');
+const entryCard = document.getElementById('entryCard');
 const btnStartCamera = document.getElementById('btnStartCamera');
 const btnFaceScan = document.getElementById('btnFaceScan');
 const btnConfirm = document.getElementById('btnConfirm');
@@ -143,26 +159,205 @@ async function callApi(action, extra) {
   return await res.json();
 }
 
-// ============ STEP 1: BUKA KAMERA + SCAN QR BADGE ============
+function stopCamera() {
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
+  wrap.style.display = "none";
+}
+
+async function ensureCameraStream(facingMode) {
+  if (video.srcObject) { wrap.style.display = "block"; return; }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+  });
+  video.srcObject = stream;
+  await video.play();
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  wrap.style.display = "block";
+}
+
+async function restartCameraStream(facingMode) {
+  stopCamera();
+  await ensureCameraStream(facingMode);
+}
+
+function initGPS() {
+  showBanner("🔄 Mengunci lokasi GPS...", "info");
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    currentGPS = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    try {
+      const lokasiResult = await callApi("FIND_NEAREST_LOCATION", { lat: currentGPS.lat, lng: currentGPS.lng });
+      if (!lokasiResult || !lokasiResult.IsInsideRadius) {
+        showBanner("🔴 Di luar area lokasi manapun (" + (lokasiResult ? lokasiResult.NamaLokasi : "-") + ")", "fail");
+        showRetry();
+        return;
+      }
+      currentLokasi = String(lokasiResult.NamaLokasi || "").trim();
+      showBanner("🟢 Lokasi terkunci: " + currentLokasi, "ok");
+      entryCard.style.display = "block";
+    } catch (e) {
+      showBanner("🔴 Gagal cek lokasi: " + e.message, "fail");
+      showRetry();
+    }
+  }, (err) => {
+    showBanner("🔴 Gagal kunci GPS: " + err.message, "fail");
+    showRetry();
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+}
+
+document.getElementById('btnStartFaceFirst').onclick = async () => {
+  entryCard.style.display = "none";
+  identifiedViaFace = false;
+  await startFaceOnlyIdentify();
+};
+
+async function startFaceOnlyIdentify() {
+  setStatus("Memuat model wajah...", "info");
+  try {
+    if (!faceModelsLoaded) {
+      const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      faceModelsLoaded = true;
+    }
+  } catch (e) {
+    setStatus("❌ Gagal memuat model: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("Mengambil data wajah karyawan...", "info");
+  try {
+    allFaceData = await callApi("GET_ALL_FACE_DATA", {});
+  } catch (e) {
+    setStatus("❌ Gagal ambil data wajah: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+  if (!allFaceData || allFaceData.length === 0) {
+    setStatus("❌ Belum ada data wajah terdaftar. Hubungi admin.", "fail");
+    showRetry();
+    return;
+  }
+
+  try {
+    await ensureCameraStream(currentFacingModeFace);
+  } catch (e) {
+    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
+  btnFaceScan.style.display = "block";
+  btnFaceScan.disabled = false;
+  document.getElementById('btnSwitchFaceCam').style.display = "block";
+
+  btnFaceScan.onclick = async () => {
+    btnFaceScan.disabled = true;
+    setStatus("Mendeteksi wajah...", "info");
+
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+      .withFaceLandmarks().withFaceDescriptor();
+
+    if (!detection) {
+      setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
+      btnFaceScan.disabled = false;
+      return;
+    }
+
+    let sorted = allFaceData.map(p => ({
+      qrCodeId: p.qrCodeId,
+      distance: faceapi.euclideanDistance(detection.descriptor, p.descriptor)
+    })).sort((a, b) => a.distance - b.distance);
+
+    const best = sorted[0];
+    const secondBest = sorted[1];
+    const withinThreshold = best && best.distance <= FACE_MATCH_THRESHOLD;
+    const isAmbiguous = secondBest && (secondBest.distance - best.distance) < AMBIGUITY_MARGIN;
+
+    if (!withinThreshold) {
+      setStatus("❌ Wajah tidak dikenali (jarak: " + best.distance.toFixed(3) + "). Coba lagi, atau pakai QR Code.", "fail");
+      btnFaceScan.disabled = false;
+      document.getElementById('btnFallbackToQr').style.display = "block";
+      return;
+    }
+    if (isAmbiguous) {
+      setStatus("⚠️ Wajah mirip lebih dari satu orang (selisih: " + (secondBest.distance - best.distance).toFixed(3) + "). Demi keamanan, pakai QR Code.", "fail");
+      btnFaceScan.disabled = false;
+      document.getElementById('btnFallbackToQr').style.display = "block";
+      return;
+    }
+
+    qrCodeId = best.qrCodeId;
+    identifiedViaFace = true;
+    setStatus("✅ Wajah dikenali!", "ok");
+    stopCamera();
+    btnFaceScan.style.display = "none";
+    document.getElementById('btnSwitchFaceCam').style.display = "none";
+    afterIdentified();
+  };
+}
+
+document.getElementById('btnSwitchFaceCam').onclick = async () => {
+  currentFacingModeFace = currentFacingModeFace === "user" ? "environment" : "user";
+  try {
+    await restartCameraStream(currentFacingModeFace);
+    setStatus("Kamera diganti ke: " + (currentFacingModeFace === "user" ? "Depan" : "Belakang"), "info");
+  } catch (e) {
+    setStatus("❌ Gagal ganti kamera: " + e.message, "fail");
+  }
+};
+
+document.getElementById('btnFallbackToQr').onclick = async () => {
+  document.getElementById('btnFallbackToQr').style.display = "none";
+  btnFaceScan.style.display = "none";
+  document.getElementById('btnSwitchFaceCam').style.display = "none";
+  identifiedViaFace = false;
+  currentFacingModeQR = "environment";
+  try {
+    await restartCameraStream(currentFacingModeQR);
+  } catch (e) { /* biarin, qrCard punya tombol buka kamera sendiri */ }
+  qrCard.style.display = "block";
+  qrGuide.style.display = "block";
+  document.getElementById('btnSwitchCam').style.display = "block";
+  setStatus("Arahkan QR badge Anda ke kamera...", "info");
+  qrScanning = true;
+  scanQRLoop();
+};
+
+document.getElementById('btnShowQrOption').onclick = () => {
+  entryCard.style.display = "none";
+  identifiedViaFace = false;
+  qrCard.style.display = "block";
+};
+
 btnStartCamera.onclick = async () => {
   btnStartCamera.disabled = true;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode:"user", width:{ideal:1280}, height:{ideal:720} }
-    });
-    video.srcObject = stream;
-    await video.play();
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    wrap.style.display = "block";
+    await ensureCameraStream(currentFacingModeQR);
     btnStartCamera.style.display = "none";
     qrGuide.style.display = "block";
+    document.getElementById('btnSwitchCam').style.display = "block";
     setStatus("Arahkan QR badge Anda ke kamera...", "info");
     qrScanning = true;
     scanQRLoop();
   } catch (e) {
     setStatus("❌ Gagal akses kamera: " + e.message, "fail");
     btnStartCamera.disabled = false;
+  }
+};
+
+document.getElementById('btnSwitchCam').onclick = async () => {
+  currentFacingModeQR = currentFacingModeQR === "environment" ? "user" : "environment";
+  try {
+    await restartCameraStream(currentFacingModeQR);
+    setStatus("Kamera diganti ke: " + (currentFacingModeQR === "user" ? "Depan" : "Belakang") + ". Arahkan QR ke kamera...", "info");
+  } catch (e) {
+    setStatus("❌ Gagal ganti kamera: " + e.message, "fail");
   }
 };
 
@@ -176,6 +371,7 @@ async function scanQRLoop() {
       if (code && code.data) {
         qrScanning = false;
         qrGuide.style.display = "none";
+        document.getElementById('btnSwitchCam').style.display = "none";
 
         const rawData = code.data.trim();
         let extractedId = rawData;
@@ -188,7 +384,8 @@ async function scanQRLoop() {
         qrCodeId = extractedId.trim().toUpperCase();
         setStatus("✅ QR terbaca: " + qrCodeId, "ok");
         stopCamera();
-        await afterQrScanned();
+        qrCard.style.display = "none";
+        afterIdentified();
         return;
       }
     }
@@ -196,53 +393,36 @@ async function scanQRLoop() {
   }
 }
 
-function stopCamera() {
-  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-  wrap.style.display = "none";
-}
-
-// ============ STEP 2: CEK GPS + STATUS TRANSFER (CHECKOUT vs CHECKIN) ============
-async function afterQrScanned() {
-  setStatus("Mengunci lokasi GPS...", "info");
-  navigator.geolocation.getCurrentPosition(async (pos) => {
-    currentGPS = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    try {
-      const lokasiResult = await callApi("FIND_NEAREST_LOCATION", { lat: currentGPS.lat, lng: currentGPS.lng });
-      if (!lokasiResult || !lokasiResult.IsInsideRadius) {
-        setStatus("🔴 Di luar area lokasi manapun (" + (lokasiResult ? lokasiResult.NamaLokasi : "-") + ")", "fail");
-        showRetry();
-        return;
-      }
-      currentLokasi = String(lokasiResult.NamaLokasi || "").trim();
-
-      const pindahStatus = await callApi("GET_PINDAH_STATUS", { qrCodeId: qrCodeId });
-      if (pindahStatus.hasOpenTransfer) {
-        currentTahap = "CHECKIN";
-        stageBadge.className = "stage-badge stage-checkin";
-        stageBadge.innerText = "✅ CHECKIN di " + currentLokasi;
-        showBanner("Anda checkout dari " + pindahStatus.lokasiAsal + " jam " + pindahStatus.jamCheckout + ". Sekarang checkin di lokasi baru.", "info");
-        document.getElementById('passwordLabel').innerText = "Password Leader BARU (di lokasi ini)";
-      } else {
-        currentTahap = "CHECKOUT";
-        stageBadge.className = "stage-badge stage-checkout";
-        stageBadge.innerText = "🚚 CHECKOUT dari " + currentLokasi;
-        showBanner("Anda akan checkout dari lokasi saat ini.", "info");
-        document.getElementById('passwordLabel').innerText = "Password Leader SEKARANG (sebelum pindah)";
-      }
-      stageArea.style.display = "block";
-
-      startFaceVerification();
-    } catch (e) {
-      setStatus("❌ Gagal cek status: " + e.message, "fail");
-      showRetry();
+async function afterIdentified() {
+  setStatus("Mengecek status pindah lokasi...", "info");
+  try {
+    const pindahStatus = await callApi("GET_PINDAH_STATUS", { qrCodeId: qrCodeId });
+    if (pindahStatus.hasOpenTransfer) {
+      currentTahap = "CHECKIN";
+      stageBadge.className = "stage-badge stage-checkin";
+      stageBadge.innerText = "✅ CHECKIN di " + currentLokasi;
+      showBanner("Anda checkout dari " + pindahStatus.lokasiAsal + " jam " + pindahStatus.jamCheckout + ". Sekarang checkin di lokasi baru.", "info");
+      document.getElementById('passwordLabel').innerText = "Password Leader BARU (di lokasi ini)";
+    } else {
+      currentTahap = "CHECKOUT";
+      stageBadge.className = "stage-badge stage-checkout";
+      stageBadge.innerText = "🚚 CHECKOUT dari " + currentLokasi;
+      showBanner("Anda akan checkout dari lokasi saat ini.", "info");
+      document.getElementById('passwordLabel').innerText = "Password Leader SEKARANG (sebelum pindah)";
     }
-  }, (err) => {
-    setStatus("🔴 Gagal kunci GPS: " + err.message, "fail");
+    stageArea.style.display = "block";
+
+    if (identifiedViaFace) {
+      showConfirmStep();
+    } else {
+      startFaceVerification();
+    }
+  } catch (e) {
+    setStatus("❌ Gagal cek status: " + e.message, "fail");
     showRetry();
-  }, { enableHighAccuracy:true, timeout:10000, maximumAge:0 });
+  }
 }
 
-// ============ STEP 3: VERIFIKASI WAJAH ============
 async function startFaceVerification() {
   setStatus("Memuat model wajah...", "info");
   try {
@@ -267,10 +447,7 @@ async function startFaceVerification() {
   }
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:"user", width:{ideal:1280}, height:{ideal:720}} });
-    video.srcObject = stream;
-    await video.play();
-    wrap.style.display = "block";
+    await ensureCameraStream(currentFacingModeFace);
   } catch (e) {
     setStatus("❌ Gagal akses kamera: " + e.message, "fail");
     showRetry();
@@ -280,6 +457,7 @@ async function startFaceVerification() {
   setStatus("Posisikan wajah di kotak, lalu tekan Scan Wajah.", "info");
   btnFaceScan.style.display = "block";
   btnFaceScan.disabled = false;
+  document.getElementById('btnSwitchFaceCam').style.display = "block";
 
   btnFaceScan.onclick = async () => {
     btnFaceScan.disabled = true;
@@ -303,15 +481,15 @@ async function startFaceVerification() {
     setStatus("✅ Wajah cocok!", "ok");
     stopCamera();
     btnFaceScan.style.display = "none";
+    document.getElementById('btnSwitchFaceCam').style.display = "none";
     showConfirmStep();
   };
 }
 
-// ============ STEP 4: KONFIRMASI CHECKOUT/CHECKIN ============
 function showConfirmStep() {
   btnConfirm.style.display = "block";
   btnConfirm.innerText = currentTahap === "CHECKOUT" ? "🚚 Konfirmasi Checkout" : "✅ Konfirmasi Checkin";
-  setStatus("Tekan tombol di bawah untuk konfirmasi.", "ok");
+  setStatus("Isi password, lalu tekan tombol di bawah.", "ok");
 
   btnConfirm.onclick = async () => {
     const leaderPassword = document.getElementById('txtLeaderPassword').value.trim();
@@ -342,6 +520,8 @@ function showConfirmStep() {
     }
   };
 }
+
+initGPS();
 </script>
 </body>
 </html>
