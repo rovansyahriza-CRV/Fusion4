@@ -518,21 +518,9 @@ document.getElementById('btnSwitchCam').onclick = async () => {
   }
 };
 
-let warmupDone = false;
-function warmupFaceModels() {
-  if (warmupDone) return;
-  (async () => {
-    try {
-      await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-      warmupDone = true;
-      console.log("✅ Warm-up model selesai.");
-    } catch (e) {
-      console.warn("Warm-up gagal (tidak masalah):", e.message);
-    }
-  })();
-}
+// CATATAN: fitur warm-up dihapus -- terbukti jadi penyebab hang (2 proses
+// deteksi berat rebutan WebGL), bukan solusi. Deteksi asli sudah cukup
+// cepat (<1 detik) tanpa warm-up sama sekali.
 
 function withTimeout(promise, ms, timeoutMessage) {
   return Promise.race([
@@ -564,7 +552,6 @@ async function init() {
     status.innerText = `Siap. Arahkan wajah: ${ANGLE_LABELS[0]}`;
     updateStepChip(0);
     btnCapture.disabled = false;
-    warmupFaceModels(); // panasin model berat di background, tidak blocking UI
   } catch (err) {
     status.innerText = "❌ ERROR: " + err.message;
     console.error(err);
