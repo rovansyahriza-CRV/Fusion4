@@ -549,7 +549,16 @@ btnScanFace.onclick = async () => {
   }
 
   // Validasi posisi/ukuran -- tolak kalau wajah terlalu jauh/dekat/nggak di tengah
-  const posCheck = evaluateFaceBox(detection.box);
+  let posCheck;
+  try {
+    posCheck = evaluateFaceBox(detection.detection.box);
+  } catch (e) {
+    console.error("evaluateFaceBox error:", e);
+    setStatus("❌ Error validasi posisi: " + e.message, "fail");
+    btnScanFace.disabled = false;
+    showRetry();
+    return;
+  }
   if (!posCheck.ok) {
     setStatus(`❌ ${posCheck.reason}. Sesuaikan posisi, lalu coba lagi.`, "fail");
     btnScanFace.disabled = false;
