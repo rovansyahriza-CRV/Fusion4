@@ -100,6 +100,12 @@
   <div id="stageArea" style="display:none;">
     <div id="stageBadge" class="stage-badge"></div>
     <div class="card" style="text-align:left; margin-top:10px;">
+      <div id="leaderSelectWrap" style="display:none; margin-bottom:14px;">
+        <p class="card-label">Pilih Leader Baru</p>
+        <select id="selectNewLeader" style="width:100%; font-family:'Inter',sans-serif; font-size:15px; font-weight:500; padding:13px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <option value="">-- Pilih Leader --</option>
+        </select>
+      </div>
       <p class="card-label" id="passwordLabel">Password Leader</p>
       <input type="password" id="txtLeaderPassword" placeholder="Masukkan password" style="width:100%; font-family:'IBM Plex Mono',monospace; font-size:16px; padding:13px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text);">
     </div>
@@ -402,13 +408,30 @@ async function afterIdentified() {
       stageBadge.className = "stage-badge stage-checkin";
       stageBadge.innerText = "✅ CHECKIN di " + currentLokasi;
       showBanner("Anda checkout dari " + pindahStatus.lokasiAsal + " jam " + pindahStatus.jamCheckout + ". Sekarang checkin di lokasi baru.", "info");
-      document.getElementById('passwordLabel').innerText = "Password Leader BARU (di lokasi ini)";
+      document.getElementById('passwordLabel').innerText = "Password Leader yang Dipilih";
+
+      // Isi dropdown pilihan leader baru
+      document.getElementById('leaderSelectWrap').style.display = "block";
+      const selectEl = document.getElementById('selectNewLeader');
+      selectEl.innerHTML = '<option value="">-- Pilih Leader --</option>';
+      try {
+        const leaderList = await callApi("GET_LEADER_LIST", {});
+        (leaderList || []).forEach(l => {
+          const opt = document.createElement('option');
+          opt.value = l.author;
+          opt.innerText = l.nama + " (" + l.author + ")";
+          selectEl.appendChild(opt);
+        });
+      } catch (e) {
+        console.warn("Gagal ambil daftar leader:", e.message);
+      }
     } else {
       currentTahap = "CHECKOUT";
       stageBadge.className = "stage-badge stage-checkout";
       stageBadge.innerText = "🚚 CHECKOUT dari " + currentLokasi;
       showBanner("Anda akan checkout dari lokasi saat ini.", "info");
       document.getElementById('passwordLabel').innerText = "Password Leader SEKARANG (sebelum pindah)";
+      document.getElementById('leaderSelectWrap').style.display = "none";
     }
     stageArea.style.display = "block";
 
@@ -498,10 +521,19 @@ function showConfirmStep() {
       return;
     }
 
+    let selectedLeaderAuthor = "";
+    if (currentTahap === "CHECKIN") {
+      selectedLeaderAuthor = document.getElementById('selectNewLeader').value;
+      if (!selectedLeaderAuthor) {
+        alert("Pilih Leader baru dulu!");
+        return;
+      }
+    }
+
     btnConfirm.disabled = true;
     setStatus("Menyimpan...", "info");
     try {
-      const res = await callApi("SUBMIT_PINDAH_LOKASI", { qrCodeId: qrCodeId, lokasi: currentLokasi, tahap: currentTahap, password: leaderPassword });
+      const res = await callApi("SUBMIT_PINDAH_LOKASI", { qrCodeId: qrCodeId, lokasi: currentLokasi, tahap: currentTahap, password: leaderPassword, newLeaderAuthor: selectedLeaderAuthor });
       if (res.status === "SUCCESS") {
         showBanner("✅ " + res.message, "ok");
         setStatus("", "");
