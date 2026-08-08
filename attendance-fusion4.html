@@ -427,6 +427,26 @@ function withTimeout(promise, ms, timeoutMessage) {
   ]);
 }
 
+// "Panasin" model berat (FaceRecognitionNet) di background begitu kamera
+// nyala -- kompilasi shader WebGL pertama kali sering lambat banget, jadi
+// mending kejadian diam-diam sambil user posisi-in wajah, bukan pas
+// user udah tekan tombol Scan (biar nggak keliatan "macet").
+let warmupDone = false;
+function warmupFaceModels() {
+  if (warmupDone) return;
+  (async () => {
+    try {
+      await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+      warmupDone = true;
+      console.log("✅ Warm-up model selesai, deteksi berikutnya harusnya lebih cepat.");
+    } catch (e) {
+      console.warn("Warm-up gagal (tidak masalah, akan dicoba lagi nanti):", e.message);
+    }
+  })();
+}
+
 async function startFaceOnlyCapture() {
   matchMode = "1:N";
   setStatus("Memuat model wajah...", "info");
@@ -466,6 +486,7 @@ async function startFaceOnlyCapture() {
   btnScanFace.disabled = false;
   guideLoop();
   document.getElementById("btnSwitchFaceCam").style.display = "block";
+  warmupFaceModels(); // panasin model berat di background, tidak blocking UI
 }
 
 // ============ 3. VERIFIKASI WAJAH (mode 1:1, identitas sudah pasti dari QR) ============
@@ -502,6 +523,7 @@ async function startFaceVerification() {
   btnScanFace.disabled = false;
   guideLoop();
   document.getElementById("btnSwitchFaceCam").style.display = "block";
+  warmupFaceModels(); // panasin model berat di background, tidak blocking UI
 }
 
 btnScanFace.onclick = async () => {
