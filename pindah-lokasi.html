@@ -92,6 +92,10 @@
 
   <div id="stageArea" style="display:none;">
     <div id="stageBadge" class="stage-badge"></div>
+    <div class="card" style="text-align:left; margin-top:10px;">
+      <p class="card-label" id="passwordLabel">Password Leader</p>
+      <input type="password" id="txtLeaderPassword" placeholder="Masukkan password" style="width:100%; font-family:'IBM Plex Mono',monospace; font-size:16px; padding:13px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text);">
+    </div>
   </div>
 
   <p id="status">Menyiapkan...</p>
@@ -217,11 +221,13 @@ async function afterQrScanned() {
         stageBadge.className = "stage-badge stage-checkin";
         stageBadge.innerText = "✅ CHECKIN di " + currentLokasi;
         showBanner("Anda checkout dari " + pindahStatus.lokasiAsal + " jam " + pindahStatus.jamCheckout + ". Sekarang checkin di lokasi baru.", "info");
+        document.getElementById('passwordLabel').innerText = "Password Leader BARU (di lokasi ini)";
       } else {
         currentTahap = "CHECKOUT";
         stageBadge.className = "stage-badge stage-checkout";
         stageBadge.innerText = "🚚 CHECKOUT dari " + currentLokasi;
         showBanner("Anda akan checkout dari lokasi saat ini.", "info");
+        document.getElementById('passwordLabel').innerText = "Password Leader SEKARANG (sebelum pindah)";
       }
       stageArea.style.display = "block";
 
@@ -308,10 +314,16 @@ function showConfirmStep() {
   setStatus("Tekan tombol di bawah untuk konfirmasi.", "ok");
 
   btnConfirm.onclick = async () => {
+    const leaderPassword = document.getElementById('txtLeaderPassword').value.trim();
+    if (!leaderPassword) {
+      alert("Password Leader tidak boleh kosong!");
+      return;
+    }
+
     btnConfirm.disabled = true;
     setStatus("Menyimpan...", "info");
     try {
-      const res = await callApi("SUBMIT_PINDAH_LOKASI", { qrCodeId: qrCodeId, lokasi: currentLokasi, tahap: currentTahap });
+      const res = await callApi("SUBMIT_PINDAH_LOKASI", { qrCodeId: qrCodeId, lokasi: currentLokasi, tahap: currentTahap, password: leaderPassword });
       if (res.status === "SUCCESS") {
         showBanner("✅ " + res.message, "ok");
         setStatus("", "");
@@ -322,7 +334,7 @@ function showConfirmStep() {
         showBanner("❌ " + res.message, "fail");
         setStatus("", "");
         statusEl.style.display = "none";
-        btnConfirm.style.display = "none";
+        btnConfirm.disabled = false;
       }
     } catch (e) {
       setStatus("❌ Gagal submit: " + e.message, "fail");
