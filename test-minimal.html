@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Minimal</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+</head>
+<body style="font-family:sans-serif; text-align:center; padding:20px;">
+
+<h3>Test Minimal Face Detection</h3>
+<video id="video" width="320" height="240" autoplay muted playsinline style="border:2px solid #333;"></video>
+<br><br>
+<button id="btnStart" style="padding:12px 24px; font-size:16px;">1. Mulai Kamera</button>
+<br><br>
+<button id="btnDetect" style="padding:12px 24px; font-size:16px;" disabled>2. Deteksi Wajah</button>
+
+<p id="log" style="white-space:pre-wrap; text-align:left; background:#f0f0f0; padding:10px; margin-top:20px; font-family:monospace; font-size:13px;">Belum mulai.</p>
+
+<script>
+const video = document.getElementById('video');
+const log = document.getElementById('log');
+const btnStart = document.getElementById('btnStart');
+const btnDetect = document.getElementById('btnDetect');
+
+function addLog(msg) {
+  const time = new Date().toLocaleTimeString();
+  log.innerText += `\n[${time}] ${msg}`;
+  console.log(msg);
+}
+
+btnStart.onclick = async () => {
+  btnStart.disabled = true;
+  addLog("Memuat 3 model...");
+  const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+  try {
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    addLog("Model 1/3 (TinyFaceDetector) OK");
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    addLog("Model 2/3 (FaceLandmark68Net) OK");
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    addLog("Model 3/3 (FaceRecognitionNet) OK");
+  } catch (e) {
+    addLog("❌ GAGAL load model: " + e.message);
+    return;
+  }
+
+  addLog("Membuka kamera (resolusi rendah, 320x240, kamera depan)...");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: 320, height: 240 }
+    });
+    video.srcObject = stream;
+    await video.play();
+    addLog("Kamera OK. Resolusi aktual: " + video.videoWidth + "x" + video.videoHeight);
+  } catch (e) {
+    addLog("❌ GAGAL buka kamera: " + e.message);
+    return;
+  }
+
+  btnDetect.disabled = false;
+  addLog("SIAP. Tekan tombol 'Deteksi Wajah'.");
+};
+
+btnDetect.onclick = async () => {
+  btnDetect.disabled = true;
+  addLog("--- Mulai deteksi ---");
+
+  const startTime = Date.now();
+
+  addLog("Tahap 1: detectSingleFace (TinyFaceDetector)...");
+  const t1 = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+  addLog(`Tahap 1 selesai dalam ${Date.now() - startTime}ms. Hasil: ${t1 ? "wajah ditemukan" : "tidak ada wajah"}`);
+
+  if (!t1) {
+    addLog("❌ Tidak ada wajah terdeteksi, coba lagi dengan posisi wajah di depan kamera.");
+    btnDetect.disabled = false;
+    return;
+  }
+
+  addLog("Tahap 2: withFaceLandmarks()...");
+  const t2start = Date.now();
+  const detectionWithLandmarks = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+  addLog(`Tahap 2 selesai dalam ${Date.now() - t2start}ms.`);
+
+  addLog("Tahap 3: withFaceDescriptor() -- INI YANG SERING MACET...");
+  const t3start = Date.now();
+  const fullDetection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+  addLog(`Tahap 3 selesai dalam ${Date.now() - t3start}ms.`);
+
+  if (fullDetection) {
+    addLog(`✅✅✅ SUKSES TOTAL dalam ${Date.now() - startTime}ms! Descriptor length: ${fullDetection.descriptor.length}`);
+  } else {
+    addLog("❌ Deteksi akhir gagal (null)");
+  }
+
+  btnDetect.disabled = false;
+};
+</script>
+</body>
+</html>
