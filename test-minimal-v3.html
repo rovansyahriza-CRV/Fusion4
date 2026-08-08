@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test v3 - Isolasi Canvas 2D</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+</head>
+<body style="font-family:sans-serif; text-align:center; padding:20px;">
+
+<h3>Test v3 -- Isolasi Konflik Canvas 2D vs WebGL</h3>
+<video id="video" width="320" height="240" autoplay muted playsinline style="border:2px solid #333;"></video>
+<canvas id="visibleCanvas" width="320" height="240" style="display:none;"></canvas>
+<br><br>
+<button id="btnA" style="padding:12px 20px; font-size:15px;">A. TANPA canvas 2D (kontrol)</button>
+<br><br>
+<button id="btnB" style="padding:12px 20px; font-size:15px;">B. DENGAN canvas 2D dibuka dulu (kayak QR scan)</button>
+
+<p id="log" style="white-space:pre-wrap; text-align:left; background:#f0f0f0; padding:10px; margin-top:20px; font-family:monospace; font-size:13px;">Belum mulai.</p>
+
+<script>
+const video = document.getElementById('video');
+const log = document.getElementById('log');
+
+function addLog(msg) {
+  const time = new Date().toLocaleTimeString();
+  log.innerText += `\n[${time}] ${msg}`;
+  console.log(msg);
+}
+
+let modelsLoaded = false;
+async function loadModels() {
+  if (modelsLoaded) return;
+  addLog("Memuat model...");
+  const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  modelsLoaded = true;
+  addLog("Model OK.");
+}
+
+async function openCamera() {
+  if (video.srcObject) return;
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }
+  });
+  video.srcObject = stream;
+  await video.play();
+  addLog("Kamera OK: " + video.videoWidth + "x" + video.videoHeight);
+}
+
+async function runDetection(label) {
+  addLog(`--- ${label}: mulai deteksi (tunggu video ready dulu) ---`);
+  let waitCount = 0;
+  while (video.readyState < video.HAVE_ENOUGH_DATA && waitCount < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    waitCount++;
+  }
+  addLog("Video ready. Tunggu 1.5 detik biar Anda posisi wajah...");
+  await new Promise(r => setTimeout(r, 1500));
+
+  const startTime = Date.now();
+  try {
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+    const elapsed = Date.now() - startTime;
+    if (detection) {
+      addLog(`✅✅✅ ${label}: SUKSES dalam ${elapsed}ms!`);
+    } else {
+      addLog(`❌ ${label}: selesai ${elapsed}ms, HASIL NULL (coba lagi, pastikan wajah kelihatan)`);
+    }
+  } catch (e) {
+    addLog(`❌ ${label}: ERROR setelah ${Date.now() - startTime}ms: ${e.message}`);
+  }
+}
+
+document.getElementById('btnA').onclick = async () => {
+  await loadModels();
+  await openCamera();
+  await runDetection("TEST A (tanpa canvas 2D)");
+};
+
+document.getElementById('btnB').onclick = async () => {
+  await loadModels();
+  await openCamera();
+
+  addLog("Membuka canvas 2D (willReadFrequently) dan gambar 1 frame, kayak yang dipakai QR scan...");
+  const canvas = document.getElementById('visibleCanvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  addLog("Canvas 2D sudah dipakai (getImageData berhasil, " + imageData.data.length + " byte). Sekarang coba deteksi wajah...");
+
+  await runDetection("TEST B (SETELAH canvas 2D dipakai)");
+};
+</script>
+</body>
+</html>
