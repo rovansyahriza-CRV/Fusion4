@@ -502,6 +502,24 @@ async function startFaceVerification() {
 
 btnScanFace.onclick = async () => {
   btnScanFace.disabled = true;
+  setStatus("Menyiapkan kamera...", "info");
+
+  // Pastikan video BENERAN sudah punya frame (readyState cukup), bukan cuma
+  // stream udah "dibuka". Ini yang beda dari test minimal yang berhasil --
+  // di situ ada jeda 2 detik dulu sebelum deteksi, di sini kita tunggu
+  // readyState eksplisit (biasanya cuma sepersekian detik, tapi penting).
+  let waitCount = 0;
+  while (video.readyState < video.HAVE_ENOUGH_DATA && waitCount < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    waitCount++;
+  }
+  if (video.readyState < video.HAVE_ENOUGH_DATA) {
+    setStatus("❌ Kamera belum siap (video belum ada frame). Coba lagi.", "fail");
+    btnScanFace.disabled = false;
+    showRetry();
+    return;
+  }
+
   setStatus("Mendeteksi wajah...", "info");
 
   let detection;
