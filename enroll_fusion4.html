@@ -575,6 +575,19 @@ btnCapture.onclick = async () => {
   }
 
   btnCapture.disabled = true;
+  status.innerText = "Menyiapkan kamera...";
+
+  let waitCount = 0;
+  while (video.readyState < video.HAVE_ENOUGH_DATA && waitCount < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    waitCount++;
+  }
+  if (video.readyState < video.HAVE_ENOUGH_DATA) {
+    status.innerText = "❌ Kamera belum siap (video belum ada frame). Coba lagi.";
+    btnCapture.disabled = false;
+    return;
+  }
+
   status.innerText = "Mendeteksi wajah...";
 
   let detection;
