@@ -3,25 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Test Minimal</title>
+<title>Test Minimal v2</title>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body style="font-family:sans-serif; text-align:center; padding:20px;">
 
-<h3>Test Minimal Face Detection</h3>
+<h3>Test Minimal v2 -- Chain Utuh + Perbandingan Resolusi</h3>
 <video id="video" width="320" height="240" autoplay muted playsinline style="border:2px solid #333;"></video>
 <br><br>
-<button id="btnStart" style="padding:12px 24px; font-size:16px;">1. Mulai Kamera</button>
+<button id="btnLoadModels" style="padding:12px 24px; font-size:16px;">1. Muat Model</button>
 <br><br>
-<button id="btnDetect" style="padding:12px 24px; font-size:16px;" disabled>2. Deteksi Wajah</button>
+<button id="btnLowRes" style="padding:12px 20px; font-size:15px;" disabled>2a. Kamera RENDAH (480x640) + Deteksi</button>
+<br><br>
+<button id="btnHighRes" style="padding:12px 20px; font-size:15px;" disabled>2b. Kamera TINGGI (1280x720) + Deteksi</button>
 
 <p id="log" style="white-space:pre-wrap; text-align:left; background:#f0f0f0; padding:10px; margin-top:20px; font-family:monospace; font-size:13px;">Belum mulai.</p>
 
 <script>
 const video = document.getElementById('video');
 const log = document.getElementById('log');
-const btnStart = document.getElementById('btnStart');
-const btnDetect = document.getElementById('btnDetect');
+const btnLoadModels = document.getElementById('btnLoadModels');
+const btnLowRes = document.getElementById('btnLowRes');
+const btnHighRes = document.getElementById('btnHighRes');
 
 function addLog(msg) {
   const time = new Date().toLocaleTimeString();
@@ -29,26 +32,35 @@ function addLog(msg) {
   console.log(msg);
 }
 
-btnStart.onclick = async () => {
-  btnStart.disabled = true;
+btnLoadModels.onclick = async () => {
+  btnLoadModels.disabled = true;
   addLog("Memuat 3 model...");
   const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
   try {
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-    addLog("Model 1/3 (TinyFaceDetector) OK");
     await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-    addLog("Model 2/3 (FaceLandmark68Net) OK");
     await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-    addLog("Model 3/3 (FaceRecognitionNet) OK");
+    addLog("Semua model OK.");
   } catch (e) {
     addLog("❌ GAGAL load model: " + e.message);
     return;
   }
+  btnLowRes.disabled = false;
+  btnHighRes.disabled = false;
+  addLog("SIAP. Pilih tombol 2a atau 2b.");
+};
 
-  addLog("Membuka kamera (resolusi rendah, 320x240, kamera depan)...");
+async function runTest(width, height, label) {
+  addLog(`\n=== TEST ${label} (${width}x${height}) ===`);
+
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+  }
+
+  addLog("Membuka kamera...");
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: 480, height: 640 }
+      video: { facingMode: "user", width: { ideal: width }, height: { ideal: height } }
     });
     video.srcObject = stream;
     await video.play();
@@ -58,47 +70,33 @@ btnStart.onclick = async () => {
     return;
   }
 
-  btnDetect.disabled = false;
-  addLog("SIAP. Tekan tombol 'Deteksi Wajah'.");
-};
+  addLog("Tunggu 2 detik biar kamera stabil & Anda siap posisi wajah...");
+  await new Promise(r => setTimeout(r, 2000));
 
-btnDetect.onclick = async () => {
-  btnDetect.disabled = true;
-  addLog("--- Mulai deteksi ---");
-
+  addLog("--- Mulai deteksi (1 CHAIN UTUH, 1x panggilan) ---");
   const startTime = Date.now();
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }); // sama kayak production
 
-  addLog("Tahap 1: detectSingleFace (TinyFaceDetector, scoreThreshold 0.3)...");
-  const t1 = await faceapi.detectSingleFace(video, options);
-  addLog(`Tahap 1 selesai dalam ${Date.now() - startTime}ms. Hasil: ${t1 ? "wajah ditemukan, score=" + t1.score.toFixed(3) : "tidak ada wajah"}`);
+  try {
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
 
-  if (!t1) {
-    addLog("❌ Tidak ada wajah terdeteksi, coba lagi dengan posisi wajah di depan kamera.");
-    btnDetect.disabled = false;
-    return;
+    const elapsed = Date.now() - startTime;
+
+    if (detection) {
+      addLog(`✅✅✅ SUKSES dalam ${elapsed}ms! Descriptor length: ${detection.descriptor.length}, score: ${detection.detection.score.toFixed(3)}`);
+    } else {
+      addLog(`❌ Selesai dalam ${elapsed}ms tapi HASIL NULL (wajah tidak terdeteksi di frame ini). Coba lagi, pastikan wajah di depan kamera.`);
+    }
+  } catch (e) {
+    const elapsed = Date.now() - startTime;
+    addLog(`❌ ERROR setelah ${elapsed}ms: ${e.message}`);
   }
+}
 
-  addLog("Tahap 2: withFaceLandmarks()...");
-  const t2start = Date.now();
-  const detectionWithLandmarks = await faceapi.detectSingleFace(video, options).withFaceLandmarks();
-  addLog(`Tahap 2 selesai dalam ${Date.now() - t2start}ms.`);
-
-  addLog("Tahap 3: withFaceDescriptor() -- INI YANG SERING MACET...");
-  const t3start = Date.now();
-  const fullDetection = await faceapi.detectSingleFace(video, options)
-    .withFaceLandmarks()
-    .withFaceDescriptor();
-  addLog(`Tahap 3 selesai dalam ${Date.now() - t3start}ms.`);
-
-  if (fullDetection) {
-    addLog(`✅✅✅ SUKSES TOTAL dalam ${Date.now() - startTime}ms! Descriptor length: ${fullDetection.descriptor.length}`);
-  } else {
-    addLog("❌ Deteksi akhir gagal (null)");
-  }
-
-  btnDetect.disabled = false;
-};
+btnLowRes.onclick = () => runTest(480, 640, "RESOLUSI RENDAH");
+btnHighRes.onclick = () => runTest(1280, 720, "RESOLUSI TINGGI");
 </script>
 </body>
 </html>
