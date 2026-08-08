@@ -517,29 +517,20 @@ async function startFaceVerification() {
 
 btnScanFace.onclick = async () => {
   btnScanFace.disabled = true;
-  guideLoopActive = false; // hentikan loop ringan dulu, jangan sampai rebutan WebGL
-  await new Promise(r => setTimeout(r, 300)); // kasih waktu WebGL "beres-beres" di iOS Safari
   setStatus("Mendeteksi wajah...", "info");
 
   let detection;
   try {
-    setStatus("Mendeteksi wajah (tahap 1/3: deteksi dasar)...", "info");
-    const baseTask = faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }));
-    const baseResult = await withTimeout(baseTask, 8000, "STUCK di tahap 1 (deteksi dasar) -- kemungkinan model TinyFaceDetector.");
-    if (!baseResult) {
-      setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
-      btnScanFace.disabled = false;
-      guideLoop();
-      return;
-    }
-
-    setStatus("Mendeteksi wajah (tahap 2/3: landmark)...", "info");
-    const landmarkTask = baseTask.withFaceLandmarks();
-    await withTimeout(landmarkTask, 8000, "STUCK di tahap 2 (landmark 68 titik) -- kemungkinan model FaceLandmark68Net.");
-
-    setStatus("Mendeteksi wajah (tahap 3/3: descriptor wajah)...", "info");
-    const descriptorTask = landmarkTask.withFaceDescriptor();
-    detection = await withTimeout(descriptorTask, 8000, "STUCK di tahap 3 (descriptor wajah) -- kemungkinan model FaceRecognitionNet, yang paling berat.");
+    // PENTING: chain HARUS utuh nggak boleh dipecah jadi await terpisah
+    // (versi dipecah kemarin ternyata malah bikin macet -- versi utuh ini
+    // yang terbukti pernah berhasil waktu enroll Amir Yahya).
+    detection = await withTimeout(
+      faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor(),
+      20000,
+      "Deteksi wajah timeout (20 detik). Coba lagi atau refresh halaman."
+    );
   } catch (e) {
     setStatus("❌ " + e.message, "fail");
     btnScanFace.disabled = false;
