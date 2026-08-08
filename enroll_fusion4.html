@@ -615,7 +615,15 @@ btnCapture.onclick = async () => {
   }
 
   // Validasi posisi/ukuran -- tolak kalau wajah terlalu jauh/dekat/nggak di tengah
-  const posCheck = evaluateFaceBox(detection.box);
+  let posCheck;
+  try {
+    posCheck = evaluateFaceBox(detection.detection.box);
+  } catch (e) {
+    console.error("evaluateFaceBox error:", e);
+    status.innerText = "❌ Error validasi posisi: " + e.message;
+    btnCapture.disabled = false;
+    return;
+  }
   if (!posCheck.ok) {
     status.innerText = `❌ ${posCheck.reason}. Sesuaikan posisi, lalu coba lagi.`;
     btnCapture.disabled = false;
