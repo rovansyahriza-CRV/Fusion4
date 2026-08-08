@@ -48,7 +48,7 @@ btnStart.onclick = async () => {
   addLog("Membuka kamera (resolusi rendah, 320x240, kamera depan)...");
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: 320, height: 240 }
+      video: { facingMode: "user", width: 480, height: 640 }
     });
     video.srcObject = stream;
     await video.play();
@@ -67,10 +67,11 @@ btnDetect.onclick = async () => {
   addLog("--- Mulai deteksi ---");
 
   const startTime = Date.now();
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }); // sama kayak production
 
-  addLog("Tahap 1: detectSingleFace (TinyFaceDetector)...");
-  const t1 = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
-  addLog(`Tahap 1 selesai dalam ${Date.now() - startTime}ms. Hasil: ${t1 ? "wajah ditemukan" : "tidak ada wajah"}`);
+  addLog("Tahap 1: detectSingleFace (TinyFaceDetector, scoreThreshold 0.3)...");
+  const t1 = await faceapi.detectSingleFace(video, options);
+  addLog(`Tahap 1 selesai dalam ${Date.now() - startTime}ms. Hasil: ${t1 ? "wajah ditemukan, score=" + t1.score.toFixed(3) : "tidak ada wajah"}`);
 
   if (!t1) {
     addLog("❌ Tidak ada wajah terdeteksi, coba lagi dengan posisi wajah di depan kamera.");
@@ -80,12 +81,12 @@ btnDetect.onclick = async () => {
 
   addLog("Tahap 2: withFaceLandmarks()...");
   const t2start = Date.now();
-  const detectionWithLandmarks = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+  const detectionWithLandmarks = await faceapi.detectSingleFace(video, options).withFaceLandmarks();
   addLog(`Tahap 2 selesai dalam ${Date.now() - t2start}ms.`);
 
   addLog("Tahap 3: withFaceDescriptor() -- INI YANG SERING MACET...");
   const t3start = Date.now();
-  const fullDetection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+  const fullDetection = await faceapi.detectSingleFace(video, options)
     .withFaceLandmarks()
     .withFaceDescriptor();
   addLog(`Tahap 3 selesai dalam ${Date.now() - t3start}ms.`);
