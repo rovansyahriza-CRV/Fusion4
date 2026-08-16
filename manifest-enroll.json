@@ -1,0 +1,31 @@
+{
+  "name": "Fusion4 Enroll Wajah",
+  "short_name": "Enroll",
+  "description": "Enroll wajah karyawan untuk sistem absensi Fusion4",
+  "start_url": "/Fusion4/enroll_fusion4.html",
+  "scope": "/Fusion4/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#243463",
+  "theme_color": "#243463",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
