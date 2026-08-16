@@ -659,6 +659,7 @@ btnScanFace.onclick = async () => {
       const namaKaryawan = best.nama || qrCodeId;
       await queueOfflineAbsen({ qrCodeId: qrCodeId, nama: namaKaryawan, gps: offlineGPS });
       const jumlahPending = await countPendingQueue();
+      statusEl.style.display = "none";
       showResultCard(`${namaKaryawan} tercatat (offline). ${jumlahPending} data menunggu sinkronisasi saat online.`, "ok");
       return;
     }
