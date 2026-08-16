@@ -11,8 +11,8 @@ const DB_VERSION = 1;
 const STORE_QUEUE = "queue";
 const STORE_FACES = "faceCache";
 
-const FACE_MATCH_THRESHOLD = 0.45;   // samakan dengan setting online yang sudah ada
-const AMBIGUITY_MARGIN = 0.12;       // samakan dengan setting online yang sudah ada
+const OFFLINE_FACE_MATCH_THRESHOLD = 0.45;   // samakan dengan setting online yang sudah ada
+const OFFLINE_AMBIGUITY_MARGIN = 0.12;       // samakan dengan setting online yang sudah ada
 
 function openOfflineDB() {
   return new Promise((resolve, reject) => {
@@ -83,10 +83,10 @@ async function matchFaceOffline(liveDescriptor) {
     }
   });
 
-  if (bestDist > FACE_MATCH_THRESHOLD) {
+  if (bestDist > OFFLINE_FACE_MATCH_THRESHOLD) {
     return { match: null, reason: "Wajah tidak dikenali" };
   }
-  if ((secondBestDist - bestDist) < AMBIGUITY_MARGIN) {
+  if ((secondBestDist - bestDist) < OFFLINE_AMBIGUITY_MARGIN) {
     return { match: null, reason: "Wajah mirip lebih dari satu orang, coba lagi" };
   }
   return { match: best, distance: bestDist };
