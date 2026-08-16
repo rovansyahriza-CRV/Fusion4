@@ -16,6 +16,7 @@
   
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="/Fusion4/offline-absen.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -218,7 +219,9 @@ let refDescriptor = null;
 let faceVerified = false;
 let matchMode = "1:1"; // "1:1" (QR dulu, verifikasi ke 1 orang) atau "1:N" (wajah dulu, cari dari semua)
 let allFaceData = null; // cache daftar semua descriptor, buat mode 1:N
-let pendingPindahReminder = null; // diisi kalau user pilih "Lewati" checkin pindah lokasi
+let pendingPindahReminder = null;
+let isOfflineMode = false;
+let offlineGPS = null;
 
 const locBanner = document.getElementById('locBanner');
 const resultBanner = document.getElementById('resultBanner');
@@ -320,6 +323,15 @@ async function submitAbsensiCall(qrCodeId, lokasi, password) {
 
 // ============ 1. GPS ============
 async function initGPS() {
+  if (!navigator.onLine) {
+    isOfflineMode = true;
+    offlineGPS = await getGPSNonBlocking();
+    showBanner(locBanner, "⚠️ Tidak ada sinyal internet. Mode offline aktif -- lanjut Scan Wajah.", "warn");
+    setStatus("Pilih cara absen di bawah ini (mode offline).", "info");
+    document.getElementById('entryCard').style.display = "block";
+    document.getElementById('btnShowQrOption').style.display = "none";
+    return;
+  }
   if (!navigator.geolocation) {
     showBanner(locBanner, "❌ Browser tidak mendukung GPS.", "fail");
     return;
@@ -327,12 +339,17 @@ async function initGPS() {
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
       const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      offlineGPS = { lat, lng };
       showBanner(locBanner, "🟢 GPS terkunci. Menyelaraskan dengan server...", "info");
       try {
         const result = await callApi("FIND_NEAREST_LOCATION", { lat: lat, lng: lng });
         handleLocationResult(result);
       } catch (e) {
-        showBanner(locBanner, "❌ Gagal terhubung ke server: " + e.message, "fail");
+        isOfflineMode = true;
+        showBanner(locBanner, "⚠️ Tidak bisa hubungi server. Mode offline aktif -- lanjut Scan Wajah.", "warn");
+        setStatus("Pilih cara absen di bawah ini (mode offline).", "info");
+        document.getElementById('entryCard').style.display = "block";
+        document.getElementById('btnShowQrOption').style.display = "none";
       }
     },
     (err) => {
@@ -340,13 +357,23 @@ async function initGPS() {
       if (err.code === err.PERMISSION_DENIED) pesan = "Akses lokasi GPS ditolak. Aktifkan izin lokasi di HP.";
       else if (err.code === err.POSITION_UNAVAILABLE) pesan = "Sinyal GPS tidak tersedia.";
       else if (err.code === err.TIMEOUT) pesan = "Waktu pencarian lokasi habis.";
-      showBanner(locBanner, "🔴 " + pesan, "fail");
-      showRetry();
+
+      if (!navigator.onLine) {
+        isOfflineMode = true;
+        offlineGPS = null;
+        showBanner(locBanner, "⚠️ GPS & internet tidak tersedia. Mode offline aktif.", "warn");
+        setStatus("Pilih cara absen di bawah ini (mode offline).", "info");
+        document.getElementById('entryCard').style.display = "block";
+        document.getElementById('btnShowQrOption').style.display = "none";
+      } else {
+        showBanner(locBanner, "🔴 " + pesan, "fail");
+        showRetry();
+      }
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
 }
-
+  
 function handleLocationResult(result) {
   if (!result || typeof result !== 'object') {
     showBanner(locBanner, "🔴 Lokasi tidak ditemukan.", "fail");
@@ -460,7 +487,11 @@ async function startFaceOnlyCapture() {
 
   setStatus("Mengambil data wajah karyawan...", "info");
   try {
-    allFaceData = await callApi("GET_ALL_FACE_DATA", {});
+    if (isOfflineMode) {
+      allFaceData = await getCachedFaces();
+    } else {
+      allFaceData = await callApi("GET_ALL_FACE_DATA", {});
+    }
   } catch (e) {
     setStatus("❌ Gagal ambil data wajah: " + e.message, "fail");
     showRetry();
@@ -591,8 +622,9 @@ btnScanFace.onclick = async () => {
 
   if (matchMode === "1:N") {
     // Cari 2 kandidat terdekat -- bukan cuma yang #1, biar bisa deteksi "ragu-ragu"
-    let sorted = allFaceData.map(p => ({
+  let sorted = allFaceData.map(p => ({
       qrCodeId: p.qrCodeId,
+      nama: p.nama,
       distance: faceapi.euclideanDistance(detection.descriptor, p.descriptor)
     })).sort((a, b) => a.distance - b.distance);
 
@@ -622,6 +654,14 @@ btnScanFace.onclick = async () => {
     stopGuideLoop();
     stopCamera();
     faceVerified = true;
+
+    if (isOfflineMode) {
+      const namaKaryawan = best.nama || qrCodeId;
+      await queueOfflineAbsen({ qrCodeId: qrCodeId, nama: namaKaryawan, gps: offlineGPS });
+      const jumlahPending = await countPendingQueue();
+      showResultCard(`${namaKaryawan} tercatat (offline). ${jumlahPending} data menunggu sinkronisasi saat online.`, "ok");
+      return;
+    }
 
     try {
       const paketData = await callApi("GET_PERSON_DATA", { qrCodeId: qrCodeId });
@@ -958,6 +998,9 @@ async function scanQRLoop() {
 // GPS selalu dikunci duluan (baik lewat redirect QR fisik maupun buka langsung).
 // Setelah lokasi valid, handleLocationResult() yang nentuin lanjut otomatis
 // (kalau qrCodeId sudah ada dari URL) atau munculin pilihan Face-First/QR.
+if (navigator.onLine) {
+  syncFaceCache().catch(err => console.warn("Sync cache wajah gagal:", err));
+}
 initGPS();
 </script>
 
