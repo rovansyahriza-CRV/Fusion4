@@ -3,116 +3,182 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Fusion4 HO Mega Dashboard</title>
+  <title>BiMa Attendance Update</title>
   <style>
+    :root {
+      --bg: #14110f;
+      --surface: #1d1916;
+      --surface-2: #262019;
+      --border: #362f27;
+      --orange: #E8562C;
+      --orange-light: #F5C4B3;
+      --charcoal: #3d3d3d;
+      --text: #F5F1EA;
+      --text-muted: #A9A296;
+      --amber: #F0A202;
+      --green: #4CAF7D;
+      --green-bg: #16261e;
+      --amber-bg: #2a2011;
+    }
+    * { box-sizing: border-box; }
     html, body {
       margin: 0; padding: 0; width: 100vw; height: 100vh;
-      overflow: hidden; background-color: #0c0c0c; color: #ffffff;
+      overflow: hidden; background-color: var(--bg); color: var(--text);
       font-family: 'Segoe UI', Roboto, sans-serif;
     }
     .dashboard-wrapper {
-      display: grid; grid-template-rows: 9% 9% 82%;
+      display: grid; grid-template-rows: auto auto 1fr;
       width: 100vw; height: 100vh; box-sizing: border-box;
-      padding: 12px 16px; /* margin aman dari overscan TV */
+      padding: 16px 20px; gap: 14px;
     }
+
+    /* ===== HEADER ===== */
     .tv-header {
-      background-color: #141414; border-bottom: 2px solid #00e676;
       display: flex; justify-content: space-between; align-items: center;
-      padding: 0 25px; gap: 16px; overflow: hidden;
+      gap: 20px;
     }
-    .tv-title {
-      font-size: clamp(1rem, 2.1vw, 1.5rem); font-weight: bold; color: #00e676; letter-spacing: 0.5px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;
+    .brand-card {
+      background: #FFFFFF; border-radius: 12px;
+      padding: 10px 20px 10px 12px;
+      display: flex; align-items: center; gap: 14px;
+      min-width: 0; flex: 1;
     }
-    .tv-clock { font-size: 1.3rem; font-weight: bold; color: #ffffff; flex-shrink: 0; }
+    .brand-logo { height: 44px; width: auto; flex-shrink: 0; }
+    .brand-text { min-width: 0; }
+    .brand-title {
+      font-size: clamp(0.95rem, 1.8vw, 1.35rem); font-weight: 700; color: var(--charcoal);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25;
+    }
+    .brand-subtitle {
+      font-size: clamp(0.75rem, 1.2vw, 0.95rem); font-weight: 500; color: var(--orange);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tv-clock {
+      font-size: 1.3rem; font-weight: 600; color: var(--text); flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
 
-    .summary-bar {
-      display: flex; gap: 20px; align-items: center; padding: 10px 25px; background: #111;
-    }
+    /* ===== SUMMARY BAR ===== */
+    .summary-bar { display: flex; gap: 14px; }
     .card-box {
-      padding: 12px 25px; border-radius: 8px; font-size: 1.3rem; font-weight: bold; display: flex; align-items: center; gap: 10px;
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-left: 4px solid var(--orange);
+      border-radius: 10px; padding: 14px 20px;
+      display: flex; align-items: center; gap: 12px;
     }
-    .card-hadir { background: #0288d1; color: white; }
-    .card-running { background: #f57c00; color: black; animation: pulseGlow 2s infinite; }
-    .card-done { background: #388e3c; color: white; }
+    .card-box.running { border-left-color: var(--amber); }
+    .card-box.done { border-left-color: var(--green); }
+    .card-icon { font-size: 1.4rem; }
+    .card-label { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; }
+    .card-value { font-size: 1.3rem; font-weight: 700; color: var(--text); }
 
+    /* ===== WORKSPACE ===== */
     .split-workspace {
-      display: grid; grid-template-columns: 50% 50%; height: 100%; box-sizing: border-box;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      min-height: 0;
     }
-    .panel-box { padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; overflow-y: auto; }
-    .panel-left { border-right: 1px solid #222; }
-    .panel-right { border-left: 1px solid #222; }
-    .panel-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 2px solid #333; }
-    .title-reguler { color: #0288d1; }
-    .title-overtime { color: #ffb74d; }
+    .panel-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 18px 20px; box-sizing: border-box;
+      display: flex; flex-direction: column; overflow-y: auto; min-height: 0;
+    }
+    .panel-title {
+      font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+    }
+    .title-reguler { color: var(--orange); }
+    .title-overtime { color: var(--amber); }
 
-    .tv-table { width: 100%; border-collapse: collapse; font-size: 1.4rem; text-align: left; }
-    .tv-table th { background: #222; color: #aaa; padding: 12px; font-size: 1.1rem; text-transform: uppercase; }
-    .tv-table td { padding: 14px 12px; border-bottom: 1px solid #1f1f1f; }
+    .tv-table { width: 100%; border-collapse: collapse; font-size: 1.05rem; text-align: left; }
+    .tv-table th {
+      color: var(--text-muted); padding: 8px 10px; font-size: 0.8rem;
+      text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    .tv-table td { padding: 12px 10px; border-bottom: 1px solid var(--border); }
+    .tv-table tr:last-child td { border-bottom: none; }
 
-    .status-badge { padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 1.1rem; }
-    .badge-open { background: #e3f2fd; color: #0d47a1; }
-    .badge-closed { background: #37474f; color: #eceff1; }
-    .badge-running { background: #fff3e0; color: #e65100; animation: blinkText 1.5s infinite; }
-    .badge-done { background: #e8f5e9; color: #1b5e20; }
+    .loc-tag { color: var(--orange-light); font-weight: 500; }
+
+    .status-badge {
+      padding: 5px 14px; border-radius: 999px; font-weight: 700;
+      font-size: 0.85rem; display: inline-block;
+    }
+    .badge-open { background: rgba(232,86,44,0.15); color: var(--orange); }
+    .badge-closed { background: var(--surface-2); color: var(--text-muted); }
+    .badge-running { background: var(--amber-bg); color: var(--amber); animation: blinkText 1.6s infinite; }
+    .badge-done { background: var(--green-bg); color: var(--green); }
+
+    .empty-state { text-align: center; color: var(--text-muted); padding: 30px 0; }
 
     #connError {
       display: none; position: fixed; bottom: 16px; right: 16px;
-      background: #b71c1c; color: white; padding: 10px 18px; border-radius: 8px;
+      background: #7A2418; color: #fff; padding: 10px 18px; border-radius: 8px;
       font-size: 1rem; z-index: 999;
     }
 
-    @keyframes pulseGlow {
-      0% { box-shadow: 0 0 5px rgba(245,124,0,0.4); }
-      50% { box-shadow: 0 0 20px rgba(245,124,0,0.8); }
-      100% { box-shadow: 0 0 5px rgba(245,124,0,0.4); }
-    }
-    @keyframes blinkText { 50% { opacity: 0.4; } }
+    @keyframes blinkText { 50% { opacity: 0.45; } }
   </style>
 </head>
 <body>
 
   <div class="dashboard-wrapper">
     <div class="tv-header">
-      <div class="tv-title">🏢 FUSION4 COMMAND CENTER - HEAD OFFICE MONITOR</div>
+      <div class="brand-card">
+        <img src="logo-bima.png" alt="BiMa" class="brand-logo">
+        <div class="brand-text">
+          <div class="brand-title">PT. Bilal Mitra Aryatama</div>
+          <div class="brand-subtitle">Attendance Update</div>
+        </div>
+      </div>
       <div class="tv-clock" id="tvClock">00:00:00</div>
     </div>
 
     <div class="summary-bar">
-      <div class="card-box card-hadir">👥 REGULER HADIR: <span id="sumHadir">0</span></div>
-      <div class="card-box card-running">🔥 OT ACTIVE: <span id="sumRunning">0</span></div>
-      <div class="card-box card-done">✅ OT DONE: <span id="sumDone">0</span></div>
+      <div class="card-box">
+        <span class="card-icon">👥</span>
+        <div>
+          <div class="card-label">Reguler Hadir</div>
+          <div class="card-value" id="sumHadir">0 Orang</div>
+        </div>
+      </div>
+      <div class="card-box running">
+        <span class="card-icon">🔥</span>
+        <div>
+          <div class="card-label">OT Active</div>
+          <div class="card-value" id="sumRunning">0 Orang</div>
+        </div>
+      </div>
+      <div class="card-box done">
+        <span class="card-icon">✅</span>
+        <div>
+          <div class="card-label">OT Done</div>
+          <div class="card-value" id="sumDone">0 Orang</div>
+        </div>
+      </div>
     </div>
 
     <div class="split-workspace">
-      <div class="panel-box panel-left" id="panelBoxReguler">
-        <div class="panel-title title-reguler">📊 ABSENSI SHIFT REGULER</div>
+      <div class="panel-box" id="panelBoxReguler">
+        <div class="panel-title title-reguler">📊 Absensi Shift Reguler</div>
         <table class="tv-table">
           <thead>
-            <tr>
-              <th>Personnel</th>
-              <th>Lokasi Terakhir</th>
-              <th>Status Harian</th>
-            </tr>
+            <tr><th>Personnel</th><th>Lokasi Terakhir</th><th>Status</th></tr>
           </thead>
           <tbody id="tbodyReguler">
-            <tr><td colspan="3" style="color:#666; text-align:center;">Memuat data absensi...</td></tr>
+            <tr><td colspan="3" class="empty-state">Memuat data absensi...</td></tr>
           </tbody>
         </table>
       </div>
 
-      <div class="panel-box panel-right" id="panelBoxOvertime">
-        <div class="panel-title title-overtime">⏳ SEBARAN KARYAWAN OVERTIME (SPKL)</div>
+      <div class="panel-box" id="panelBoxOvertime">
+        <div class="panel-title title-overtime">⏳ Sebaran Karyawan Overtime (SPKL)</div>
         <table class="tv-table">
           <thead>
-            <tr>
-              <th>Personnel</th>
-              <th>Durasi Lembur</th>
-              <th>Status OT</th>
-            </tr>
+            <tr><th>Personnel</th><th>Durasi Lembur</th><th>Status OT</th></tr>
           </thead>
           <tbody id="tbodyOvertime">
-            <tr><td colspan="3" style="color:#666; text-align:center;">Memuat data lembur...</td></tr>
+            <tr><td colspan="3" class="empty-state">Memuat data lembur...</td></tr>
           </tbody>
         </table>
       </div>
@@ -132,33 +198,6 @@
       startAutoScroll('panelBoxReguler');
       startAutoScroll('panelBoxOvertime');
     });
-
-    // ============ AUTO-SCROLL PANEL (kalau data lebih panjang dari layar) ============
-    function startAutoScroll(elementId, speedPxPerFrame = 0.6, pauseAtEndsMs = 2500) {
-      const el = document.getElementById(elementId);
-      let waiting = false;
-
-      function step() {
-        if (!waiting) {
-          const bisaScroll = el.scrollHeight > el.clientHeight + 4;
-          if (bisaScroll) {
-            const sudahDiBawah = (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 2);
-            if (sudahDiBawah) {
-              waiting = true;
-              setTimeout(() => {
-                el.scrollTop = 0;
-                waiting = false;
-                requestAnimationFrame(step);
-              }, pauseAtEndsMs);
-              return;
-            }
-            el.scrollTop += speedPxPerFrame;
-          }
-        }
-        requestAnimationFrame(step);
-      }
-      requestAnimationFrame(step);
-    }
 
     function startClock() {
       setInterval(() => {
@@ -195,7 +234,7 @@
 
       const tbodyReg = document.getElementById('tbodyReguler');
       if (res.dataReguler.length === 0) {
-        tbodyReg.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#666;">Belum ada kehadiran reguler hari ini.</td></tr>';
+        tbodyReg.innerHTML = '<tr><td colspan="3" class="empty-state">Belum ada kehadiran reguler hari ini.</td></tr>';
       } else {
         let htmlReg = '';
         res.dataReguler.forEach(item => {
@@ -203,7 +242,7 @@
           htmlReg += `
             <tr>
               <td style="font-weight:600;">${item.nama}</td>
-              <td><span style="color:#0288d1; font-weight:500;">📍 ${item.lokasi}</span></td>
+              <td><span class="loc-tag">📍 ${item.lokasi}</span></td>
               <td><span class="status-badge ${badgeCls}">${item.statusReguler}</span></td>
             </tr>
           `;
@@ -213,7 +252,7 @@
 
       const tbodyOt = document.getElementById('tbodyOvertime');
       if (res.dataOvertime.length === 0) {
-        tbodyOt.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#666;">Tidak ada aktivitas lembur grup hari ini.</td></tr>';
+        tbodyOt.innerHTML = '<tr><td colspan="3" class="empty-state">Tidak ada aktivitas lembur grup hari ini.</td></tr>';
       } else {
         let htmlOt = '';
         res.dataOvertime.forEach(item => {
@@ -221,13 +260,40 @@
           htmlOt += `
             <tr>
               <td style="font-weight:600;">${item.nama}</td>
-              <td style="color:#00e676; font-weight:bold;">🕒 ${item.durasi ? item.durasi : '-'}</td>
+              <td style="color:var(--amber); font-weight:600;">🕒 ${item.durasi ? item.durasi : '-'}</td>
               <td><span class="status-badge ${badgeCls}">${item.statusOt}</span></td>
             </tr>
           `;
         });
         tbodyOt.innerHTML = htmlOt;
       }
+    }
+
+    // ============ AUTO-SCROLL PANEL (kalau data lebih panjang dari layar) ============
+    function startAutoScroll(elementId, speedPxPerFrame = 0.6, pauseAtEndsMs = 2500) {
+      const el = document.getElementById(elementId);
+      let waiting = false;
+
+      function step() {
+        if (!waiting) {
+          const bisaScroll = el.scrollHeight > el.clientHeight + 4;
+          if (bisaScroll) {
+            const sudahDiBawah = (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 2);
+            if (sudahDiBawah) {
+              waiting = true;
+              setTimeout(() => {
+                el.scrollTop = 0;
+                waiting = false;
+                requestAnimationFrame(step);
+              }, pauseAtEndsMs);
+              return;
+            }
+            el.scrollTop += speedPxPerFrame;
+          }
+        }
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
     }
   </script>
 </body>
