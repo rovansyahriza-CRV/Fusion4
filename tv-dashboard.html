@@ -238,12 +238,15 @@
       } else {
         let htmlReg = '';
         res.dataReguler.forEach(item => {
-          let badgeCls = item.statusReguler === 'OPEN' ? 'badge-open' : 'badge-closed';
+          let badgeCls = item.isClosed ? 'badge-closed' : 'badge-open';
           htmlReg += `
             <tr>
               <td style="font-weight:600;">${item.nama}</td>
               <td><span class="loc-tag">📍 ${item.lokasi}</span></td>
-              <td><span class="status-badge ${badgeCls}">${item.statusReguler}</span></td>
+              <td>
+                <span class="status-badge ${badgeCls}">${item.statusReguler}</span>
+                <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">${item.jamScan}</div>
+              </td>
             </tr>
           `;
         });
