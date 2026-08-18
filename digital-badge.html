@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BiMa - Badge Digital</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#E8562C">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -17,13 +22,11 @@
     margin: 0; padding: 0; min-height: 100vh; -webkit-tap-highlight-color: transparent;
   }
   .page { max-width: 420px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
-
   .banner {
     background: var(--orange); color: #fff; text-align: center;
     padding: 28px 20px 60px; position: relative;
   }
   .banner-title { font-size: 15px; font-weight: 600; opacity: 0.95; }
-
   .badge-card {
     background: #fff; border-radius: 20px; margin: -44px 16px 0;
     padding: 28px 20px 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
@@ -34,7 +37,6 @@
   .badge-nama { font-size: 20px; font-weight: 700; color: var(--charcoal); margin-bottom: 2px; }
   .badge-jabatan { font-size: 14px; color: var(--orange); font-weight: 600; margin-bottom: 10px; }
   .badge-id { font-size: 12px; color: var(--text-muted); font-family: monospace; }
-
   .divider { border-top: 1px dashed var(--border); margin: 18px 0; }
   .footer-copyright {
     font-size: 11px; color: var(--text-muted); text-align: center; padding: 20px;
@@ -44,7 +46,6 @@
     background: #fff; border: 1.5px solid var(--border); border-radius: 12px;
     color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer;
   }
-
   #pinOverlay {
     position: fixed; inset: 0; background: rgba(61,61,61,0.55);
     display: flex; align-items: center; justify-content: center; z-index: 100;
@@ -76,12 +77,10 @@
 </style>
 </head>
 <body>
-
 <div class="page" id="pageContent" style="display:none;">
   <div class="banner">
     <div class="banner-title">Tunjukkan layar ini untuk absen</div>
   </div>
-
   <div class="badge-card">
     <div id="qrbox"></div>
     <div class="badge-nama" id="badgeNama">-</div>
@@ -89,11 +88,9 @@
     <div class="divider"></div>
     <div class="badge-id" id="badgeId">-</div>
   </div>
-
   <div class="btn-ganti" id="btnGantiPin">🔁 Ganti PIN / Bukan Anda?</div>
   <div class="footer-copyright">© PT. Bilal Mitra Aryatama</div>
 </div>
-
 <div id="pinOverlay">
   <div id="pinModal">
     <div class="pin-icon">🔒</div>
@@ -104,32 +101,24 @@
     <div id="pinMsg"></div>
   </div>
 </div>
-
 <script>
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
-
 const txtPin = document.getElementById('txtPin');
 const pinMsg = document.getElementById('pinMsg');
 const btnSubmitPin = document.getElementById('btnSubmitPin');
 const pinOverlay = document.getElementById('pinOverlay');
 const pageContent = document.getElementById('pageContent');
-
 txtPin.focus();
-
 async function submitPin() {
   const pin = txtPin.value.trim();
-
   pinMsg.style.display = "none";
-
   if (!pin) {
     pinMsg.innerText = "❌ PIN wajib diisi.";
     pinMsg.style.display = "block";
     return;
   }
-
   btnSubmitPin.disabled = true;
   btnSubmitPin.innerText = "Memeriksa...";
-
   try {
     const res = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
@@ -137,7 +126,6 @@ async function submitPin() {
       headers: { "Content-Type": "text/plain" }
     });
     const hasil = await res.json();
-
     if (!hasil.valid) {
       pinMsg.innerText = "❌ " + (hasil.message || "PIN tidak ditemukan.");
       pinMsg.style.display = "block";
@@ -147,7 +135,6 @@ async function submitPin() {
       txtPin.focus();
       return;
     }
-
     document.getElementById('badgeNama').innerText = hasil.nama || "-";
     document.getElementById('badgeJabatan').innerText = hasil.kualifikasi || "-";
     document.getElementById('badgeId').innerText = hasil.qrCodeId;
@@ -159,7 +146,6 @@ async function submitPin() {
       colorDark: "#3D3D3D",
       colorLight: "#ffffff"
     });
-
     pinOverlay.style.display = "none";
     pageContent.style.display = "flex";
   } catch (e) {
@@ -169,12 +155,10 @@ async function submitPin() {
     btnSubmitPin.innerText = "Tampilkan Badge";
   }
 }
-
 btnSubmitPin.onclick = submitPin;
 txtPin.addEventListener('keydown', (e) => {
   if (e.key === "Enter") submitPin();
 });
-
 document.getElementById('btnGantiPin').onclick = () => {
   pageContent.style.display = "none";
   pinOverlay.style.display = "flex";
