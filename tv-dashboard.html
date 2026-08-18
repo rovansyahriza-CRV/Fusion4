@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Fusion4 HO Mega Dashboard</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100vw; height: 100vh;
+      overflow: hidden; background-color: #0c0c0c; color: #ffffff;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+    }
+    .dashboard-wrapper {
+      display: grid; grid-template-rows: 8% 10% 82%;
+      width: 100vw; height: 100vh; box-sizing: border-box;
+    }
+    .tv-header {
+      background-color: #141414; border-bottom: 2px solid #00e676;
+      display: flex; justify-content: space-between; align-items: center; padding: 0 25px;
+    }
+    .tv-title { font-size: 1.8rem; font-weight: bold; color: #00e676; letter-spacing: 1px; }
+    .tv-clock { font-size: 1.5rem; font-weight: bold; color: #ffffff; }
+
+    .summary-bar {
+      display: flex; gap: 20px; align-items: center; padding: 10px 25px; background: #111;
+    }
+    .card-box {
+      padding: 12px 25px; border-radius: 8px; font-size: 1.3rem; font-weight: bold; display: flex; align-items: center; gap: 10px;
+    }
+    .card-hadir { background: #0288d1; color: white; }
+    .card-running { background: #f57c00; color: black; animation: pulseGlow 2s infinite; }
+    .card-done { background: #388e3c; color: white; }
+
+    .split-workspace {
+      display: grid; grid-template-columns: 50% 50%; height: 100%; box-sizing: border-box;
+    }
+    .panel-box { padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; overflow-y: auto; }
+    .panel-left { border-right: 1px solid #222; }
+    .panel-right { border-left: 1px solid #222; }
+    .panel-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 2px solid #333; }
+    .title-reguler { color: #0288d1; }
+    .title-overtime { color: #ffb74d; }
+
+    .tv-table { width: 100%; border-collapse: collapse; font-size: 1.4rem; text-align: left; }
+    .tv-table th { background: #222; color: #aaa; padding: 12px; font-size: 1.1rem; text-transform: uppercase; }
+    .tv-table td { padding: 14px 12px; border-bottom: 1px solid #1f1f1f; }
+
+    .status-badge { padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 1.1rem; }
+    .badge-open { background: #e3f2fd; color: #0d47a1; }
+    .badge-closed { background: #37474f; color: #eceff1; }
+    .badge-running { background: #fff3e0; color: #e65100; animation: blinkText 1.5s infinite; }
+    .badge-done { background: #e8f5e9; color: #1b5e20; }
+
+    #connError {
+      display: none; position: fixed; bottom: 16px; right: 16px;
+      background: #b71c1c; color: white; padding: 10px 18px; border-radius: 8px;
+      font-size: 1rem; z-index: 999;
+    }
+
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 0 5px rgba(245,124,0,0.4); }
+      50% { box-shadow: 0 0 20px rgba(245,124,0,0.8); }
+      100% { box-shadow: 0 0 5px rgba(245,124,0,0.4); }
+    }
+    @keyframes blinkText { 50% { opacity: 0.4; } }
+  </style>
+</head>
+<body>
+
+  <div class="dashboard-wrapper">
+    <div class="tv-header">
+      <div class="tv-title">🏢 FUSION4 COMMAND CENTER - HEAD OFFICE MONITOR</div>
+      <div class="tv-clock" id="tvClock">00:00:00</div>
+    </div>
+
+    <div class="summary-bar">
+      <div class="card-box card-hadir">👥 REGULER HADIR: <span id="sumHadir">0</span></div>
+      <div class="card-box card-running">🔥 OT ACTIVE: <span id="sumRunning">0</span></div>
+      <div class="card-box card-done">✅ OT DONE: <span id="sumDone">0</span></div>
+    </div>
+
+    <div class="split-workspace">
+      <div class="panel-box panel-left">
+        <div class="panel-title title-reguler">📊 ABSENSI SHIFT REGULER</div>
+        <table class="tv-table">
+          <thead>
+            <tr>
+              <th>Personnel</th>
+              <th>Lokasi Terakhir</th>
+              <th>Status Harian</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyReguler">
+            <tr><td colspan="3" style="color:#666; text-align:center;">Memuat data absensi...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel-box panel-right">
+        <div class="panel-title title-overtime">⏳ SEBARAN KARYAWAN OVERTIME (SPKL)</div>
+        <table class="tv-table">
+          <thead>
+            <tr>
+              <th>Personnel</th>
+              <th>Durasi Lembur</th>
+              <th>Status OT</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyOvertime">
+            <tr><td colspan="3" style="color:#666; text-align:center;">Memuat data lembur...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="connError">⚠️ Gagal terhubung ke server, mencoba lagi...</div>
+
+  <script>
+    // ============ KONFIGURASI ============
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
+    const REFRESH_INTERVAL_MS = 15000;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      startClock();
+      runLivePolling();
+    });
+
+    function startClock() {
+      setInterval(() => {
+        const now = new Date();
+        document.getElementById('tvClock').innerText = now.toLocaleTimeString('id-ID');
+      }, 1000);
+    }
+
+    function runLivePolling() {
+      fetchDashboardData();
+      setInterval(fetchDashboardData, REFRESH_INTERVAL_MS);
+    }
+
+    async function fetchDashboardData() {
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "GET_DASHBOARD_HO" }),
+          headers: { "Content-Type": "text/plain" }
+        });
+        const data = await res.json();
+        document.getElementById('connError').style.display = "none";
+        renderDashboardHO(data);
+      } catch (err) {
+        console.error("Gagal fetch dashboard:", err);
+        document.getElementById('connError').style.display = "block";
+      }
+    }
+
+    function renderDashboardHO(res) {
+      document.getElementById('sumHadir').innerText = res.summary.hadirReguler + " Orang";
+      document.getElementById('sumRunning').innerText = res.summary.otRunning + " Orang";
+      document.getElementById('sumDone').innerText = res.summary.otDone + " Orang";
+
+      const tbodyReg = document.getElementById('tbodyReguler');
+      if (res.dataReguler.length === 0) {
+        tbodyReg.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#666;">Belum ada kehadiran reguler hari ini.</td></tr>';
+      } else {
+        let htmlReg = '';
+        res.dataReguler.forEach(item => {
+          let badgeCls = item.statusReguler === 'OPEN' ? 'badge-open' : 'badge-closed';
+          htmlReg += `
+            <tr>
+              <td style="font-weight:600;">${item.nama}</td>
+              <td><span style="color:#0288d1; font-weight:500;">📍 ${item.lokasi}</span></td>
+              <td><span class="status-badge ${badgeCls}">${item.statusReguler}</span></td>
+            </tr>
+          `;
+        });
+        tbodyReg.innerHTML = htmlReg;
+      }
+
+      const tbodyOt = document.getElementById('tbodyOvertime');
+      if (res.dataOvertime.length === 0) {
+        tbodyOt.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#666;">Tidak ada aktivitas lembur grup hari ini.</td></tr>';
+      } else {
+        let htmlOt = '';
+        res.dataOvertime.forEach(item => {
+          let badgeCls = item.statusOt === 'RUNNING' ? 'badge-running' : 'badge-done';
+          htmlOt += `
+            <tr>
+              <td style="font-weight:600;">${item.nama}</td>
+              <td style="color:#00e676; font-weight:bold;">🕒 ${item.durasi ? item.durasi : '-'}</td>
+              <td><span class="status-badge ${badgeCls}">${item.statusOt}</span></td>
+            </tr>
+          `;
+        });
+        tbodyOt.innerHTML = htmlOt;
+      }
+    }
+  </script>
+</body>
+</html>
