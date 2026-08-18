@@ -11,15 +11,20 @@
       font-family: 'Segoe UI', Roboto, sans-serif;
     }
     .dashboard-wrapper {
-      display: grid; grid-template-rows: 8% 10% 82%;
+      display: grid; grid-template-rows: 9% 9% 82%;
       width: 100vw; height: 100vh; box-sizing: border-box;
+      padding: 12px 16px; /* margin aman dari overscan TV */
     }
     .tv-header {
       background-color: #141414; border-bottom: 2px solid #00e676;
-      display: flex; justify-content: space-between; align-items: center; padding: 0 25px;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 25px; gap: 16px; overflow: hidden;
     }
-    .tv-title { font-size: 1.8rem; font-weight: bold; color: #00e676; letter-spacing: 1px; }
-    .tv-clock { font-size: 1.5rem; font-weight: bold; color: #ffffff; }
+    .tv-title {
+      font-size: clamp(1rem, 2.1vw, 1.5rem); font-weight: bold; color: #00e676; letter-spacing: 0.5px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;
+    }
+    .tv-clock { font-size: 1.3rem; font-weight: bold; color: #ffffff; flex-shrink: 0; }
 
     .summary-bar {
       display: flex; gap: 20px; align-items: center; padding: 10px 25px; background: #111;
@@ -80,7 +85,7 @@
     </div>
 
     <div class="split-workspace">
-      <div class="panel-box panel-left">
+      <div class="panel-box panel-left" id="panelBoxReguler">
         <div class="panel-title title-reguler">📊 ABSENSI SHIFT REGULER</div>
         <table class="tv-table">
           <thead>
@@ -96,7 +101,7 @@
         </table>
       </div>
 
-      <div class="panel-box panel-right">
+      <div class="panel-box panel-right" id="panelBoxOvertime">
         <div class="panel-title title-overtime">⏳ SEBARAN KARYAWAN OVERTIME (SPKL)</div>
         <table class="tv-table">
           <thead>
@@ -124,7 +129,36 @@
     window.addEventListener('DOMContentLoaded', () => {
       startClock();
       runLivePolling();
+      startAutoScroll('panelBoxReguler');
+      startAutoScroll('panelBoxOvertime');
     });
+
+    // ============ AUTO-SCROLL PANEL (kalau data lebih panjang dari layar) ============
+    function startAutoScroll(elementId, speedPxPerFrame = 0.6, pauseAtEndsMs = 2500) {
+      const el = document.getElementById(elementId);
+      let waiting = false;
+
+      function step() {
+        if (!waiting) {
+          const bisaScroll = el.scrollHeight > el.clientHeight + 4;
+          if (bisaScroll) {
+            const sudahDiBawah = (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 2);
+            if (sudahDiBawah) {
+              waiting = true;
+              setTimeout(() => {
+                el.scrollTop = 0;
+                waiting = false;
+                requestAnimationFrame(step);
+              }, pauseAtEndsMs);
+              return;
+            }
+            el.scrollTop += speedPxPerFrame;
+          }
+        }
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
 
     function startClock() {
       setInterval(() => {
