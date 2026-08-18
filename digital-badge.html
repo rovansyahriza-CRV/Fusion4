@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BiMa - Badge Digital</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #F4EFE9; --orange: #E8562C; --orange-dark: #C23F1B;
+    --charcoal: #3D3D3D; --text-muted: #8A8580; --border: #E5DED4;
+    --danger: #C0392B; --danger-bg: #FBEAE7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', 'Segoe UI', sans-serif; background: var(--bg); color: var(--charcoal);
+    margin: 0; padding: 0; min-height: 100vh; -webkit-tap-highlight-color: transparent;
+  }
+  .page { max-width: 420px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+
+  .banner {
+    background: var(--orange); color: #fff; text-align: center;
+    padding: 28px 20px 60px; position: relative;
+  }
+  .banner-title { font-size: 15px; font-weight: 600; opacity: 0.95; }
+
+  .badge-card {
+    background: #fff; border-radius: 20px; margin: -44px 16px 0;
+    padding: 28px 20px 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    text-align: center; position: relative; z-index: 2;
+  }
+  #qrbox { display: flex; justify-content: center; margin: 4px 0 18px; }
+  #qrbox img, #qrbox canvas { border-radius: 10px; }
+  .badge-nama { font-size: 20px; font-weight: 700; color: var(--charcoal); margin-bottom: 2px; }
+  .badge-jabatan { font-size: 14px; color: var(--orange); font-weight: 600; margin-bottom: 10px; }
+  .badge-id { font-size: 12px; color: var(--text-muted); font-family: monospace; }
+
+  .divider { border-top: 1px dashed var(--border); margin: 18px 0; }
+  .footer-copyright {
+    font-size: 11px; color: var(--text-muted); text-align: center; padding: 20px;
+  }
+  .btn-ganti {
+    display: block; margin: 0 16px 16px; padding: 12px; text-align: center;
+    background: #fff; border: 1.5px solid var(--border); border-radius: 12px;
+    color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+
+  #pinOverlay {
+    position: fixed; inset: 0; background: rgba(61,61,61,0.55);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+    padding: 20px;
+  }
+  #pinModal {
+    background: #fff; border-radius: 18px; padding: 28px 24px; width: 100%; max-width: 340px;
+    text-align: center;
+  }
+  #pinModal .pin-icon { font-size: 32px; margin-bottom: 8px; }
+  #pinModal h3 { margin: 0 0 6px; font-size: 18px; color: var(--charcoal); }
+  #pinModal p { margin: 0 0 18px; font-size: 13px; color: var(--text-muted); }
+  input#txtPin {
+    width: 100%; font-size: 24px; padding: 14px; margin-bottom: 12px;
+    border-radius: 12px; border: 1.5px solid var(--border); background: #FAF7F3;
+    text-align: center; letter-spacing: 8px; font-weight: 700;
+  }
+  input:focus { outline: none; border-color: var(--orange); background: #fff; }
+  button#btnSubmitPin {
+    width: 100%; padding: 14px; font-size: 15px; font-weight: 700;
+    border: none; border-radius: 12px; background: var(--orange); color: #fff; cursor: pointer;
+  }
+  button#btnSubmitPin:active { background: var(--orange-dark); }
+  button#btnSubmitPin:disabled { opacity: 0.5; }
+  #pinMsg {
+    margin-top: 12px; font-size: 13px; padding: 10px; border-radius: 8px;
+    background: var(--danger-bg); color: var(--danger); display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="page" id="pageContent" style="display:none;">
+  <div class="banner">
+    <div class="banner-title">Tunjukkan layar ini untuk absen</div>
+  </div>
+
+  <div class="badge-card">
+    <div id="qrbox"></div>
+    <div class="badge-nama" id="badgeNama">-</div>
+    <div class="badge-jabatan" id="badgeJabatan">-</div>
+    <div class="divider"></div>
+    <div class="badge-id" id="badgeId">-</div>
+  </div>
+
+  <div class="btn-ganti" id="btnGantiPin">🔁 Ganti PIN / Bukan Anda?</div>
+  <div class="footer-copyright">© PT. Bilal Mitra Aryatama</div>
+</div>
+
+<div id="pinOverlay">
+  <div id="pinModal">
+    <div class="pin-icon">🔒</div>
+    <h3>Verifikasi PIN</h3>
+    <p>Masukkan PIN Anda untuk menampilkan badge.</p>
+    <input type="password" id="txtPin" placeholder="••••" inputmode="numeric" maxlength="6">
+    <button id="btnSubmitPin">Tampilkan Badge</button>
+    <div id="pinMsg"></div>
+  </div>
+</div>
+
+<script>
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
+
+const txtPin = document.getElementById('txtPin');
+const pinMsg = document.getElementById('pinMsg');
+const btnSubmitPin = document.getElementById('btnSubmitPin');
+const pinOverlay = document.getElementById('pinOverlay');
+const pageContent = document.getElementById('pageContent');
+
+txtPin.focus();
+
+async function submitPin() {
+  const pin = txtPin.value.trim();
+
+  pinMsg.style.display = "none";
+
+  if (!pin) {
+    pinMsg.innerText = "❌ PIN wajib diisi.";
+    pinMsg.style.display = "block";
+    return;
+  }
+
+  btnSubmitPin.disabled = true;
+  btnSubmitPin.innerText = "Memeriksa...";
+
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "GET_DIGITAL_BADGE", pin: pin }),
+      headers: { "Content-Type": "text/plain" }
+    });
+    const hasil = await res.json();
+
+    if (!hasil.valid) {
+      pinMsg.innerText = "❌ " + (hasil.message || "PIN tidak ditemukan.");
+      pinMsg.style.display = "block";
+      btnSubmitPin.disabled = false;
+      btnSubmitPin.innerText = "Tampilkan Badge";
+      txtPin.value = "";
+      txtPin.focus();
+      return;
+    }
+
+    document.getElementById('badgeNama').innerText = hasil.nama || "-";
+    document.getElementById('badgeJabatan').innerText = hasil.kualifikasi || "-";
+    document.getElementById('badgeId').innerText = hasil.qrCodeId;
+    document.getElementById('qrbox').innerHTML = "";
+    new QRCode(document.getElementById('qrbox'), {
+      text: hasil.qrCodeId,
+      width: 200,
+      height: 200,
+      colorDark: "#3D3D3D",
+      colorLight: "#ffffff"
+    });
+
+    pinOverlay.style.display = "none";
+    pageContent.style.display = "flex";
+  } catch (e) {
+    pinMsg.innerText = "❌ Gagal terhubung ke server: " + e.message;
+    pinMsg.style.display = "block";
+    btnSubmitPin.disabled = false;
+    btnSubmitPin.innerText = "Tampilkan Badge";
+  }
+}
+
+btnSubmitPin.onclick = submitPin;
+txtPin.addEventListener('keydown', (e) => {
+  if (e.key === "Enter") submitPin();
+});
+
+document.getElementById('btnGantiPin').onclick = () => {
+  pageContent.style.display = "none";
+  pinOverlay.style.display = "flex";
+  txtPin.value = "";
+  txtPin.focus();
+};
+</script>
+</body>
+</html>
