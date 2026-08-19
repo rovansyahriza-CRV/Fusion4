@@ -1,0 +1,12 @@
+{
+  "name": "BiMa - Badge Digital",
+  "short_name": "BiMa Badge",
+  "start_url": "./digital-badge.html",
+  "display": "standalone",
+  "background_color": "#F4EFE9",
+  "theme_color": "#E8562C",
+  "icons": [
+    { "src": "badge-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "badge-icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
