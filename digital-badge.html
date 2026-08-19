@@ -29,6 +29,17 @@
     padding: 28px 20px 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
     text-align: center; position: relative; z-index: 2;
   }
+  .badge-foto {
+    width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
+    border: 3px solid var(--orange); margin: 0 auto 14px; display: block;
+    background: var(--bg);
+  }
+  .badge-foto-fallback {
+    width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 14px;
+    background: var(--charcoal); color: #fff; font-size: 32px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    border: 3px solid var(--orange);
+  }
   #qrbox { display: flex; justify-content: center; margin: 4px 0 18px; }
   #qrbox img, #qrbox canvas { border-radius: 10px; }
   .badge-nama { font-size: 20px; font-weight: 700; color: var(--charcoal); margin-bottom: 2px; }
@@ -85,6 +96,8 @@
   </div>
 
   <div class="badge-card">
+    <img id="badgeFoto" class="badge-foto" style="display:none;" alt="Foto">
+    <div id="badgeFotoFallback" class="badge-foto-fallback" style="display:none;"></div>
     <div id="qrbox"></div>
     <div class="badge-nama" id="badgeNama">-</div>
     <div class="badge-jabatan" id="badgeJabatan">-</div>
@@ -93,6 +106,7 @@
   </div>
 
   <div class="btn-ganti" id="btnGantiPin">🔁 Ganti PIN / Bukan Anda?</div>
+  <a href="change-password.html" target="_blank" style="display:block; text-align:center; margin:0 16px 16px; font-size:13px; color:var(--text-muted); text-decoration:none;">🔑 Ganti Password Absen</a>
   <div class="footer-copyright">© PT. Bilal Mitra Aryatama</div>
 </div>
 
@@ -201,6 +215,24 @@ async function submitPin() {
     document.getElementById('badgeNama').innerText = hasil.nama || "-";
     document.getElementById('badgeJabatan').innerText = hasil.kualifikasi || "-";
     document.getElementById('badgeId').innerText = hasil.qrCodeId;
+
+    const fotoEl = document.getElementById('badgeFoto');
+    const fallbackEl = document.getElementById('badgeFotoFallback');
+    if (hasil.fotoUrl) {
+      fotoEl.src = hasil.fotoUrl;
+      fotoEl.style.display = "block";
+      fallbackEl.style.display = "none";
+      fotoEl.onerror = () => {
+        fotoEl.style.display = "none";
+        fallbackEl.style.display = "flex";
+        fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
+      };
+    } else {
+      fotoEl.style.display = "none";
+      fallbackEl.style.display = "flex";
+      fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
+    }
+
     document.getElementById('qrbox').innerHTML = "";
     new QRCode(document.getElementById('qrbox'), {
       text: hasil.qrCodeId,
