@@ -30,15 +30,15 @@
     text-align: center; position: relative; z-index: 2;
   }
   .badge-foto {
-    width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
-    border: 3px solid var(--orange); margin: 0 auto 14px; display: block;
+    width: 140px; height: 140px; border-radius: 50%; object-fit: cover;
+    border: 4px solid var(--orange); margin: 0 auto 16px; display: block;
     background: var(--bg);
   }
   .badge-foto-fallback {
-    width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 14px;
-    background: var(--charcoal); color: #fff; font-size: 32px; font-weight: 700;
+    width: 140px; height: 140px; border-radius: 50%; margin: 0 auto 16px;
+    background: var(--charcoal); color: #fff; font-size: 48px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
-    border: 3px solid var(--orange);
+    border: 4px solid var(--orange);
   }
   #qrbox { display: flex; justify-content: center; margin: 4px 0 18px; }
   #qrbox img, #qrbox canvas { border-radius: 10px; }
@@ -106,7 +106,7 @@
   </div>
 
   <div class="btn-ganti" id="btnGantiPin">🔁 Ganti PIN / Bukan Anda?</div>
-  <a href="change-password.html" target="_blank" style="display:block; text-align:center; margin:0 16px 16px; font-size:13px; color:var(--text-muted); text-decoration:none;">🔑 Ganti Password Absen</a>
+  <a href="change-password.html" id="linkGantiPassword" target="_blank" style="display:block; text-align:center; margin:0 16px 16px; font-size:13px; color:var(--text-muted); text-decoration:none;">🔑 Ganti Password Absen</a>
   <div class="footer-copyright">© PT. Bilal Mitra Aryatama</div>
 </div>
 
@@ -215,6 +215,7 @@ async function submitPin() {
     document.getElementById('badgeNama').innerText = hasil.nama || "-";
     document.getElementById('badgeJabatan').innerText = hasil.kualifikasi || "-";
     document.getElementById('badgeId').innerText = hasil.qrCodeId;
+    document.getElementById('linkGantiPassword').href = "change-password.html?QrCodeId=" + encodeURIComponent(hasil.qrCodeId);
 
     const fotoEl = document.getElementById('badgeFoto');
     const fallbackEl = document.getElementById('badgeFotoFallback');
