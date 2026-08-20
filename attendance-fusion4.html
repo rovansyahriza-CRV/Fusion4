@@ -456,7 +456,7 @@ async function loadFaceModelsWithBackendFix() {
   await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
   await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
   faceModelsAlreadyLoaded = true;
-  console.log('TF.js backend aktif:', faceapi.tf.getBackend());
+  /*console.log('TF.js backend aktif:', faceapi.tf.getBackend());*/
 }
 
 // Bungkus promise dengan batas waktu -- kalau lebih dari `ms` belum selesai,
