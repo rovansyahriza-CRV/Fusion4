@@ -575,6 +575,32 @@ btnScanFace.onclick = async () => {
     return;
   }
 
+  // ===== DEBUG SNAPSHOT (sementara, buat cek kenapa A55/A56 stuck) =====
+  try {
+    const dbgCtx = canvas.getContext('2d');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    dbgCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+
+    let dbgBox = document.getElementById('debugFrameBox');
+    if (!dbgBox) {
+      dbgBox = document.createElement('div');
+      dbgBox.id = 'debugFrameBox';
+      dbgBox.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;border:2px solid red;background:#000;';
+      dbgBox.innerHTML = '<img id="debugFrameImg" style="width:120px;display:block;"><div id="debugFrameInfo" style="color:#0f0;font-size:10px;padding:2px;font-family:monospace;"></div>';
+      document.body.appendChild(dbgBox);
+    }
+    document.getElementById('debugFrameImg').src = dataUrl;
+    document.getElementById('debugFrameInfo').textContent =
+      `video:${video.videoWidth}x${video.videoHeight} readyState:${video.readyState}`;
+  } catch (dbgErr) {
+    console.error('debug snapshot error:', dbgErr);
+  }
+  // ===== END DEBUG SNAPSHOT =====
+
+  setStatus("Mendeteksi wajah...", "info");
+
   setStatus("Mendeteksi wajah...", "info");
 
   let detection;
