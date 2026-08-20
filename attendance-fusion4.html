@@ -577,7 +577,7 @@ btnScanFace.onclick = async () => {
   }
 
   // ===== DEBUG SNAPSHOT (sementara, buat cek kenapa A55/A56 stuck) =====
-  /*try {
+  try {
     const dbgCtx = canvas.getContext('2d');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -597,7 +597,7 @@ btnScanFace.onclick = async () => {
       `video:${video.videoWidth}x${video.videoHeight} readyState:${video.readyState}`;
   } catch (dbgErr) {
     console.error('debug snapshot error:', dbgErr);
-  } */
+  } 
   // ===== END DEBUG SNAPSHOT =====
 
   setStatus("Mendeteksi wajah...", "info");
