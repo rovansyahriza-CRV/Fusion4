@@ -26,14 +26,16 @@
   }
   .page { max-width: 420px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
 
-  .banner {
-    background: var(--orange); color: #fff; text-align: center;
-    padding: 28px 20px 60px; position: relative;
-  }
-  .banner-title { font-size: 15px; font-weight: 600; opacity: 0.95; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:20px 20px 4px; }
+  .topbar-brand { display:flex; align-items:center; gap:8px; }
+  .topbar-logo { width:40px; height:40px; object-fit:contain; }
+  .topbar-bima { font-size:15px; font-weight:800; color:var(--charcoal); line-height:1.1; }
+  .topbar-sub { font-size:9px; color:var(--text-muted); }
+  .topbar-title { font-size:19px; font-weight:400; color:var(--charcoal); }
+  .topbar-title b { font-weight:800; border-bottom:2px solid var(--orange); }
 
   .badge-card {
-    background: #fff; border-radius: 20px; margin: -44px 16px 0;
+    background: #fff; border-radius: 20px; margin: 0 16px 16px;
     padding: 28px 20px 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
     text-align: center; position: relative; z-index: 2;
   }
@@ -99,15 +101,15 @@
 <body>
 
 <div class="page" id="pageContent" style="display:none;">
-  <div class="banner">
-    <div class="banner-brand">
-      <img src="logo.png" alt="BiMa" class="banner-logo" onerror="this.style.display='none';">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <img src="logo-bima.png" alt="BiMa" class="topbar-logo">
       <div>
-        <div class="banner-bima">BiMa</div>
-        <div class="banner-sub">Bilal Mitra Aryatama</div>
+        <div class="topbar-bima">BiMa</div>
+        <div class="topbar-sub">Bilal Mitra Aryatama</div>
       </div>
     </div>
-    <div class="banner-title">Virtual <b>WALLET</b></div>
+    <div class="topbar-title">Virtual <b>WALLET</b></div>
   </div>
 
   <div class="badge-card">
