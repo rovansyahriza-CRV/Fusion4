@@ -37,18 +37,18 @@
     padding: 28px 20px 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
     text-align: center; position: relative; z-index: 2;
   }
+  .badge-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
   .badge-foto {
-    width: 140px; height: 140px; border-radius: 50%; object-fit: cover;
-    border: 4px solid var(--orange); margin: 0 auto 16px; display: block;
-    background: var(--bg);
+    width: 90px; height: 90px; border-radius: 50%; object-fit: cover;
+    border: 3px solid var(--orange); flex-shrink: 0; background: var(--bg);
   }
   .badge-foto-fallback {
-    width: 140px; height: 140px; border-radius: 50%; margin: 0 auto 16px;
-    background: var(--charcoal); color: #fff; font-size: 48px; font-weight: 700;
+    width: 90px; height: 90px; border-radius: 50%; flex-shrink: 0;
+    background: var(--charcoal); color: #fff; font-size: 32px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
-    border: 4px solid var(--orange);
+    border: 3px solid var(--orange);
   }
-  #qrbox { display: flex; justify-content: center; margin: 4px 0 18px; }
+  #qrbox { margin: 0; }
   #qrbox img, #qrbox canvas { border-radius: 10px; }
   .badge-nama { font-size: 20px; font-weight: 700; color: var(--charcoal); margin-bottom: 2px; }
   .badge-jabatan { font-size: 14px; color: var(--orange); font-weight: 600; margin-bottom: 10px; }
@@ -100,13 +100,22 @@
 
 <div class="page" id="pageContent" style="display:none;">
   <div class="banner">
-    <div class="banner-title">Tunjukkan layar ini untuk absen</div>
+    <div class="banner-brand">
+      <img src="logo.png" alt="BiMa" class="banner-logo" onerror="this.style.display='none';">
+      <div>
+        <div class="banner-bima">BiMa</div>
+        <div class="banner-sub">Bilal Mitra Aryatama</div>
+      </div>
+    </div>
+    <div class="banner-title">Virtual <b>WALLET</b></div>
   </div>
 
   <div class="badge-card">
-    <img id="badgeFoto" class="badge-foto" style="display:none;" alt="Foto">
-    <div id="badgeFotoFallback" class="badge-foto-fallback" style="display:none;"></div>
-    <div id="qrbox"></div>
+    <div class="badge-row">
+      <div id="qrbox"></div>
+      <img id="badgeFoto" class="badge-foto" style="display:none;" alt="Foto">
+      <div id="badgeFotoFallback" class="badge-foto-fallback" style="display:none;"></div>
+    </div>
     <div class="badge-nama" id="badgeNama">-</div>
     <div class="badge-jabatan" id="badgeJabatan">-</div>
     <div class="divider"></div>
@@ -247,8 +256,8 @@ async function submitPin() {
     document.getElementById('qrbox').innerHTML = "";
     new QRCode(document.getElementById('qrbox'), {
       text: hasil.qrCodeId,
-      width: 200,
-      height: 200,
+      width: 120,
+      height: 120,
       colorDark: "#3D3D3D",
       colorLight: "#ffffff"
     });
