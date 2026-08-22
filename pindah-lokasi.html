@@ -136,6 +136,7 @@ let qrScanning = false;
 let faceModelsLoaded = false;
 let allFaceData = null;
 let identifiedViaFace = false;
+let isIndependen = false;
 let currentFacingModeQR = "environment";
 let currentFacingModeFace = "user";
 
@@ -402,28 +403,44 @@ async function scanQRLoop() {
 async function afterIdentified() {
   setStatus("Mengecek status pindah lokasi...", "info");
   try {
+    // Cek dulu apakah orang ini independen (AuthorizedBy kosong) --
+    // menentukan apakah dia perlu pilih Leader baru pas Checkin nanti.
+    const personData = await callApi("GET_PERSON_DATA", { qrCodeId: qrCodeId });
+    isIndependen = !(personData && personData.person && String(personData.person.AuthorizedBy || "").trim() !== "");
+
     const pindahStatus = await callApi("GET_PINDAH_STATUS", { qrCodeId: qrCodeId });
     if (pindahStatus.hasOpenTransfer) {
       currentTahap = "CHECKIN";
       stageBadge.className = "stage-badge stage-checkin";
       stageBadge.innerText = "✅ CHECKIN di " + currentLokasi;
       showBanner("Anda checkout dari " + pindahStatus.lokasiAsal + " jam " + pindahStatus.jamCheckout + ". Sekarang checkin di lokasi baru.", "info");
-      document.getElementById('passwordLabel').innerText = "Password Leader yang Dipilih";
 
-      // Isi dropdown pilihan leader baru
-      document.getElementById('leaderSelectWrap').style.display = "block";
-      const selectEl = document.getElementById('selectNewLeader');
-      selectEl.innerHTML = '<option value="">-- Pilih Leader --</option>';
-      try {
-        const leaderList = await callApi("GET_LEADER_LIST", {});
-        (leaderList || []).forEach(l => {
-          const opt = document.createElement('option');
-          opt.value = l.author;
-          opt.innerText = l.nama + " (" + l.author + ")";
-          selectEl.appendChild(opt);
-        });
-      } catch (e) {
-        console.warn("Gagal ambil daftar leader:", e.message);
+      if (isIndependen) {
+        // Independen (HO/Supervisor, AuthorizedBy kosong) -- tidak perlu
+        // pilih Leader maupun isi password, langsung lanjut ke konfirmasi.
+        document.getElementById('leaderSelectWrap').style.display = "none";
+        document.getElementById('passwordLabel').style.display = "none";
+        document.getElementById('txtLeaderPassword').style.display = "none";
+      } else {
+        document.getElementById('passwordLabel').style.display = "block";
+        document.getElementById('txtLeaderPassword').style.display = "block";
+        document.getElementById('passwordLabel').innerText = "Password Leader yang Dipilih";
+
+        // Isi dropdown pilihan leader baru
+        document.getElementById('leaderSelectWrap').style.display = "block";
+        const selectEl = document.getElementById('selectNewLeader');
+        selectEl.innerHTML = '<option value="">-- Pilih Leader --</option>';
+        try {
+          const leaderList = await callApi("GET_LEADER_LIST", {});
+          (leaderList || []).forEach(l => {
+            const opt = document.createElement('option');
+            opt.value = l.author;
+            opt.innerText = l.nama + " (" + l.author + ")";
+            selectEl.appendChild(opt);
+          });
+        } catch (e) {
+          console.warn("Gagal ambil daftar leader:", e.message);
+        }
       }
     } else {
       currentTahap = "CHECKOUT";
@@ -515,21 +532,25 @@ function showConfirmStep() {
   setStatus("Isi password, lalu tekan tombol di bawah.", "ok");
 
   btnConfirm.onclick = async () => {
-    const leaderPassword = document.getElementById('txtLeaderPassword').value.trim();
-    if (!leaderPassword) {
-      alert("Password Leader tidak boleh kosong!");
-      return;
-    }
-
+    let leaderPassword = "";
     let selectedLeaderAuthor = "";
-    if (currentTahap === "CHECKIN") {
-      selectedLeaderAuthor = document.getElementById('selectNewLeader').value;
-      if (!selectedLeaderAuthor) {
-        alert("Pilih Leader baru dulu!");
+
+    if (currentTahap === "CHECKIN" && isIndependen) {
+      // Independen -- skip total, tidak perlu password maupun pilih Leader
+    } else {
+      leaderPassword = document.getElementById('txtLeaderPassword').value.trim();
+      if (!leaderPassword) {
+        alert("Password Leader tidak boleh kosong!");
         return;
       }
+      if (currentTahap === "CHECKIN") {
+        selectedLeaderAuthor = document.getElementById('selectNewLeader').value;
+        if (!selectedLeaderAuthor) {
+          alert("Pilih Leader baru dulu!");
+          return;
+        }
+      }
     }
-
     btnConfirm.disabled = true;
     setStatus("Menyimpan...", "info");
     try {
