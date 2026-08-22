@@ -827,8 +827,12 @@ async function proceedAfterFaceVerified() {
   if (currentPerson.AuthorizedBy && currentPerson.AuthorizedBy !== "") {
     // anggota kelompok -> langsung submit, tanpa password
     doSubmitAbsensi("");
+  } else if (fromBadge && (!currentPerson.AuthorizedBy || currentPerson.AuthorizedBy === "")) {
+    // Independen, datang dari Virtual Wallet -- sudah lolos verifikasi PIN,
+    // skip password otorisasi.
+    doSubmitAbsensi("");
   } else if (currentPerson._needAuth) {
-    // Supervisor / independen -> perlu password dulu
+    // Supervisor / independen (bukan dari badge) -> perlu password dulu
     setStatus("Verifikasi wajah selesai. Masukkan password otorisasi.", "ok");
     passwordCard.style.display = "block";
   } else {
