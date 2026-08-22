@@ -213,6 +213,7 @@ const FACE_MATCH_THRESHOLD = 0.45; // diperketat dari 0.55 -- kurangi resiko sal
 
 const params = new URLSearchParams(window.location.search);
 let qrCodeId = (params.get('QrCodeId') || params.get('qrCodeId') || params.get('qrcodeid') || "").trim().toUpperCase();
+let fromBadge = (params.get('fromBadge') === '1');
 
 let activeLocation = "";
 let currentPerson = null;
