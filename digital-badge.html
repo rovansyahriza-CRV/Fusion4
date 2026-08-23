@@ -485,6 +485,7 @@ async function loadApprovalIssues(qrId) {
       });
     }
   } catch (e) {
+    console.error("DEBUG loadApprovalIssues error:", e);
     box.style.display = "flex";
     box.innerHTML = "Gagal memuat data approval.";
   }
