@@ -402,6 +402,7 @@ document.getElementById('btnSubmitRequest').onclick = async () => {
       msgEl.style.background = "var(--success-bg, #E5F6EC)";
       msgEl.style.color = "var(--charcoal)";
       msgEl.innerText = "✅ " + hasil.message;
+      loadMyVouchers(qrId);
       setTimeout(() => { document.getElementById('requestOverlay').style.display = "none"; }, 1800);
     } else {
       msgEl.style.background = "var(--danger-bg)";
