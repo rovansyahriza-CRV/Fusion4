@@ -499,6 +499,29 @@ async function loadMyVouchers(qrId) {
     const hasil = await res.json();
     document.getElementById('voucherIjinId').innerText = hasil.ijinVoucher || "-";
     document.getElementById('voucherLemburId').innerText = hasil.lemburVoucher || "-";
+
+    const btnIjin = document.getElementById('btnAjukanIjin');
+    const btnLembur = document.getElementById('btnAjukanLembur');
+
+    if (hasil.ijinLocked) {
+      btnIjin.disabled = true;
+      btnIjin.style.opacity = "0.4";
+      btnIjin.style.cursor = "not-allowed";
+    } else {
+      btnIjin.disabled = false;
+      btnIjin.style.opacity = "1";
+      btnIjin.style.cursor = "pointer";
+    }
+
+    if (hasil.lemburLocked) {
+      btnLembur.disabled = true;
+      btnLembur.style.opacity = "0.4";
+      btnLembur.style.cursor = "not-allowed";
+    } else {
+      btnLembur.disabled = false;
+      btnLembur.style.opacity = "1";
+      btnLembur.style.cursor = "pointer";
+    }
   } catch (e) {
     console.warn("Gagal ambil voucher:", e.message);
   }
