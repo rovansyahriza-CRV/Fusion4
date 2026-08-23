@@ -124,7 +124,12 @@
     <div class="badge-id" id="badgeId">-</div>
     <button id="btnAbsenSekarang" class="btn-block" style="display:block; width:100%; padding:14px; margin-top:16px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">ABSEN</button>
   </div>
-
+  
+  <div style="display:flex; gap:10px; margin-top:10px;">
+    <button id="btnAjukanIjin" style="flex:1; padding:12px; font-size:14px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">IJIN</button>
+    <button id="btnAjukanLembur" style="flex:1; padding:12px; font-size:14px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">LEMBUR</button>
+  </div>
+  
   <div class="btn-ganti" id="btnGantiPin">🔁 Ganti PIN / Bukan Anda?</div>
   <a href="change-password.html" id="linkGantiPassword" target="_blank" style="display:block; text-align:center; margin:0 16px 16px; font-size:13px; color:var(--text-muted); text-decoration:none;">🔑 Ganti Password Absen</a>
   <div class="footer-copyright">© PT. Bilal Mitra Aryatama</div>
@@ -145,6 +150,16 @@
     </div>
     <button id="btnSubmitPin">Tampilkan Badge</button>
     <div id="pinMsg"></div>
+  </div>
+</div>
+
+<div id="requestOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px;">
+    <h3 id="requestTitle" style="margin:0 0 12px; font-size:17px; color:var(--charcoal);"></h3>
+    <textarea id="requestAlasan" rows="4" placeholder="Tulis alasan..." style="width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box;"></textarea>
+    <button id="btnSubmitRequest" style="width:100%; margin-top:14px; padding:13px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">Kirim Pengajuan</button>
+    <button id="btnCancelRequest" style="width:100%; margin-top:8px; padding:12px; font-size:14px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
+    <div id="requestMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
   </div>
 </div>
 
@@ -290,6 +305,72 @@ document.getElementById('btnGantiPin').onclick = () => {
   pinOverlay.style.display = "flex";
   clearPinBoxes();
 };
+
+let currentRequestType = "";
+
+function openRequestForm(type) {
+  currentRequestType = type;
+  document.getElementById('requestTitle').innerText = type === "IJIN" ? "Ajukan Ijin Keluar" : "Ajukan Lembur";
+  document.getElementById('requestAlasan').value = "";
+  document.getElementById('requestMsg').style.display = "none";
+  document.getElementById('requestOverlay').style.display = "flex";
+}
+
+document.getElementById('btnAjukanIjin').onclick = () => openRequestForm("IJIN");
+document.getElementById('btnAjukanLembur').onclick = () => openRequestForm("LEMBUR");
+
+document.getElementById('btnCancelRequest').onclick = () => {
+  document.getElementById('requestOverlay').style.display = "none";
+};
+
+document.getElementById('btnSubmitRequest').onclick = async () => {
+  const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+  const alasan = document.getElementById('requestAlasan').value.trim();
+  const msgEl = document.getElementById('requestMsg');
+
+  if (!alasan) {
+    msgEl.style.display = "block";
+    msgEl.style.background = "var(--danger-bg)";
+    msgEl.style.color = "var(--danger)";
+    msgEl.innerText = "❌ Alasan tidak boleh kosong.";
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitRequest');
+  btn.disabled = true;
+  btn.innerText = "Mengirim...";
+
+  try {
+    const action = currentRequestType === "IJIN" ? "SUBMIT_IJIN_REQUEST" : "SUBMIT_LEMBUR_REQUEST";
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: action, qrCodeId: qrId, alasan: alasan }),
+      headers: { "Content-Type": "text/plain" }
+    });
+    const hasil = await res.json();
+
+    msgEl.style.display = "block";
+    if (hasil.status === "SUCCESS") {
+      msgEl.style.background = "var(--success-bg, #E5F6EC)";
+      msgEl.style.color = "var(--charcoal)";
+      msgEl.innerText = "✅ " + hasil.message;
+      setTimeout(() => { document.getElementById('requestOverlay').style.display = "none"; }, 1800);
+    } else {
+      msgEl.style.background = "var(--danger-bg)";
+      msgEl.style.color = "var(--danger)";
+      msgEl.innerText = "❌ " + (hasil.message || "Gagal mengirim pengajuan.");
+    }
+  } catch (e) {
+    msgEl.style.display = "block";
+    msgEl.style.background = "var(--danger-bg)";
+    msgEl.style.color = "var(--danger)";
+    msgEl.innerText = "❌ Gagal terhubung ke server: " + e.message;
+  }
+
+  btn.disabled = false;
+  btn.innerText = "Kirim Pengajuan";
+};
+  
 </script>
 </body>
 </html>
