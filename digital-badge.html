@@ -251,6 +251,7 @@ async function submitPin() {
     const hasil = await res.json();
     window.currentBadgeData = hasil;
     loadApprovalIssues(hasil.qrCodeId);
+    loadMyVouchers(hasil.qrCodeId);
     
     if (!hasil.valid) {
       pinMsg.innerText = "❌ " + (hasil.message || "PIN tidak ditemukan.");
@@ -463,6 +464,21 @@ document.getElementById('btnSubmitRequest').onclick = async () => {
   }
 }
 
+async function loadMyVouchers(qrId) {
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "GET_MY_VOUCHERS", qrCodeId: qrId }),
+      headers: { "Content-Type": "text/plain" }
+    });
+    const hasil = await res.json();
+    document.getElementById('voucherIjinId').innerText = hasil.ijinVoucher || "-";
+    document.getElementById('voucherLemburId').innerText = hasil.lemburVoucher || "-";
+  } catch (e) {
+    console.warn("Gagal ambil voucher:", e.message);
+  }
+}
+  
 async function handleApprovalDecision(type, requestId, decision, approverQrId) {
   try {
     const res = await fetch(APPS_SCRIPT_URL, {
