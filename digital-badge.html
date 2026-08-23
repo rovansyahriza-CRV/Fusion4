@@ -165,6 +165,9 @@
 <div id="requestOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
   <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px;">
     <h3 id="requestTitle" style="margin:0 0 12px; font-size:17px; color:var(--charcoal);"></h3>
+    <select id="requestArea" style="width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box; margin-bottom:10px;">
+      <option value="">-- Pilih Area --</option>
+    </select>
     <textarea id="requestAlasan" rows="4" placeholder="Tulis alasan..." style="width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box;"></textarea>
     <button id="btnSubmitRequest" style="width:100%; margin-top:14px; padding:13px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">Kirim Pengajuan</button>
     <button id="btnCancelRequest" style="width:100%; margin-top:8px; padding:12px; font-size:14px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
@@ -317,12 +320,35 @@ document.getElementById('btnGantiPin').onclick = () => {
 
 let currentRequestType = "";
 
-function openRequestForm(type) {
+async function openRequestForm(type) {
   currentRequestType = type;
   document.getElementById('requestTitle').innerText = type === "IJIN" ? "Ajukan Ijin Keluar" : "Ajukan Lembur";
+  document.getElementById('requestArea').style.display = type === "LEMBUR" ? "block" : "none";
   document.getElementById('requestAlasan').value = "";
   document.getElementById('requestMsg').style.display = "none";
   document.getElementById('requestOverlay').style.display = "flex";
+
+  if (type === "LEMBUR") {
+    const selectEl = document.getElementById('requestArea');
+    selectEl.innerHTML = '<option value="">Memuat area...</option>';
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "GET_LOKASI_LIST" }),
+        headers: { "Content-Type": "text/plain" }
+      });
+      const lokasiList = await res.json();
+      selectEl.innerHTML = '<option value="">-- Pilih Area --</option>';
+      (lokasiList || []).forEach(nama => {
+        const opt = document.createElement('option');
+        opt.value = nama;
+        opt.innerText = nama;
+        selectEl.appendChild(opt);
+      });
+    } catch (e) {
+      selectEl.innerHTML = '<option value="">Gagal memuat area</option>';
+    }
+  }
 }
 
 document.getElementById('btnAjukanIjin').onclick = () => openRequestForm("IJIN");
@@ -334,9 +360,17 @@ document.getElementById('btnCancelRequest').onclick = () => {
 
 document.getElementById('btnSubmitRequest').onclick = async () => {
   const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+  const area = document.getElementById('requestArea').value.trim();
   const alasan = document.getElementById('requestAlasan').value.trim();
   const msgEl = document.getElementById('requestMsg');
 
+  if (currentRequestType === "LEMBUR" && !area) {
+    msgEl.style.display = "block";
+    msgEl.style.background = "var(--danger-bg)";
+    msgEl.style.color = "var(--danger)";
+    msgEl.innerText = "❌ Area tidak boleh kosong.";
+    return;
+  }
   if (!alasan) {
     msgEl.style.display = "block";
     msgEl.style.background = "var(--danger-bg)";
@@ -351,9 +385,12 @@ document.getElementById('btnSubmitRequest').onclick = async () => {
 
   try {
     const action = currentRequestType === "IJIN" ? "SUBMIT_IJIN_REQUEST" : "SUBMIT_LEMBUR_REQUEST";
+    const bodyPayload = { action: action, qrCodeId: qrId, alasan: alasan };
+    if (currentRequestType === "LEMBUR") bodyPayload.area = area;
+
     const res = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
-      body: JSON.stringify({ action: action, qrCodeId: qrId, alasan: alasan }),
+      body: JSON.stringify(bodyPayload),
       headers: { "Content-Type": "text/plain" }
     });
     const hasil = await res.json();
