@@ -249,8 +249,9 @@ async function submitPin() {
       headers: { "Content-Type": "text/plain" }
     });
     const hasil = await res.json();
-    window.currentBadgeData = hasil;  // <-- tambahan ini, biar bisa diakses tombol Absen
-
+    window.currentBadgeData = hasil;
+    loadApprovalIssues(hasil.qrCodeId);
+    
     if (!hasil.valid) {
       pinMsg.innerText = "❌ " + (hasil.message || "PIN tidak ditemukan.");
       pinMsg.style.display = "block";
@@ -416,6 +417,66 @@ document.getElementById('btnSubmitRequest').onclick = async () => {
   btn.disabled = false;
   btn.innerText = "Kirim Pengajuan";
 };
+
+  async function loadApprovalIssues(qrId) {
+  const box = document.getElementById('approvalIssuesBox');
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "GET_APPROVAL_LIST", qrCodeId: qrId }),
+      headers: { "Content-Type": "text/plain" }
+    });
+    const hasil = await res.json();
+
+    if (!hasil.role || !hasil.items || hasil.items.length === 0) {
+      box.style.display = "flex";
+      box.style.flexDirection = "row";
+      box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
+      return;
+    }
+
+    box.style.display = "block";
+    box.innerHTML = "";
+    hasil.items.forEach(item => {
+      const row = document.createElement('div');
+      row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
+      row.innerHTML = `
+        <div style="font-size:13px; font-weight:700; color:var(--charcoal);">${item.type} - ${item.nama}</div>
+        <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.alasan}</div>
+        <div style="display:flex; gap:8px;">
+          <button class="btnApprove" data-type="${item.type}" data-id="${item.requestId}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+          <button class="btnReject" data-type="${item.type}" data-id="${item.requestId}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
+        </div>
+      `;
+      box.appendChild(row);
+    });
+
+    document.querySelectorAll('.btnApprove').forEach(btn => {
+      btn.onclick = () => handleApprovalDecision(btn.dataset.type, btn.dataset.id, "APPROVE", qrId);
+    });
+    document.querySelectorAll('.btnReject').forEach(btn => {
+      btn.onclick = () => handleApprovalDecision(btn.dataset.type, btn.dataset.id, "REJECT", qrId);
+    });
+  } catch (e) {
+    box.style.display = "flex";
+    box.innerHTML = "Gagal memuat data approval.";
+  }
+}
+
+async function handleApprovalDecision(type, requestId, decision, approverQrId) {
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "PROCESS_APPROVAL", type: type, requestId: requestId, qrCodeId: approverQrId, decision: decision }),
+      headers: { "Content-Type": "text/plain" }
+    });
+    const hasil = await res.json();
+    alert(hasil.message || "Diproses.");
+    loadApprovalIssues(approverQrId);
+  } catch (e) {
+    alert("Gagal memproses: " + e.message);
+  }
+}
   
 </script>
 </body>
