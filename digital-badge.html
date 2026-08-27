@@ -478,6 +478,10 @@ async function loadApprovalIssues(qrId) {
         row.innerHTML = `
           <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Material Request - ${item.refno}</div>
           <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">Proyek ${item.projectid || '-'} · ${item.purpose || '-'} · Level: ${item.currentlevel}</div>
+          
+          <div class="detailToggleReq" data-refno="${item.refno}" style="font-size:11px; color:var(--orange); font-weight:700; cursor:pointer; margin-bottom:8px;">▸ Lihat Detail Item</div>
+          <div class="detailContainerReq" data-refno="${item.refno}" style="display:none; margin-bottom:8px;"></div>
+          
           <div style="display:flex; gap:8px;">
             <button class="btnApproveReq" data-refno="${item.refno}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
             <button class="btnRejectReq" data-refno="${item.refno}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
@@ -491,6 +495,9 @@ async function loadApprovalIssues(qrId) {
       });
       document.querySelectorAll('.btnRejectReq').forEach(btn => {
         btn.onclick = () => handleRequestApprovalDecision(btn.dataset.refno, "Reject", qrId);
+      });
+      document.querySelectorAll('.detailToggleReq').forEach(el => {
+        el.onclick = () => toggleWalletRequestDetail(el.dataset.refno, el);
       });
     }
 
@@ -597,6 +604,44 @@ async function handleApprovalDecision(type, requestId, decision, approverQrId) {
     loadApprovalIssues(qrId);
   } catch (e) {
     alert("Gagal memproses: " + e.message);
+  }
+}
+
+async function toggleWalletRequestDetail(refno, toggleEl) {
+  const container = toggleEl.nextElementSibling;
+  const isOpen = container.style.display === 'block';
+
+  if (isOpen) {
+    container.style.display = 'none';
+    toggleEl.innerText = '▸ Lihat Detail Item';
+    return;
+  }
+
+  toggleEl.innerText = '▾ Memuat...';
+  container.style.display = 'block';
+  container.innerHTML = '<div style="font-size:12px; color:var(--text-muted);">Memuat...</div>';
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('request')
+      .select('*')
+      .eq('RefNo', refno);
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      container.innerHTML = '<div style="font-size:12px; color:var(--text-muted);">Tidak ada detail item.</div>';
+    } else {
+      container.innerHTML = data.map(it => `
+        <div style="font-size:12px; padding:6px 0; border-bottom:1px dashed var(--border);">
+          <span style="font-weight:700;">${it.ItemGroup || '-'}</span> — ${it.ItemDescription || '-'}
+          <div style="color:var(--text-muted);">Qty: ${it.QTY ?? '-'} ${it.UNIT || ''}</div>
+        </div>
+      `).join('');
+    }
+    toggleEl.innerText = '▾ Sembunyikan Detail';
+  } catch (e) {
+    container.innerHTML = `<div style="font-size:12px; color:var(--danger);">Gagal memuat detail: ${e.message}</div>`;
+    toggleEl.innerText = '▾ Sembunyikan Detail';
   }
 }
   
