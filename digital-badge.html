@@ -648,7 +648,30 @@ async function handleApprovalDecision(type, requestId, decision, approverQrId) {
     alert("Gagal memproses: " + e.message);
   }
 }
-  
+
+  async function handleRfqApprovalDecision(rfqVendorId, decision, qrId) {
+  const confirmMsg = decision === 'Approve' ? `Setujui vendor pemenang RFQ ini?` : `Tolak vendor ini?`;
+  if (!confirm(confirmMsg)) return;
+
+  let reason = null;
+  if (decision === 'Reject') {
+    reason = prompt(`Alasan penolakan (opsional):`) || '';
+  }
+
+  try {
+    const { error } = await supabaseClient.rpc('process_rfq_approval_by_qrcode', {
+      p_qrcode: qrId,
+      p_rfqvendorid: Number(rfqVendorId),
+      p_decision: decision,
+      p_reason: reason
+    });
+    if (error) throw error;
+    alert(`RFQ berhasil diproses.`);
+    loadApprovalIssues(qrId);
+  } catch (e) {
+    alert("Gagal memproses: " + e.message);
+  }
+}
   async function handleRequestApprovalDecision(refno, decision, qrId) {
   const confirmMsg = decision === 'Approve' ? `Setujui Request ${refno}?` : `Tolak Request ${refno}?`;
   if (!confirm(confirmMsg)) return;
