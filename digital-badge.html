@@ -428,31 +428,35 @@ document.getElementById('btnSubmitRequest').onclick = async () => {
 async function loadApprovalIssues(qrId) {
   const box = document.getElementById('approvalIssuesBox');
   try {
-    const [resInternal, resSmms, requestApprovals, vendorApprovals] = await Promise.all([
-      fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "GET_APPROVAL_LIST", qrCodeId: qrId }),
-        headers: { "Content-Type": "text/plain" }
-      }),
-      fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "GET_SMMS_APPROVAL_NOTICE", qrCodeId: qrId }),
-        headers: { "Content-Type": "text/plain" }
-      }),
-      supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
-      supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId })
-    ]);
+  const [resInternal, resSmms, requestApprovals, vendorApprovals, rfqApprovals] = await Promise.all([
+    fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "GET_APPROVAL_LIST", qrCodeId: qrId }),
+      headers: { "Content-Type": "text/plain" }
+    }),
+    fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "GET_SMMS_APPROVAL_NOTICE", qrCodeId: qrId }),
+      headers: { "Content-Type": "text/plain" }
+    }),
+    supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
+    supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
+    supabaseClient.rpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId })
+  ]);
     const hasil = await resInternal.json();
     const smms = await resSmms.json();
     const { data: requestData, error: requestError } = requestApprovals;
     if (requestError) console.error("DEBUG request approval error:", requestError);
     const { data: vendorData, error: vendorError } = vendorApprovals;
     if (vendorError) console.error("DEBUG vendor approval error:", vendorError);
+    const { data: rfqData, error: rfqError } = rfqApprovals;
+    if (rfqError) console.error("DEBUG rfq approval error:", rfqError);
     const hasInternal = hasil.role && hasil.items && hasil.items.length > 0;
     const hasSmms = smms.hasPending;
     const hasRequest = requestData && requestData.length > 0;
     const hasVendor = vendorData && vendorData.length > 0;
-    if (!hasInternal && !hasSmms && !hasRequest && !hasVendor) {
+    const hasRfq = rfqData && rfqData.length > 0;
+    if (!hasInternal && !hasSmms && !hasRequest && !hasVendor && !hasRfq) {
       box.style.display = "flex";
       box.style.flexDirection = "row";
       box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
@@ -517,6 +521,27 @@ async function loadApprovalIssues(qrId) {
       });
       document.querySelectorAll('.btnRejectVendor').forEach(btn => {
         btn.onclick = () => handleVendorApprovalDecision(btn.dataset.vendorid, "Reject", qrId);
+      });
+    }
+    if (hasRfq) {
+      rfqData.forEach(item => {
+        const row = document.createElement('div');
+        row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
+        row.innerHTML = `
+          <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Seleksi Vendor RFQ - ${item.norfq}</div>
+          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname} · Rp ${Number(item.totalpenawaran).toLocaleString('id-ID')} · Diusulkan: ${item.diusulkanoleh || '-'}</div>
+          <div style="display:flex; gap:8px;">
+            <button class="btnApproveRfq" data-rfqvendorid="${item.rfqvendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+            <button class="btnRejectRfq" data-rfqvendorid="${item.rfqvendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
+          </div>
+        `;
+        box.appendChild(row);
+      });
+      document.querySelectorAll('.btnApproveRfq').forEach(btn => {
+        btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Approve", qrId);
+      });
+      document.querySelectorAll('.btnRejectRfq').forEach(btn => {
+        btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Reject", qrId);
       });
     }
     if (hasInternal) {
