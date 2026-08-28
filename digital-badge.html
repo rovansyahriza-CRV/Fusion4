@@ -428,7 +428,7 @@ document.getElementById('btnSubmitRequest').onclick = async () => {
 async function loadApprovalIssues(qrId) {
   const box = document.getElementById('approvalIssuesBox');
   try {
-    const [resInternal, resSmms, requestApprovals] = await Promise.all([
+    const [resInternal, resSmms, requestApprovals, vendorApprovals] = await Promise.all([
       fetch(APPS_SCRIPT_URL, {
         method: "POST",
         body: JSON.stringify({ action: "GET_APPROVAL_LIST", qrCodeId: qrId }),
@@ -439,27 +439,27 @@ async function loadApprovalIssues(qrId) {
         body: JSON.stringify({ action: "GET_SMMS_APPROVAL_NOTICE", qrCodeId: qrId }),
         headers: { "Content-Type": "text/plain" }
       }),
-      supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId })
+      supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
+      supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId })
     ]);
     const hasil = await resInternal.json();
     const smms = await resSmms.json();
     const { data: requestData, error: requestError } = requestApprovals;
     if (requestError) console.error("DEBUG request approval error:", requestError);
-
+    const { data: vendorData, error: vendorError } = vendorApprovals;
+    if (vendorError) console.error("DEBUG vendor approval error:", vendorError);
     const hasInternal = hasil.role && hasil.items && hasil.items.length > 0;
     const hasSmms = smms.hasPending;
     const hasRequest = requestData && requestData.length > 0;
-
-    if (!hasInternal && !hasSmms && !hasRequest) {
+    const hasVendor = vendorData && vendorData.length > 0;
+    if (!hasInternal && !hasSmms && !hasRequest && !hasVendor) {
       box.style.display = "flex";
       box.style.flexDirection = "row";
       box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
       return;
     }
-
     box.style.display = "block";
     box.innerHTML = "";
-
     if (hasSmms) {
       const row = document.createElement('div');
       row.style.cssText = "border:1px solid var(--orange); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left; cursor:pointer;";
@@ -470,7 +470,6 @@ async function loadApprovalIssues(qrId) {
       row.onclick = () => { window.location.href = smms.link; };
       box.appendChild(row);
     }
-
     if (hasRequest) {
       requestData.forEach(item => {
         const row = document.createElement('div');
@@ -489,7 +488,6 @@ async function loadApprovalIssues(qrId) {
         `;
         box.appendChild(row);
       });
-
       document.querySelectorAll('.btnApproveReq').forEach(btn => {
         btn.onclick = () => handleRequestApprovalDecision(btn.dataset.refno, "Approve", qrId);
       });
@@ -500,7 +498,27 @@ async function loadApprovalIssues(qrId) {
         el.onclick = () => toggleWalletRequestDetail(el.dataset.refno, el);
       });
     }
-
+    if (hasVendor) {
+      vendorData.forEach(item => {
+        const row = document.createElement('div');
+        row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
+        row.innerHTML = `
+          <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Vendor - ${item.vendorname}</div>
+          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.catagory || '-'} · ${item.contactno || '-'} · Level: ${item.status}</div>
+          <div style="display:flex; gap:8px;">
+            <button class="btnApproveVendor" data-vendorid="${item.vendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+            <button class="btnRejectVendor" data-vendorid="${item.vendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
+          </div>
+        `;
+        box.appendChild(row);
+      });
+      document.querySelectorAll('.btnApproveVendor').forEach(btn => {
+        btn.onclick = () => handleVendorApprovalDecision(btn.dataset.vendorid, "Approve", qrId);
+      });
+      document.querySelectorAll('.btnRejectVendor').forEach(btn => {
+        btn.onclick = () => handleVendorApprovalDecision(btn.dataset.vendorid, "Reject", qrId);
+      });
+    }
     if (hasInternal) {
       hasil.items.forEach(item => {
         const row = document.createElement('div');
@@ -515,7 +533,6 @@ async function loadApprovalIssues(qrId) {
         `;
         box.appendChild(row);
       });
-
       document.querySelectorAll('.btnApprove').forEach(btn => {
         btn.onclick = () => handleApprovalDecision(btn.dataset.type, btn.dataset.id, "APPROVE", qrId);
       });
@@ -583,6 +600,30 @@ async function handleApprovalDecision(type, requestId, decision, approverQrId) {
   }
 }
 
+  async function handleVendorApprovalDecision(vendorId, decision, qrId) {
+  const confirmMsg = decision === 'Approve' ? `Setujui vendor ini?` : `Tolak vendor ini?`;
+  if (!confirm(confirmMsg)) return;
+
+  let reason = null;
+  if (decision === 'Reject') {
+    reason = prompt(`Alasan penolakan (opsional):`) || '';
+  }
+
+  try {
+    const { error } = await supabaseClient.rpc('process_vendor_approval_by_qrcode', {
+      p_qrcode: qrId,
+      p_vendor_id: Number(vendorId),
+      p_decision: decision,
+      p_reason: reason
+    });
+    if (error) throw error;
+    alert(`Vendor berhasil diproses.`);
+    loadApprovalIssues(qrId);
+  } catch (e) {
+    alert("Gagal memproses: " + e.message);
+  }
+}
+  
   async function handleRequestApprovalDecision(refno, decision, qrId) {
   const confirmMsg = decision === 'Approve' ? `Setujui Request ${refno}?` : `Tolak Request ${refno}?`;
   if (!confirm(confirmMsg)) return;
