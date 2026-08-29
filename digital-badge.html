@@ -428,21 +428,21 @@ document.getElementById('btnSubmitRequest').onclick = async () => {
 async function loadApprovalIssues(qrId) {
   const box = document.getElementById('approvalIssuesBox');
   try {
-  const [resInternal, resSmms, requestApprovals, vendorApprovals, rfqApprovals] = await Promise.all([
-    fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      body: JSON.stringify({ action: "GET_APPROVAL_LIST", qrCodeId: qrId }),
-      headers: { "Content-Type": "text/plain" }
-    }),
-    fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      body: JSON.stringify({ action: "GET_SMMS_APPROVAL_NOTICE", qrCodeId: qrId }),
-      headers: { "Content-Type": "text/plain" }
-    }),
-    supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
-    supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
-    supabaseClient.rpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId })
-  ]);
+    const [resInternal, resSmms, requestApprovals, vendorApprovals, rfqApprovals] = await Promise.all([
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "GET_APPROVAL_LIST", qrCodeId: qrId }),
+        headers: { "Content-Type": "text/plain" }
+      }),
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "GET_SMMS_APPROVAL_NOTICE", qrCodeId: qrId }),
+        headers: { "Content-Type": "text/plain" }
+      }),
+      supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
+      supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
+      supabaseClient.rpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId })
+    ]);
     const hasil = await resInternal.json();
     const smms = await resSmms.json();
     const { data: requestData, error: requestError } = requestApprovals;
@@ -529,7 +529,7 @@ async function loadApprovalIssues(qrId) {
         row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
         row.innerHTML = `
           <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Seleksi Vendor RFQ - ${item.norfq}</div>
-          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname} · Rp ${Number(item.totalpenawaran).toLocaleString('id-ID')} · Diusulkan: ${item.diusulkanoleh || '-'}</div>
+          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname} · Rp ${Number(item.totalpenawaran).toLocaleString('id-ID')} · Diusulkan: ${item.diusulkanoleh}</div>
           <div style="display:flex; gap:8px;">
             <button class="btnApproveRfq" data-rfqvendorid="${item.rfqvendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
             <button class="btnRejectRfq" data-rfqvendorid="${item.rfqvendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
@@ -650,7 +650,7 @@ async function handleApprovalDecision(type, requestId, decision, approverQrId) {
 }
 
   async function handleRfqApprovalDecision(rfqVendorId, decision, qrId) {
-  const confirmMsg = decision === 'Approve' ? `Setujui vendor pemenang RFQ ini?` : `Tolak vendor ini?`;
+  const confirmMsg = decision === 'Approve' ? `Setujui hasil seleksi vendor RFQ ini?` : `Tolak hasil seleksi vendor RFQ ini?`;
   if (!confirm(confirmMsg)) return;
 
   let reason = null;
@@ -672,6 +672,7 @@ async function handleApprovalDecision(type, requestId, decision, approverQrId) {
     alert("Gagal memproses: " + e.message);
   }
 }
+
   async function handleRequestApprovalDecision(refno, decision, qrId) {
   const confirmMsg = decision === 'Approve' ? `Setujui Request ${refno}?` : `Tolak Request ${refno}?`;
   if (!confirm(confirmMsg)) return;
