@@ -429,7 +429,7 @@ document.getElementById('btnSubmitRequest').onclick = async () => {
 async function loadApprovalIssues(qrId) {
   const box = document.getElementById('approvalIssuesBox');
   try {
-    const [resInternal, resSmms, requestApprovals, vendorApprovals, rfqApprovals] = await Promise.all([
+    const [resInternal, resSmms, requestApprovals, vendorApprovals, rfqApprovals, poApprovals] = await Promise.all([
       fetch(APPS_SCRIPT_URL, {
         method: "POST",
         body: JSON.stringify({ action: "GET_APPROVAL_LIST", qrCodeId: qrId }),
@@ -442,7 +442,8 @@ async function loadApprovalIssues(qrId) {
       }),
       supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
       supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
-      supabaseClient.rpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId })
+      supabaseClient.rpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }),
+      supabaseClient.rpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId })
     ]);
     const hasil = await resInternal.json();
     const smms = await resSmms.json();
@@ -452,12 +453,15 @@ async function loadApprovalIssues(qrId) {
     if (vendorError) console.error("DEBUG vendor approval error:", vendorError);
     const { data: rfqData, error: rfqError } = rfqApprovals;
     if (rfqError) console.error("DEBUG rfq approval error:", rfqError);
+    const { data: poData, error: poError } = poApprovals;
+    if (poError) console.error("DEBUG po approval error:", poError);
     const hasInternal = hasil.role && hasil.items && hasil.items.length > 0;
     const hasSmms = smms.hasPending;
     const hasRequest = requestData && requestData.length > 0;
     const hasVendor = vendorData && vendorData.length > 0;
     const hasRfq = rfqData && rfqData.length > 0;
-    if (!hasInternal && !hasSmms && !hasRequest && !hasVendor && !hasRfq) {
+    const hasPo = poData && poData.length > 0;
+    if (!hasInternal && !hasSmms && !hasRequest && !hasVendor && !hasRfq && !hasPo) {
       box.style.display = "flex";
       box.style.flexDirection = "row";
       box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
@@ -543,6 +547,27 @@ async function loadApprovalIssues(qrId) {
       });
       document.querySelectorAll('.btnRejectRfq').forEach(btn => {
         btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Reject", qrId, null);
+      });
+    }
+    if (hasPo) {
+      poData.forEach(item => {
+        const row = document.createElement('div');
+        row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
+        row.innerHTML = `
+          <div style="font-size:13px; font-weight:700; color:var(--charcoal);">${item.doctype} - ${item.docnumber}</div>
+          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname} · Rp ${Number(item.totalamount).toLocaleString('id-ID')} · Diajukan: ${item.submittedby}</div>
+          <div style="display:flex; gap:8px;">
+            <button class="btnApprovePo" data-poid="${item.poid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+            <button class="btnRejectPo" data-poid="${item.poid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
+          </div>
+        `;
+        box.appendChild(row);
+      });
+      document.querySelectorAll('.btnApprovePo').forEach(btn => {
+        btn.onclick = () => handlePoApprovalDecision(btn.dataset.poid, "Approve", qrId);
+      });
+      document.querySelectorAll('.btnRejectPo').forEach(btn => {
+        btn.onclick = () => handlePoApprovalDecision(btn.dataset.poid, "Reject", qrId);
       });
     }
     if (hasInternal) {
@@ -691,6 +716,30 @@ async function sendRfqApprovalEmail(extra) {
       body: `Selamat, ${extra.vendorname} ditunjuk sebagai vendor terpilih untuk RFQ ${extra.norfq}.\n\nBuka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:\n${link}\n\nMasukkan PIN Anda: ${extra.pin}`
     })
   });
+}
+
+  async function handlePoApprovalDecision(poId, decision, qrId) {
+  const confirmMsg = decision === 'Approve' ? `Setujui PO/SO ini?` : `Tolak PO/SO ini?`;
+  if (!confirm(confirmMsg)) return;
+
+  let reason = null;
+  if (decision === 'Reject') {
+    reason = prompt(`Alasan penolakan (opsional):`) || '';
+  }
+
+  try {
+    const { error } = await supabaseClient.rpc('process_po_approval_by_qrcode', {
+      p_qrcode: qrId,
+      p_poid: Number(poId),
+      p_decision: decision,
+      p_reason: reason
+    });
+    if (error) throw error;
+    alert(`PO/SO berhasil diproses.`);
+    loadApprovalIssues(qrId);
+  } catch (e) {
+    alert("Gagal memproses: " + e.message);
+  }
 }
 
   async function handleRequestApprovalDecision(refno, decision, qrId) {
