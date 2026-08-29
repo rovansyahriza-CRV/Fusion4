@@ -178,6 +178,7 @@
 
 <script>
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
+const RFQ_EMAIL_URL = "https://script.google.com/macros/s/AKfycbww8VikG_wpAvQro1-9vLC_llnvKFigFotzKXS-T_kaIHKA4q2QGbYXqZObEF5j_1Hr/exec";
 
 const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
@@ -531,17 +532,17 @@ async function loadApprovalIssues(qrId) {
           <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Seleksi Vendor RFQ - ${item.norfq}</div>
           <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname} · Rp ${Number(item.totalpenawaran).toLocaleString('id-ID')} · Diusulkan: ${item.diusulkanoleh}</div>
           <div style="display:flex; gap:8px;">
-            <button class="btnApproveRfq" data-rfqvendorid="${item.rfqvendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+            <button class="btnApproveRfq" data-rfqvendorid="${item.rfqvendorid}" data-rfqid="${item.rfqid}" data-vendorid="${item.vendorid}" data-pin="${item.pin}" data-vendoremail="${item.vendoremail || ''}" data-norfq="${item.norfq}" data-vendorname="${item.vendorname}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
             <button class="btnRejectRfq" data-rfqvendorid="${item.rfqvendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
           </div>
         `;
         box.appendChild(row);
       });
       document.querySelectorAll('.btnApproveRfq').forEach(btn => {
-        btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Approve", qrId);
+        btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Approve", qrId, btn.dataset);
       });
       document.querySelectorAll('.btnRejectRfq').forEach(btn => {
-        btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Reject", qrId);
+        btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Reject", qrId, null);
       });
     }
     if (hasInternal) {
@@ -649,7 +650,7 @@ async function handleApprovalDecision(type, requestId, decision, approverQrId) {
   }
 }
 
-  async function handleRfqApprovalDecision(rfqVendorId, decision, qrId) {
+  async function handleRfqApprovalDecision(rfqVendorId, decision, qrId, extra) {
   const confirmMsg = decision === 'Approve' ? `Setujui hasil seleksi vendor RFQ ini?` : `Tolak hasil seleksi vendor RFQ ini?`;
   if (!confirm(confirmMsg)) return;
 
@@ -666,11 +667,30 @@ async function handleApprovalDecision(type, requestId, decision, approverQrId) {
       p_reason: reason
     });
     if (error) throw error;
+
+    if (decision === 'Approve' && extra && extra.vendoremail) {
+      sendRfqApprovalEmail(extra).catch(e => console.warn('Gagal kirim email hasil seleksi ke vendor:', e.message));
+    }
+
     alert(`RFQ berhasil diproses.`);
     loadApprovalIssues(qrId);
   } catch (e) {
     alert("Gagal memproses: " + e.message);
   }
+}
+
+async function sendRfqApprovalEmail(extra) {
+  const link = `https://rovansyahriza-crv.github.io/SMMS-BIMA/rfq-confirm.html?rfq=${extra.rfqid}&vendor=${extra.vendorid}`;
+  await fetch(RFQ_EMAIL_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "SEND_SIMPLE_EMAIL",
+      to: extra.vendoremail,
+      subject: `Hasil Seleksi Vendor RFQ ${extra.norfq}`,
+      body: `Selamat, ${extra.vendorname} ditunjuk sebagai vendor terpilih untuk RFQ ${extra.norfq}.\n\nBuka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:\n${link}\n\nMasukkan PIN Anda: ${extra.pin}`
+    })
+  });
 }
 
   async function handleRequestApprovalDecision(refno, decision, qrId) {
