@@ -858,6 +858,7 @@ async function generatePoPdfBase64(poHeader, vendorInfo, termData, items) {
   const metaLines = [
     ['Tanggal', new Date().toLocaleDateString('id-ID')],
     ['Referensi RFQ', poHeader.norfq || '-'],
+    ['Titik Pengiriman', poHeader.deliverypoint || '-'],
     ['Disetujui oleh', poHeader.approvedby || '-'],
     ['Tgl. Disetujui', approvedDateStr]
   ];
@@ -880,30 +881,39 @@ async function generatePoPdfBase64(poHeader, vendorInfo, termData, items) {
   y = Math.max(y + 12, metaY + 4);
 
   // Item table header
-  doc.setFontSize(9);
+  const COL_NO = 17, COL_DESC = 25, COL_QTY = 88, COL_TGL = 104, COL_HARGA = 127, COL_SUB = 196;
+  doc.setFontSize(8.5);
   doc.setFillColor(61, 61, 61);
   doc.rect(14, y, 182, 7, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.text("No", 17, y + 5);
-  doc.text("Deskripsi Item", 27, y + 5);
-  doc.text("Qty", 120, y + 5);
-  doc.text("Harga Satuan", 140, y + 5);
-  doc.text("Subtotal", 172, y + 5);
+  doc.text("No", COL_NO, y + 5);
+  doc.text("Deskripsi Item", COL_DESC, y + 5);
+  doc.text("Qty", COL_QTY, y + 5);
+  doc.text("Tgl. Kirim", COL_TGL, y + 5);
+  doc.text("Harga Satuan", COL_HARGA, y + 5);
+  doc.text("Subtotal", COL_SUB, y + 5, { align: 'right' });
   doc.setTextColor(0, 0, 0);
   y += 12;
+
+  function formatDeliveryDate(raw) {
+    if (!raw) return '-';
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? String(raw) : d.toLocaleDateString('id-ID');
+  }
 
   let subtotal = 0;
   (items || []).forEach((it, i) => {
     subtotal += Number(it.Subtotal || 0);
     const desc = it.ItemDescription || '-';
-    const wrappedLines = doc.splitTextToSize(desc, 90);
+    const wrappedLines = doc.splitTextToSize(desc, 58);
 
-    doc.setFontSize(9);
-    doc.text(String(i + 1), 17, y);
-    doc.text(wrappedLines, 27, y);
-    doc.text(`${it.Qty} ${it.Unit || ''}`, 120, y);
-    doc.text("Rp " + Number(it.UnitPrice || 0).toLocaleString("id-ID"), 140, y);
-    doc.text("Rp " + Number(it.Subtotal || 0).toLocaleString("id-ID"), 172, y);
+    doc.setFontSize(8.5);
+    doc.text(String(i + 1), COL_NO, y);
+    doc.text(wrappedLines, COL_DESC, y);
+    doc.text(`${it.Qty} ${it.Unit || ''}`, COL_QTY, y);
+    doc.text(formatDeliveryDate(it.VendorDeliveryDate), COL_TGL, y);
+    doc.text("Rp " + Number(it.UnitPrice || 0).toLocaleString("id-ID"), COL_HARGA, y);
+    doc.text("Rp " + Number(it.Subtotal || 0).toLocaleString("id-ID"), COL_SUB, y, { align: 'right' });
 
     const lineHeight = 5;
     y += Math.max(wrappedLines.length * lineHeight, 7);
@@ -1054,7 +1064,8 @@ async function sendPoApprovalEmail(extra) {
     norfq: rfqRow ? rfqRow.NoRFQ : '-',
     totalamount: poRow.TotalAmount,
     approvedby: approverName,
-    approveddate: poRow.ManagementApprovalDate
+    approveddate: poRow.ManagementApprovalDate,
+    deliverypoint: poRow.DeliveryPoint
   };
 
   const pdfBase64 = await generatePoPdfBase64(poHeader, vendorRow, termRow, items);
