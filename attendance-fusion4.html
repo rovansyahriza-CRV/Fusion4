@@ -16,6 +16,7 @@
   
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/Fusion4/offline-absen.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
@@ -211,6 +212,14 @@
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
 const FACE_MATCH_THRESHOLD = 0.45; // diperketat dari 0.55 -- kurangi resiko salah kenali orang
 
+// ============ MIGRASI SUPABASE (Absensi + Lembur + Ijin Keluar) ============
+// Aksi lain (GET_PERSON_DATA, FIND_NEAREST_LOCATION, GET_ALL_FACE_DATA, dll) TETAP
+// lewat Apps Script (APPS_SCRIPT_URL) seperti biasa -- cuma 4 hal ini yang dipindah:
+// submit absensi reguler+lembur, CHECK_IJIN_PENDING, SUBMIT_IJIN_KELUAR, SUBMIT_LEMBUR.
+const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const params = new URLSearchParams(window.location.search);
 let qrCodeId = (params.get('QrCodeId') || params.get('qrCodeId') || params.get('qrcodeid') || "").trim().toUpperCase();
 let fromBadge = (params.get('fromBadge') === '1');
@@ -304,7 +313,31 @@ function showRetry() {
 btnRetry.onclick = () => location.reload();
 
 async function callApi(action, extra) {
-  const body = Object.assign({ action: action }, extra || {});
+  extra = extra || {};
+
+  // Sudah dipindah ke Supabase (RPC, SECURITY DEFINER) -- lihat migrasi_absensi_lembur_ijin_batch1/2.sql
+  if (action === "CHECK_IJIN_PENDING") {
+    const { data, error } = await supabaseClient.rpc('check_ijin_keluar_pending', { p_qrcodeid: extra.qrCodeId });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  if (action === "SUBMIT_IJIN_KELUAR") {
+    const { data, error } = await supabaseClient.rpc('submit_ijin_keluar', {
+      p_qrcodeid: extra.qrCodeId, p_lokasi: extra.lokasi, p_kodeijin: extra.kodeIjin
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  if (action === "SUBMIT_LEMBUR") {
+    const { data, error } = await supabaseClient.rpc('submit_absensi_lembur', {
+      p_qrcodeid: extra.qrCodeId, p_lokasi: extra.lokasi, p_pinvoucher: extra.pinVoucher || ""
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // Aksi lain masih di Apps Script (belum dimigrasi)
+  const body = Object.assign({ action: action }, extra);
   const res = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
     body: JSON.stringify(body),
@@ -313,14 +346,13 @@ async function callApi(action, extra) {
   return await res.json();
 }
 
-// SUBMIT_ABSENSI tidak pakai "action" khusus -- itu jalur default doPost
+// SUBMIT_ABSENSI (reguler + lembur) -- sudah dipindah ke Supabase RPC submit_absensi()
 async function submitAbsensiCall(qrCodeId, lokasi, password) {
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method: "POST",
-    body: JSON.stringify({ qrCodeId: qrCodeId, lokasi: lokasi, voucherPIN: password || "" }),
-    headers: { "Content-Type": "text/plain" }
+  const { data, error } = await supabaseClient.rpc('submit_absensi', {
+    p_qrcodeid: qrCodeId, p_lokasi: lokasi, p_password: password || ""
   });
-  return await res.json();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 // ============ 1. GPS ============
