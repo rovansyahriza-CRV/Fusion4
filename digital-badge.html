@@ -1,5 +1,3 @@
-<!DOCTYPE html>
-<html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,20 +11,6 @@
 <link rel="icon" type="image/png" sizes="32x32" href="./badge-favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="./badge-favicon-16.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
-
-    <div id="cutiDurasiInfo" style="font-size:12px; font-weight:600; color:#2B6CB0; margin-bottom:10px; padding:8px 10px; background:#EBF8FF; border-radius:8px; display:none;">Total: 0 Hari Kerja</div>
-
-    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Alasan / Keterangan</label>
-    <textarea id="cutiAlasan" rows="3" placeholder="Tulis keperluan cuti..." style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box; margin-bottom:12px;"></textarea>
-
-    <button id="btnSubmitCuti" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#2B6CB0; color:#fff; cursor:pointer;">Ajukan Cuti ke Atasan</button>
-    <button id="btnCancelCuti" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
-    <div id="cutiMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
-  </div>
-</div>
-
-</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -205,7 +189,6 @@
   </div>
 </div>
 
-
 <div id="requestOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
   <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px; box-sizing:border-box;">
     <h3 id="requestTitle" style="margin:0 0 12px; font-size:17px; color:var(--charcoal);">Ajukan Ijin Keluar</h3>
@@ -256,7 +239,6 @@
     <button id="btnCancelCuti" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
     <div id="cutiMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
   </div>
-</div>
 </div>
 
 <script>
@@ -426,22 +408,28 @@ async function submitPin() {
   async function populateLokasiDropdown() {
     const selectEl = document.getElementById('requestArea');
     if (!selectEl) return;
+    selectEl.innerHTML = '<option value="">-- Memuat Lokasi... --</option>';
     try {
-      const { data, error } = await supabaseClient
-        .from('lokasiTbl')
-        .select('NamaLokasi')
-        .eq('Status', 'Active')
-        .order('NamaLokasi', { ascending: true });
-      if (error) throw error;
+      let locs = [];
+      const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('list_lokasi_with_timelimit');
+      if (!rpcErr && rpcData && rpcData.length > 0) {
+        locs = rpcData.map(l => l.namalokasi || l.NamaLokasi).filter(Boolean);
+      } else {
+        const { data: tblData } = await supabaseClient.from('lokasiTbl').select('NamaLokasi');
+        if (tblData) locs = tblData.map(l => l.NamaLokasi).filter(Boolean);
+      }
+      // Unique & Sort
+      locs = [...new Set(locs)].sort();
       selectEl.innerHTML = '<option value="">-- Pilih Lokasi --</option>';
-      (data || []).forEach(l => {
+      locs.forEach(nama => {
         const opt = document.createElement('option');
-        opt.value = l.NamaLokasi;
-        opt.textContent = l.NamaLokasi;
+        opt.value = nama;
+        opt.textContent = nama;
         selectEl.appendChild(opt);
       });
     } catch (e) {
       console.warn("Gagal load lokasi dropdown:", e);
+      selectEl.innerHTML = '<option value="">-- Pilih Lokasi --</option>';
     }
   }
 
@@ -451,7 +439,9 @@ async function submitPin() {
     document.getElementById('requestAreaContainer').style.display = type === "LEMBUR" ? "block" : "none";
     document.getElementById('requestAlasan').value = "";
     document.getElementById('requestMsg').style.display = "none";
-    await populateLokasiDropdown();
+    if (type === "LEMBUR") {
+      await populateLokasiDropdown();
+    }
     document.getElementById('requestOverlay').style.display = "flex";
   }
 
@@ -459,6 +449,65 @@ async function submitPin() {
   document.getElementById('btnAjukanLembur').onclick = () => openRequestForm("LEMBUR");
   document.getElementById('btnCancelRequest').onclick = () => {
     document.getElementById('requestOverlay').style.display = "none";
+  };
+
+  document.getElementById('btnSubmitRequest').onclick = async () => {
+    const alasan = document.getElementById('requestAlasan').value.trim();
+    const area = document.getElementById('requestArea')?.value || '';
+    const msgEl = document.getElementById('requestMsg');
+    const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+
+    if (currentRequestType === "LEMBUR" && !area) {
+      msgEl.style.color = "var(--danger)";
+      msgEl.innerText = "⚠️ Silakan pilih lokasi site lembur.";
+      msgEl.style.display = "block";
+      return;
+    }
+
+    if (!alasan) {
+      msgEl.style.color = "var(--danger)";
+      msgEl.innerText = "⚠️ Alasan / keterangan tugas wajib diisi.";
+      msgEl.style.display = "block";
+      return;
+    }
+
+    const btn = document.getElementById('btnSubmitRequest');
+    btn.disabled = true;
+    btn.innerText = "Mengirim...";
+    msgEl.style.display = "none";
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const durasi = currentRequestType === "LEMBUR" ? 2 : 0;
+
+      const { data: hasil, error } = await supabaseClient.rpc('submit_pengajuan_ijin_lembur', {
+        p_pemohon_qrcode: qrId,
+        p_tipe: currentRequestType,
+        p_tanggal: today,
+        p_alasan: alasan,
+        p_durasi_jam: durasi,
+        p_lokasi: area
+      });
+      if (error) throw error;
+
+      if (hasil && hasil.status === 'SUCCESS') {
+        msgEl.style.color = "var(--green, #178A4C)";
+        msgEl.innerText = "✅ " + hasil.message;
+        msgEl.style.display = "block";
+        loadMyVouchers(qrId);
+        loadApprovalIssues(qrId);
+        setTimeout(() => { document.getElementById('requestOverlay').style.display = "none"; }, 1600);
+      } else {
+        throw new Error((hasil && hasil.message) || 'Gagal membuat pengajuan.');
+      }
+    } catch (e) {
+      msgEl.style.color = "var(--danger, #D9312E)";
+      msgEl.innerText = "⚠️ Gagal: " + e.message;
+      msgEl.style.display = "block";
+    }
+
+    btn.disabled = false;
+    btn.innerText = "Kirim Pengajuan";
   };
 
   // CUTI MODAL LOGIC
@@ -497,11 +546,11 @@ async function submitPin() {
     document.getElementById('cutiAlasan').value = '';
     document.getElementById('cutiMsg').style.display = 'none';
     updateCutiDurasi();
-    document.getElementById('cutiOverlay').style.display = 'flex';
+    document.getElementById('cutiOverlay').style.display = "flex";
   };
 
   document.getElementById('btnCancelCuti').onclick = () => {
-    document.getElementById('cutiOverlay').style.display = 'none';
+    document.getElementById('cutiOverlay').style.display = "none";
   };
 
   document.getElementById('btnSubmitCuti').onclick = async () => {
@@ -553,7 +602,7 @@ async function submitPin() {
         msgEl.style.display = "block";
         loadMyVouchers(qrId);
         loadApprovalIssues(qrId);
-        setTimeout(() => { document.getElementById('cutiOverlay').style.display = "none"; }, 2000);
+        setTimeout(() => { document.getElementById('cutiOverlay').style.display = "none"; }, 1600);
       } else {
         throw new Error((res && res.message) || 'Gagal mengajukan cuti.');
       }
@@ -565,69 +614,6 @@ async function submitPin() {
 
     btn.disabled = false;
     btn.innerText = "Ajukan Cuti ke Atasan";
-  };
-  document.getElementById('btnBatalRequest').onclick = () => {
-    document.getElementById('requestOverlay').style.display = "none";
-  };
-
-  document.getElementById('btnSubmitRequest').onclick = async () => {
-    const alasan = document.getElementById('requestAlasan').value.trim();
-    const msgEl = document.getElementById('requestMsg');
-    const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
-
-    if (!alasan) {
-      msgEl.innerText = "⚠️ Alasan / keterangan tugas wajib diisi.";
-      msgEl.style.display = "block";
-      return;
-    }
-
-    const btn = document.getElementById('btnSubmitRequest');
-    btn.disabled = true;
-    btn.innerText = "Mengirim...";
-    msgEl.style.display = "none";
-
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const durasi = currentRequestType === "LEMBUR" ? 2 : 0;
-      const area = document.getElementById('requestArea')?.value || '';
-
-      if (currentRequestType === "LEMBUR" && !area) {
-        msgEl.style.color = "var(--danger)";
-        msgEl.innerText = "⚠️ Silakan pilih lokasi site lembur.";
-        msgEl.style.display = "block";
-        btn.disabled = false;
-        btn.innerText = "Kirim Pengajuan";
-        return;
-      }
-
-      const { data: hasil, error } = await supabaseClient.rpc('submit_pengajuan_ijin_lembur', {
-        p_pemohon_qrcode: qrId,
-        p_tipe: currentRequestType,
-        p_tanggal: today,
-        p_alasan: alasan,
-        p_durasi_jam: durasi,
-        p_lokasi: area
-      });
-      if (error) throw error;
-
-      if (hasil && hasil.status === 'SUCCESS') {
-        msgEl.style.color = "var(--green, #178A4C)";
-        msgEl.innerText = "✅ " + hasil.message;
-        msgEl.style.display = "block";
-        loadMyVouchers(qrId);
-        loadApprovalIssues(qrId);
-        setTimeout(() => { document.getElementById('requestOverlay').style.display = "none"; }, 1800);
-      } else {
-        throw new Error((hasil && hasil.message) || 'Gagal membuat pengajuan.');
-      }
-    } catch (e) {
-      msgEl.style.color = "var(--danger, #D9312E)";
-      msgEl.innerText = "⚠️ Gagal: " + e.message;
-      msgEl.style.display = "block";
-    }
-
-    btn.disabled = false;
-    btn.innerText = "Kirim Pengajuan";
   };
 
   async function handleIjinLemburDecision(requestId, action, qrId) {
