@@ -263,569 +263,541 @@ pinBoxes.forEach((box, idx) => {
 });
 
 async function submitPin() {
-  const pin = getPinValue().trim();
+    const pin = getPinValue().trim();
+    pinMsg.style.display = "none";
 
-  pinMsg.style.display = "none";
-
-  if (!pin) {
-    pinMsg.innerText = "❌ PIN wajib diisi.";
-    pinMsg.style.display = "block";
-    return;
-  }
-
-  btnSubmitPin.disabled = true;
-  btnSubmitPin.innerText = "Memeriksa...";
-
-  try {
-    const { data: hasil, error: hasilErr } = await supabaseClient.rpc('get_digital_badge_by_pin', { p_pin: pin });
-    if (hasilErr) throw hasilErr;
-    
-    window.currentBadgeData = hasil;
-    loadApprovalIssues(hasil.qrCodeId);
-    loadMyVouchers(hasil.qrCodeId);
-    
-    if (!hasil.valid) {
-      pinMsg.innerText = "❌ " + (hasil.message || "PIN tidak ditemukan.");
+    if (!pin) {
+      pinMsg.innerText = "⚠️ PIN wajib diisi.";
       pinMsg.style.display = "block";
-      btnSubmitPin.disabled = false;
-      btnSubmitPin.innerText = "Tampilkan Badge";
-      clearPinBoxes();
       return;
     }
 
-    document.getElementById('badgeNama').innerText = hasil.nama || "-";
-    document.getElementById('badgeJabatan').innerText = hasil.kualifikasi || "-";
-    document.getElementById('badgeId').innerText = hasil.qrCodeId;
-    document.getElementById('linkGantiPassword').href = "change-password.html?QrCodeId=" + encodeURIComponent(hasil.qrCodeId);
+    btnSubmitPin.disabled = true;
+    btnSubmitPin.innerText = "Memeriksa...";
 
-    const fotoEl = document.getElementById('badgeFoto');
-    const fallbackEl = document.getElementById('badgeFotoFallback');
-    if (hasil.fotoUrl) {
-      fotoEl.src = hasil.fotoUrl;
-      fotoEl.style.display = "block";
-      fallbackEl.style.display = "none";
-      fotoEl.onerror = () => {
+    try {
+      const { data: hasil, error: hasilErr } = await supabaseClient.rpc('get_digital_badge_by_pin', { p_pin: pin });
+      if (hasilErr) throw hasilErr;
+
+      if (!hasil || !hasil.valid) {
+        pinMsg.innerText = "⚠️ " + ((hasil && hasil.message) || "PIN tidak ditemukan.");
+        pinMsg.style.display = "block";
+        btnSubmitPin.disabled = false;
+        btnSubmitPin.innerText = "Tampilkan Badge";
+        clearPinBoxes();
+        return;
+      }
+
+      const qrId = hasil.qrCodeId || hasil.qrcodeid || hasil.QrCodeId || "";
+      hasil.qrCodeId = qrId;
+      window.currentBadgeData = hasil;
+
+      document.getElementById('badgeNama').innerText = hasil.nama || "-";
+      document.getElementById('badgeJabatan').innerText = hasil.kualifikasi || "-";
+      document.getElementById('badgeId').innerText = qrId;
+      document.getElementById('linkGantiPassword').href = "change-password.html?QrCodeId=" + encodeURIComponent(qrId);
+
+      const fotoEl = document.getElementById('badgeFoto');
+      const fallbackEl = document.getElementById('badgeFotoFallback');
+      if (hasil.fotoUrl) {
+        fotoEl.src = hasil.fotoUrl;
+        fotoEl.style.display = "block";
+        fallbackEl.style.display = "none";
+        fotoEl.onerror = () => {
+          fotoEl.style.display = "none";
+          fallbackEl.style.display = "flex";
+          fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
+        };
+      } else {
         fotoEl.style.display = "none";
         fallbackEl.style.display = "flex";
         fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
-      };
-    } else {
-      fotoEl.style.display = "none";
-      fallbackEl.style.display = "flex";
-      fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
-    }
+      }
 
-    document.getElementById('qrbox').innerHTML = "";
-    new QRCode(document.getElementById('qrbox'), {
-      text: hasil.qrCodeId,
-      width: 120,
-      height: 120,
-      colorDark: "#3D3D3D",
-      colorLight: "#ffffff"
-    });
+      // Tampilkan Badge
+      pageContent.style.display = "block";
+      pinOverlay.style.display = "none";
+      btnSubmitPin.disabled = false;
+      btnSubmitPin.innerText = "Tampilkan Badge";
 
-    pinOverlay.style.display = "none";
-    pageContent.style.display = "flex";
-  } catch (e) {
-    pinMsg.innerText = "❌ Gagal terhubung ke server: " + e.message;
-    pinMsg.style.display = "block";
-    btnSubmitPin.disabled = false;
-    btnSubmitPin.innerText = "Tampilkan Badge";
-  }
-}
-
-btnSubmitPin.onclick = submitPin;
-
-document.getElementById('btnAbsenSekarang').onclick = () => {
-  const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
-  if (!qrId) {
-    alert("Data belum siap, coba refresh halaman.");
-    return;
-  }
-  window.location.href = "attendance-fusion4.html?QrCodeId=" + encodeURIComponent(qrId) + "&fromBadge=1";
-};
-
-document.getElementById('btnGantiPin').onclick = () => {
-  pageContent.style.display = "none";
-  pinOverlay.style.display = "flex";
-  clearPinBoxes();
-};
-
-let currentRequestType = "";
-
-async function openRequestForm(type) {
-  currentRequestType = type;
-  document.getElementById('requestTitle').innerText = type === "IJIN" ? "Ajukan Ijin Keluar" : "Ajukan Lembur";
-  document.getElementById('requestArea').style.display = type === "LEMBUR" ? "block" : "none";
-  document.getElementById('requestAlasan').value = "";
-  document.getElementById('requestMsg').style.display = "none";
-  document.getElementById('requestOverlay').style.display = "flex";
-
-  if (type === "LEMBUR") {
-    const selectEl = document.getElementById('requestArea');
-    selectEl.innerHTML = '<option value="">Memuat area...</option>';
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "GET_LOKASI_LIST" }),
-        headers: { "Content-Type": "text/plain" }
-      });
-      const lokasiList = await res.json();
-      selectEl.innerHTML = '<option value="">-- Pilih Area --</option>';
-      (lokasiList || []).forEach(nama => {
-        const opt = document.createElement('option');
-        opt.value = nama;
-        opt.innerText = nama;
-        selectEl.appendChild(opt);
-      });
-    } catch (e) {
-      selectEl.innerHTML = '<option value="">Gagal memuat area</option>';
-    }
-  }
-}
-
-document.getElementById('btnAjukanIjin').onclick = () => openRequestForm("IJIN");
-document.getElementById('btnAjukanLembur').onclick = () => openRequestForm("LEMBUR");
-
-document.getElementById('btnCancelRequest').onclick = () => {
-  document.getElementById('requestOverlay').style.display = "none";
-};
-
-document.getElementById('btnSubmitRequest').onclick = async () => {
-  const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
-  const area = document.getElementById('requestArea').value.trim();
-  const alasan = document.getElementById('requestAlasan').value.trim();
-  const msgEl = document.getElementById('requestMsg');
-
-  if (currentRequestType === "LEMBUR" && !area) {
-    msgEl.style.display = "block";
-    msgEl.style.background = "var(--danger-bg)";
-    msgEl.style.color = "var(--danger)";
-    msgEl.innerText = "❌ Area tidak boleh kosong.";
-    return;
-  }
-  if (!alasan) {
-    msgEl.style.display = "block";
-    msgEl.style.background = "var(--danger-bg)";
-    msgEl.style.color = "var(--danger)";
-    msgEl.innerText = "❌ Alasan tidak boleh kosong.";
-    return;
-  }
-
-  const btn = document.getElementById('btnSubmitRequest');
-  btn.disabled = true;
-  btn.innerText = "Mengirim...";
-
-  try {
-    const action = currentRequestType === "IJIN" ? "SUBMIT_IJIN_REQUEST" : "SUBMIT_LEMBUR_REQUEST";
-    const bodyPayload = { action: action, qrCodeId: qrId, alasan: alasan };
-    if (currentRequestType === "LEMBUR") bodyPayload.area = area;
-
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      body: JSON.stringify(bodyPayload),
-      headers: { "Content-Type": "text/plain" }
-    });
-    const hasil = await res.json();
-
-    msgEl.style.display = "block";
-    if (hasil.status === "SUCCESS") {
-      msgEl.style.background = "var(--success-bg, #E5F6EC)";
-      msgEl.style.color = "var(--charcoal)";
-      msgEl.innerText = "✅ " + hasil.message;
+      // Load data approval & voucher
+      loadApprovalIssues(qrId);
       loadMyVouchers(qrId);
-      setTimeout(() => { document.getElementById('requestOverlay').style.display = "none"; }, 1800);
-    } else {
-      msgEl.style.background = "var(--danger-bg)";
-      msgEl.style.color = "var(--danger)";
-      msgEl.innerText = "❌ " + (hasil.message || "Gagal mengirim pengajuan.");
+
+    } catch (e) {
+      console.error("Error submitPin:", e);
+      pinMsg.innerText = "⚠️ Gagal koneksi: " + e.message;
+      pinMsg.style.display = "block";
+      btnSubmitPin.disabled = false;
+      btnSubmitPin.innerText = "Tampilkan Badge";
     }
-  } catch (e) {
-    msgEl.style.display = "block";
-    msgEl.style.background = "var(--danger-bg)";
-    msgEl.style.color = "var(--danger)";
-    msgEl.innerText = "❌ Gagal terhubung ke server: " + e.message;
   }
 
-  btn.disabled = false;
-  btn.innerText = "Kirim Pengajuan";
-};
+  btnSubmitPin.onclick = submitPin;
 
-async function loadApprovalIssues(qrId) {
-  const box = document.getElementById('approvalIssuesBox');
-  try {
-    const [resInternal, resSmms, requestApprovals, vendorApprovals, rfqApprovals, poApprovals] = await Promise.all([
-      fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "GET_APPROVAL_LIST", qrCodeId: qrId }),
-        headers: { "Content-Type": "text/plain" }
-      }),
-      fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "GET_SMMS_APPROVAL_NOTICE", qrCodeId: qrId }),
-        headers: { "Content-Type": "text/plain" }
-      }),
-      supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
-      supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
-      supabaseClient.rpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }),
-      supabaseClient.rpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId })
-    ]);
-    const hasil = await resInternal.json();
-    const smms = await resSmms.json();
-    const { data: requestData, error: requestError } = requestApprovals;
-    if (requestError) console.error("DEBUG request approval error:", requestError);
-    const { data: vendorData, error: vendorError } = vendorApprovals;
-    if (vendorError) console.error("DEBUG vendor approval error:", vendorError);
-    const { data: rfqData, error: rfqError } = rfqApprovals;
-    if (rfqError) console.error("DEBUG rfq approval error:", rfqError);
-    const { data: poData, error: poError } = poApprovals;
-    if (poError) console.error("DEBUG po approval error:", poError);
-    const hasInternal = hasil.role && hasil.items && hasil.items.length > 0;
-    const hasSmms = smms.hasPending;
-    const hasRequest = requestData && requestData.length > 0;
-    const hasVendor = vendorData && vendorData.length > 0;
-    const hasRfq = rfqData && rfqData.length > 0;
-    const hasPo = poData && poData.length > 0;
-    if (!hasInternal && !hasSmms && !hasRequest && !hasVendor && !hasRfq && !hasPo) {
-      box.style.display = "flex";
-      box.style.flexDirection = "row";
-      box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
+  document.getElementById('btnAbsenSekarang').onclick = () => {
+    const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+    if (!qrId) {
+      alert("Data belum siap, coba refresh halaman.");
       return;
     }
-    box.style.display = "block";
-    box.innerHTML = "";
-    if (hasSmms) {
-      const row = document.createElement('div');
-      row.style.cssText = "border:1px solid var(--orange); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left; cursor:pointer;";
-      row.innerHTML = `
-        <div style="font-size:13px; font-weight:700; color:var(--charcoal);">SMMS - Vendor Selection</div>
-        <div style="font-size:12px; color:var(--text-muted); margin:2px 0 0;">${smms.count} RFQ menunggu approval kamu →</div>
-      `;
-      row.onclick = () => { window.location.href = smms.link; };
-      box.appendChild(row);
+    window.location.href = "attendance-fusion4.html?QrCodeId=" + encodeURIComponent(qrId) + "&fromBadge=1";
+  };
+
+  document.getElementById('btnGantiPin').onclick = () => {
+    pageContent.style.display = "none";
+    pinOverlay.style.display = "flex";
+    clearPinBoxes();
+  };
+
+  let currentRequestType = "";
+
+  async function openRequestForm(type) {
+    currentRequestType = type;
+    document.getElementById('requestTitle').innerText = type === "IJIN" ? "Ajukan Ijin Keluar" : "Ajukan Lembur";
+    document.getElementById('requestArea').style.display = type === "LEMBUR" ? "block" : "none";
+    document.getElementById('requestAlasan').value = "";
+    document.getElementById('requestMsg').style.display = "none";
+    document.getElementById('requestOverlay').style.display = "flex";
+  }
+
+  document.getElementById('btnAjukanIjin').onclick = () => openRequestForm("IJIN");
+  document.getElementById('btnAjukanLembur').onclick = () => openRequestForm("LEMBUR");
+  document.getElementById('btnBatalRequest').onclick = () => {
+    document.getElementById('requestOverlay').style.display = "none";
+  };
+
+  document.getElementById('btnSubmitRequest').onclick = async () => {
+    const alasan = document.getElementById('requestAlasan').value.trim();
+    const msgEl = document.getElementById('requestMsg');
+    const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+
+    if (!alasan) {
+      msgEl.innerText = "⚠️ Alasan / keterangan tugas wajib diisi.";
+      msgEl.style.display = "block";
+      return;
     }
-    if (hasRequest) {
-      requestData.forEach(item => {
-        const row = document.createElement('div');
-        row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
-        row.innerHTML = `
-          <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Material Request - ${item.refno}</div>
-          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">Proyek ${item.projectid || '-'} · ${item.purpose || '-'} · Level: ${item.currentlevel}</div>
+
+    const btn = document.getElementById('btnSubmitRequest');
+    btn.disabled = true;
+    btn.innerText = "Mengirim...";
+    msgEl.style.display = "none";
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const durasi = currentRequestType === "LEMBUR" ? 2 : 0;
+
+      const { data: hasil, error } = await supabaseClient.rpc('submit_pengajuan_ijin_lembur', {
+        p_pemohon_qrcode: qrId,
+        p_tipe: currentRequestType,
+        p_tanggal: today,
+        p_alasan: alasan,
+        p_durasi_jam: durasi,
+        p_lokasi: ''
+      });
+      if (error) throw error;
+
+      if (hasil && hasil.status === 'SUCCESS') {
+        msgEl.style.color = "var(--green, #178A4C)";
+        msgEl.innerText = "✅ " + hasil.message;
+        msgEl.style.display = "block";
+        loadMyVouchers(qrId);
+        loadApprovalIssues(qrId);
+        setTimeout(() => { document.getElementById('requestOverlay').style.display = "none"; }, 1800);
+      } else {
+        throw new Error((hasil && hasil.message) || 'Gagal membuat pengajuan.');
+      }
+    } catch (e) {
+      msgEl.style.color = "var(--danger, #D9312E)";
+      msgEl.innerText = "⚠️ Gagal: " + e.message;
+      msgEl.style.display = "block";
+    }
+
+    btn.disabled = false;
+    btn.innerText = "Kirim Pengajuan";
+  };
+
+  async function handleIjinLemburDecision(requestId, action, qrId) {
+    const actionLabel = action === 'PROPOSE' ? 'Usulkan (Propose)' : (action === 'REVIEW' ? 'Tinjau (Review)' : (action === 'APPROVE' ? 'Setujui (Approve)' : 'Tolak (Reject)'));
+    const confirmMsg = action === 'REJECT' ? 'Tolak pengajuan ini?' : actionLabel + ' pengajuan ini?';
+    if (!confirm(confirmMsg)) return;
+
+    let catatan = '';
+    if (action === 'REJECT') {
+      catatan = prompt('Alasan penolakan (opsional):') || '';
+    }
+
+    try {
+      const { data, error } = await supabaseClient.rpc('process_approval_action', {
+        p_request_id: Number(requestId),
+        p_user_qrcode: qrId,
+        p_action: action,
+        p_catatan: catatan
+      });
+      if (error) throw error;
+      alert((data && data.message) || 'Pengajuan berhasil diproses.');
+      loadApprovalIssues(qrId);
+      loadMyVouchers(qrId);
+    } catch (e) {
+      alert('Gagal memproses approval: ' + e.message);
+    }
+  }
+
+  async function loadApprovalIssues(qrId) {
+    const box = document.getElementById('approvalIssuesBox');
+    if (!box || !qrId) return;
+
+    box.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:6px 0;">Memeriksa antrean approval...</div>';
+
+    try {
+      // 1. Ambil data dari Supabase (Cepat < 100ms)
+      const [ijinLemburRes, requestRes, vendorRes, rfqRes, poRes] = await Promise.all([
+        supabaseClient.rpc('get_pending_ijin_lembur_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] })),
+        supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] })),
+        supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] })),
+        supabaseClient.rpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] })),
+        supabaseClient.rpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] }))
+      ]);
+
+      const ijinLemburData = (ijinLemburRes && ijinLemburRes.data) || [];
+      const requestData = (requestRes && requestRes.data) || [];
+      const vendorData = (vendorRes && vendorRes.data) || [];
+      const rfqData = (rfqRes && rfqRes.data) || [];
+      const poData = (poRes && poRes.data) || [];
+
+      const hasIjinLembur = ijinLemburData.length > 0;
+      const hasRequest = requestData.length > 0;
+      const hasVendor = vendorData.length > 0;
+      const hasRfq = rfqData.length > 0;
+      const hasPo = poData.length > 0;
+
+      if (!hasIjinLembur && !hasRequest && !hasVendor && !hasRfq && !hasPo) {
+        box.style.display = "flex";
+        box.style.flexDirection = "row";
+        box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
+      } else {
+        box.style.display = "block";
+        box.innerHTML = "";
+      }
+
+      // Render Tiket Ijin & Lembur
+      if (hasIjinLembur) {
+        ijinLemburData.forEach(item => {
+          const row = document.createElement('div');
+          row.style.cssText = "border:1.5px solid var(--orange); border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#fff;";
           
-          <div class="detailToggleReq" data-refno="${item.refno}" style="font-size:11px; color:var(--orange); font-weight:700; cursor:pointer; margin-bottom:8px;">▸ Lihat Detail Item</div>
-          <div class="detailContainerReq" data-refno="${item.refno}" style="display:none; margin-bottom:8px;"></div>
-          
-          <div style="display:flex; gap:8px;">
-            <button class="btnApproveReq" data-refno="${item.refno}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
-            <button class="btnRejectReq" data-refno="${item.refno}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
-          </div>
-        `;
-        box.appendChild(row);
-      });
-      document.querySelectorAll('.btnApproveReq').forEach(btn => {
-        btn.onclick = () => handleRequestApprovalDecision(btn.dataset.refno, "Approve", qrId);
-      });
-      document.querySelectorAll('.btnRejectReq').forEach(btn => {
-        btn.onclick = () => handleRequestApprovalDecision(btn.dataset.refno, "Reject", qrId);
-      });
-      document.querySelectorAll('.detailToggleReq').forEach(el => {
-        el.onclick = () => toggleWalletRequestDetail(el.dataset.refno, el);
-      });
-    }
-    if (hasVendor) {
-      vendorData.forEach(item => {
-        const row = document.createElement('div');
-        row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
-        row.innerHTML = `
-          <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Vendor - ${item.vendorname}</div>
-          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.catagory || '-'} · ${item.contactno || '-'} · Level: ${item.status}</div>
-          <div style="display:flex; gap:8px;">
-            <button class="btnApproveVendor" data-vendorid="${item.vendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
-            <button class="btnRejectVendor" data-vendorid="${item.vendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
-          </div>
-        `;
-        box.appendChild(row);
-      });
-      document.querySelectorAll('.btnApproveVendor').forEach(btn => {
-        btn.onclick = () => handleVendorApprovalDecision(btn.dataset.vendorid, "Approve", qrId);
-      });
-      document.querySelectorAll('.btnRejectVendor').forEach(btn => {
-        btn.onclick = () => handleVendorApprovalDecision(btn.dataset.vendorid, "Reject", qrId);
-      });
-    }
-    if (hasRfq) {
-      rfqData.forEach(item => {
-        const row = document.createElement('div');
-        row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
-        row.innerHTML = `
-          <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Seleksi Vendor RFQ - ${item.norfq}</div>
-          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname} · Rp ${Number(item.totalpenawaran).toLocaleString('id-ID')} · Diusulkan: ${item.diusulkanoleh}</div>
-          <div style="display:flex; gap:8px;">
-            <button class="btnApproveRfq" data-rfqvendorid="${item.rfqvendorid}" data-rfqid="${item.rfqid}" data-vendorid="${item.vendorid}" data-pin="${item.pin}" data-vendoremail="${item.vendoremail || ''}" data-norfq="${item.norfq}" data-vendorname="${item.vendorname}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
-            <button class="btnRejectRfq" data-rfqvendorid="${item.rfqvendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
-          </div>
-        `;
-        box.appendChild(row);
-      });
-      document.querySelectorAll('.btnApproveRfq').forEach(btn => {
-        btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Approve", qrId, btn.dataset);
-      });
-      document.querySelectorAll('.btnRejectRfq').forEach(btn => {
-        btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Reject", qrId, null);
-      });
-    }
-    if (hasPo) {
-      poData.forEach(item => {
-        const row = document.createElement('div');
-        row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
-        row.innerHTML = `
-          <div style="font-size:13px; font-weight:700; color:var(--charcoal);">${item.doctype} - ${item.docnumber}</div>
-          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname} · Rp ${Number(item.totalamount).toLocaleString('id-ID')} · Diajukan: ${item.submittedby}</div>
-          <div style="display:flex; gap:8px;">
-            <button class="btnApprovePo" data-poid="${item.poid}" data-docnumber="${item.docnumber}" data-doctype="${item.doctype}" data-rfqid="${item.rfqid}" data-norfq="${item.norfq}" data-vendorid="${item.vendorid}" data-vendorname="${item.vendorname}" data-totalamount="${item.totalamount}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
-            <button class="btnRejectPo" data-poid="${item.poid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
-          </div>
-        `;
-        box.appendChild(row);
-      });
-      document.querySelectorAll('.btnApprovePo').forEach(btn => {
-        btn.onclick = () => handlePoApprovalDecision(btn.dataset.poid, "Approve", qrId, btn.dataset);
-      });
-      document.querySelectorAll('.btnRejectPo').forEach(btn => {
-        btn.onclick = () => handlePoApprovalDecision(btn.dataset.poid, "Reject", qrId, null);
-      });
-    }
-    if (hasInternal) {
-      hasil.items.forEach(item => {
-        const row = document.createElement('div');
-        row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
-        row.innerHTML = `
-          <div style="font-size:13px; font-weight:700; color:var(--charcoal);">${item.type} - ${item.nama}</div>
-          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.alasan}</div>
-          <div style="display:flex; gap:8px;">
-            <button class="btnApprove" data-type="${item.type}" data-id="${item.requestId}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
-            <button class="btnReject" data-type="${item.type}" data-id="${item.requestId}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
-          </div>
-        `;
-        box.appendChild(row);
-      });
-      document.querySelectorAll('.btnApprove').forEach(btn => {
-        btn.onclick = () => handleApprovalDecision(btn.dataset.type, btn.dataset.id, "APPROVE", qrId);
-      });
-      document.querySelectorAll('.btnReject').forEach(btn => {
-        btn.onclick = () => handleApprovalDecision(btn.dataset.type, btn.dataset.id, "REJECT", qrId);
-      });
-    }
-  } catch (e) {
-    console.error("DEBUG loadApprovalIssues error:", e);
-    box.style.display = "flex";
-    box.innerHTML = "Gagal memuat data approval.";
-  }
-}
-  
-async function loadMyVouchers(qrId) {
-  try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      body: JSON.stringify({ action: "GET_MY_VOUCHERS", qrCodeId: qrId }),
-      headers: { "Content-Type": "text/plain" }
-    });
-    const hasil = await res.json();
-    document.getElementById('voucherIjinId').innerText = hasil.ijinVoucher || "-";
-    document.getElementById('voucherLemburId').innerText = hasil.lemburVoucher || "-";
+          const typeTitle = item.tipe === 'IJIN' ? '🚪 Ijin Pulang' : '⏱️ SPKL Lembur';
+          const act = item.required_action || 'APPROVE';
+          let btnLabel = '✅ Setujui (Approve)';
+          let btnBg = 'var(--orange)';
+          if (act === 'PROPOSE') {
+            btnLabel = '⚡ Usulkan (Propose)';
+            btnBg = 'linear-gradient(135deg, #F59E0B, #D97706)';
+          } else if (act === 'REVIEW') {
+            btnLabel = '🔍 Tinjau (Review)';
+            btnBg = 'linear-gradient(135deg, #8B5CF6, #6D28D9)';
+          }
 
-    const btnIjin = document.getElementById('btnAjukanIjin');
-    const btnLembur = document.getElementById('btnAjukanLembur');
+          row.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <div style="font-size:13px; font-weight:700; color:var(--charcoal);">${typeTitle}</div>
+              <span style="font-size:11px; padding:2px 8px; border-radius:999px; background:#FEF3C7; color:#92400E; font-weight:700;">Level ${item.current_level}/${item.total_levels}</span>
+            </div>
+            <div style="font-size:12px; font-weight:600; color:var(--charcoal); margin-bottom:2px;">${item.nama_pemohon || item.qrcodeid} <span style="font-weight:400; color:var(--text-muted);">(${item.kualifikasi || '-'})</span></div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
+              📅 ${item.tanggal || '-'} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}<br>
+              📝 <em>"${item.alasan || '-'}"</em>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btnApproveIjinLembur" data-id="${item.id}" data-action="${act}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:${btnBg}; color:#fff; cursor:pointer;">${btnLabel}</button>
+              <button class="btnRejectIjinLembur" data-id="${item.id}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--danger, #D9312E); cursor:pointer;">❌ Tolak</button>
+            </div>
+          `;
+          box.appendChild(row);
+        });
 
-    if (hasil.ijinLocked) {
-      btnIjin.disabled = true;
-      btnIjin.style.opacity = "0.4";
-      btnIjin.style.cursor = "not-allowed";
-    } else {
-      btnIjin.disabled = false;
-      btnIjin.style.opacity = "1";
-      btnIjin.style.cursor = "pointer";
-    }
+        box.querySelectorAll('.btnApproveIjinLembur').forEach(btn => {
+          btn.onclick = () => handleIjinLemburDecision(btn.dataset.id, btn.dataset.action, qrId);
+        });
+        box.querySelectorAll('.btnRejectIjinLembur').forEach(btn => {
+          btn.onclick = () => handleIjinLemburDecision(btn.dataset.id, 'REJECT', qrId);
+        });
+      }
 
-    if (hasil.lemburLocked) {
-      btnLembur.disabled = true;
-      btnLembur.style.opacity = "0.4";
-      btnLembur.style.cursor = "not-allowed";
-    } else {
-      btnLembur.disabled = false;
-      btnLembur.style.opacity = "1";
-      btnLembur.style.cursor = "pointer";
+      // Render Request, Vendor, RFQ, PO
+      if (hasRequest) {
+        requestData.forEach(item => {
+          const row = document.createElement('div');
+          row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
+          row.innerHTML = `
+            <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Material Request - ${item.refno}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">Proyek ${item.projectid || '-'} • ${item.purpose || '-'} • Level: ${item.currentlevel}</div>
+            <div class="detailToggleReq" data-refno="${item.refno}" style="font-size:11px; color:var(--orange); font-weight:700; cursor:pointer; margin-bottom:8px;">▾ Lihat Detail Item</div>
+            <div class="detailContainerReq" data-refno="${item.refno}" style="display:none; margin-bottom:8px;"></div>
+            <div style="display:flex; gap:8px;">
+              <button class="btnApproveReq" data-refno="${item.refno}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+              <button class="btnRejectReq" data-refno="${item.refno}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
+            </div>
+          `;
+          box.appendChild(row);
+        });
+        box.querySelectorAll('.btnApproveReq').forEach(btn => {
+          btn.onclick = () => handleRequestApprovalDecision(btn.dataset.refno, "Approve", qrId);
+        });
+        box.querySelectorAll('.btnRejectReq').forEach(btn => {
+          btn.onclick = () => handleRequestApprovalDecision(btn.dataset.refno, "Reject", qrId);
+        });
+        box.querySelectorAll('.detailToggleReq').forEach(el => {
+          el.onclick = () => toggleWalletRequestDetail(el.dataset.refno, el);
+        });
+      }
+
+      if (hasVendor) {
+        vendorData.forEach(item => {
+          const row = document.createElement('div');
+          row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
+          row.innerHTML = `
+            <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Vendor - ${item.vendorname}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.catagory || '-'} • ${item.contactno || '-'} • Level: ${item.status}</div>
+            <div style="display:flex; gap:8px;">
+              <button class="btnApproveVendor" data-vendorid="${item.vendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+              <button class="btnRejectVendor" data-vendorid="${item.vendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
+            </div>
+          `;
+          box.appendChild(row);
+        });
+        box.querySelectorAll('.btnApproveVendor').forEach(btn => {
+          btn.onclick = () => handleVendorApprovalDecision(btn.dataset.vendorid, "Approve", qrId);
+        });
+        box.querySelectorAll('.btnRejectVendor').forEach(btn => {
+          btn.onclick = () => handleVendorApprovalDecision(btn.dataset.vendorid, "Reject", qrId);
+        });
+      }
+
+      if (hasRfq) {
+        rfqData.forEach(item => {
+          const row = document.createElement('div');
+          row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
+          row.innerHTML = `
+            <div style="font-size:13px; font-weight:700; color:var(--charcoal);">Seleksi Vendor RFQ - ${item.norfq}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname} • Rp ${Number(item.totalpenawaran).toLocaleString('id-ID')} • Diusulkan: ${item.diusulkanoleh}</div>
+            <div style="display:flex; gap:8px;">
+              <button class="btnApproveRfq" data-rfqvendorid="${item.rfqvendorid}" data-rfqid="${item.rfqid}" data-vendorid="${item.vendorid}" data-pin="${item.pin}" data-vendoremail="${item.vendoremail || ''}" data-norfq="${item.norfq}" data-vendorname="${item.vendorname}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+              <button class="btnRejectRfq" data-rfqvendorid="${item.rfqvendorid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
+            </div>
+          `;
+          box.appendChild(row);
+        });
+        box.querySelectorAll('.btnApproveRfq').forEach(btn => {
+          btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Approve", qrId, btn.dataset);
+        });
+        box.querySelectorAll('.btnRejectRfq').forEach(btn => {
+          btn.onclick = () => handleRfqApprovalDecision(btn.dataset.rfqvendorid, "Reject", qrId, null);
+        });
+      }
+
+      if (hasPo) {
+        poData.forEach(item => {
+          const row = document.createElement('div');
+          row.style.cssText = "border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; text-align:left;";
+          row.innerHTML = `
+            <div style="font-size:13px; font-weight:700; color:var(--charcoal);">${item.doctype === 'SO' ? 'Service Order' : 'Purchase Order'} - ${item.docnumber}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${item.vendorname || '-'} • Rp ${Number(item.totalamount).toLocaleString('id-ID')} • Level: ${item.status}</div>
+            <div style="display:flex; gap:8px;">
+              <button class="btnApprovePo" data-poid="${item.poid}" data-vendorname="${item.vendorname || ''}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">Setujui</button>
+              <button class="btnRejectPo" data-poid="${item.poid}" style="flex:1; padding:8px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--text-muted); cursor:pointer;">Tolak</button>
+            </div>
+          `;
+          box.appendChild(row);
+        });
+        box.querySelectorAll('.btnApprovePo').forEach(btn => {
+          btn.onclick = () => handlePoApprovalDecision(btn.dataset.poid, "Approve", qrId, btn.dataset);
+        });
+        box.querySelectorAll('.btnRejectPo').forEach(btn => {
+          btn.onclick = () => handlePoApprovalDecision(btn.dataset.poid, "Reject", qrId, null);
+        });
+      }
+
+    } catch (e) {
+      console.error("DEBUG loadApprovalIssues error:", e);
+      box.style.display = "flex";
+      box.innerHTML = "Gagal memuat data approval: " + e.message;
     }
-  } catch (e) {
-    console.warn("Gagal ambil voucher:", e.message);
   }
-}
-  
-async function handleApprovalDecision(type, requestId, decision, approverQrId) {
-  try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      body: JSON.stringify({ action: "PROCESS_APPROVAL", type: type, requestId: requestId, qrCodeId: approverQrId, decision: decision }),
-      headers: { "Content-Type": "text/plain" }
-    });
-    const hasil = await res.json();
-    alert(hasil.message || "Diproses.");
-    loadApprovalIssues(approverQrId);
-  } catch (e) {
-    alert("Gagal memproses: " + e.message);
+
+  async function loadMyVouchers(qrId) {
+    try {
+      const { data: hasil, error } = await supabaseClient.rpc('get_my_active_vouchers_by_qrcode', { p_qrcode: qrId });
+      if (error) throw error;
+      
+      document.getElementById('voucherIjinId').innerText = (hasil && hasil.ijinVoucher) || "-";
+      document.getElementById('voucherLemburId').innerText = (hasil && hasil.lemburVoucher) || "-";
+
+      const btnIjin = document.getElementById('btnAjukanIjin');
+      const btnLembur = document.getElementById('btnAjukanLembur');
+
+      if (hasil && hasil.ijinLocked) {
+        btnIjin.disabled = true;
+        btnIjin.style.opacity = "0.4";
+        btnIjin.style.cursor = "not-allowed";
+      } else {
+        btnIjin.disabled = false;
+        btnIjin.style.opacity = "1";
+        btnIjin.style.cursor = "pointer";
+      }
+
+      if (hasil && hasil.lemburLocked) {
+        btnLembur.disabled = true;
+        btnLembur.style.opacity = "0.4";
+        btnLembur.style.cursor = "not-allowed";
+      } else {
+        btnLembur.disabled = false;
+        btnLembur.style.opacity = "1";
+        btnLembur.style.cursor = "pointer";
+      }
+    } catch (e) {
+      console.error("DEBUG loadMyVouchers error:", e);
+    }
   }
-}
 
   async function handleVendorApprovalDecision(vendorId, decision, qrId) {
-  const confirmMsg = decision === 'Approve' ? `Setujui vendor ini?` : `Tolak vendor ini?`;
-  if (!confirm(confirmMsg)) return;
+    const confirmMsg = decision === 'Approve' ? 'Setujui vendor ini?' : 'Tolak vendor ini?';
+    if (!confirm(confirmMsg)) return;
 
-  let reason = null;
-  if (decision === 'Reject') {
-    reason = prompt(`Alasan penolakan (opsional):`) || '';
-  }
+    let reason = null;
+    if (decision === 'Reject') {
+      reason = prompt('Alasan penolakan (opsional):') || '';
+    }
 
-  try {
-    const { error } = await supabaseClient.rpc('process_vendor_approval_by_qrcode', {
-      p_qrcode: qrId,
-      p_vendor_id: Number(vendorId),
-      p_decision: decision,
-      p_reason: reason
-    });
-    if (error) throw error;
-    alert(`Vendor berhasil diproses.`);
-    loadApprovalIssues(qrId);
-  } catch (e) {
-    alert("Gagal memproses: " + e.message);
+    try {
+      const { error } = await supabaseClient.rpc('process_vendor_approval_by_qrcode', {
+        p_qrcode: qrId,
+        p_vendor_id: Number(vendorId),
+        p_decision: decision,
+        p_reason: reason
+      });
+      if (error) throw error;
+      alert('Vendor berhasil diproses.');
+      loadApprovalIssues(qrId);
+    } catch (e) {
+      alert("Gagal memproses: " + e.message);
+    }
   }
-}
 
   async function handleRfqApprovalDecision(rfqVendorId, decision, qrId, extra) {
-  const confirmMsg = decision === 'Approve' ? `Setujui hasil seleksi vendor RFQ ini?` : `Tolak hasil seleksi vendor RFQ ini?`;
-  if (!confirm(confirmMsg)) return;
+    const confirmMsg = decision === 'Approve' ? 'Setujui hasil seleksi vendor RFQ ini?' : 'Tolak hasil seleksi vendor RFQ ini?';
+    if (!confirm(confirmMsg)) return;
 
-  let reason = null;
-  if (decision === 'Reject') {
-    reason = prompt(`Alasan penolakan (opsional):`) || '';
-  }
-
-  try {
-    const { error } = await supabaseClient.rpc('process_rfq_approval_by_qrcode', {
-      p_qrcode: qrId,
-      p_rfqvendorid: Number(rfqVendorId),
-      p_decision: decision,
-      p_reason: reason
-    });
-    if (error) throw error;
-
-    if (decision === 'Approve' && extra && extra.vendoremail) {
-      sendRfqApprovalEmail(extra).catch(e => console.warn('Gagal kirim email hasil seleksi ke vendor:', e.message));
+    let reason = null;
+    if (decision === 'Reject') {
+      reason = prompt('Alasan penolakan (opsional):') || '';
     }
 
-    alert(`RFQ berhasil diproses.`);
-    loadApprovalIssues(qrId);
-  } catch (e) {
-    alert("Gagal memproses: " + e.message);
-  }
-}
+    try {
+      const { error } = await supabaseClient.rpc('process_rfq_approval_by_qrcode', {
+        p_qrcode: qrId,
+        p_rfqvendorid: Number(rfqVendorId),
+        p_decision: decision,
+        p_reason: reason
+      });
+      if (error) throw error;
 
-async function sendRfqApprovalEmail(extra) {
-  const link = `https://rovansyahriza-crv.github.io/SMMS-BIMA/rfq-confirm.html?rfq=${extra.rfqid}&vendor=${extra.vendorid}`;
-  await fetch(RFQ_EMAIL_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({
-      action: "SEND_SIMPLE_EMAIL",
-      to: extra.vendoremail,
-      subject: `Hasil Seleksi Vendor RFQ ${extra.norfq}`,
-      body: `Selamat, ${extra.vendorname} ditunjuk sebagai vendor terpilih untuk RFQ ${extra.norfq}.\n\nBuka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:\n${link}\n\nMasukkan PIN Anda: ${extra.pin}`
-    })
-  });
-}
+      if (decision === 'Approve' && extra && extra.vendoremail) {
+        sendRfqApprovalEmail(extra).catch(e => console.warn('Gagal kirim email hasil seleksi ke vendor:', e.message));
+      }
+
+      alert('RFQ berhasil diproses.');
+      loadApprovalIssues(qrId);
+    } catch (e) {
+      alert("Gagal memproses: " + e.message);
+    }
+  }
+
+  async function sendRfqApprovalEmail(extra) {
+    const link = "https://rovansyahriza-crv.github.io/SMMS-BIMA/rfq-confirm.html?rfq=" + extra.rfqid + "&vendor=" + extra.vendorid;
+    await fetch(RFQ_EMAIL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "SEND_SIMPLE_EMAIL",
+        to: extra.vendoremail,
+        subject: "Hasil Seleksi Vendor RFQ " + extra.norfq,
+        body: "Selamat, " + extra.vendorname + " ditunjuk sebagai vendor terpilih untuk RFQ " + extra.norfq + ".
+
+Buka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:
+" + link + "
+
+Masukkan PIN Anda: " + extra.pin
+      })
+    });
+  }
 
   async function handlePoApprovalDecision(poId, decision, qrId, extra) {
-  const confirmMsg = decision === 'Approve' ? `Setujui PO/SO ini?` : `Tolak PO/SO ini?`;
-  if (!confirm(confirmMsg)) return;
+    const confirmMsg = decision === 'Approve' ? 'Setujui PO/SO ini?' : 'Tolak PO/SO ini?';
+    if (!confirm(confirmMsg)) return;
 
-  let reason = null;
-  if (decision === 'Reject') {
-    reason = prompt(`Alasan penolakan (opsional):`) || '';
+    let reason = null;
+    if (decision === 'Reject') {
+      reason = prompt('Alasan penolakan (opsional):') || '';
+    }
+
+    try {
+      const { error } = await supabaseClient.rpc('process_po_approval_by_qrcode', {
+        p_qrcode: qrId,
+        p_poid: Number(poId),
+        p_decision: decision,
+        p_reason: reason
+      });
+      if (error) throw error;
+
+      if (decision === 'Approve' && extra) {
+        sendPoApprovalEmail(extra).catch(e => console.warn('Gagal kirim PDF PO/SO:', e.message));
+      }
+
+      alert('PO/SO berhasil diproses.');
+      loadApprovalIssues(qrId);
+    } catch (e) {
+      alert("Gagal memproses: " + e.message);
+    }
   }
 
-  try {
-    const { error } = await supabaseClient.rpc('process_po_approval_by_qrcode', {
-      p_qrcode: qrId,
-      p_poid: Number(poId),
-      p_decision: decision,
-      p_reason: reason
-    });
-    if (error) throw error;
+  function terbilang(n) {
+    n = Math.floor(Math.abs(Number(n) || 0));
+    const ones = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh',
+      'sebelas', 'dua belas', 'tiga belas', 'empat belas', 'lima belas', 'enam belas', 'tujuh belas', 'delapan belas', 'sembilan belas'];
 
-    if (decision === 'Approve' && extra) {
-      sendPoApprovalEmail(extra).catch(e => console.warn('Gagal kirim PO/SO ke vendor:', e.message));
+    function words(num) {
+      if (num < 20) return ones[num];
+      if (num < 100) {
+        const sisa = num % 10;
+        return words(Math.floor(num / 10)) + ' puluh' + (sisa ? ' ' + words(sisa) : '');
+      }
+      if (num < 200) return 'seratus' + (num % 100 ? ' ' + words(num % 100) : '');
+      if (num < 1000) {
+        const sisa = num % 100;
+        return words(Math.floor(num / 100)) + ' ratus' + (sisa ? ' ' + words(sisa) : '');
+      }
+      if (num < 2000) return 'seribu' + (num % 1000 ? ' ' + words(num % 1000) : '');
+      if (num < 1000000) {
+        const sisa = num % 1000;
+        return words(Math.floor(num / 1000)) + ' ribu' + (sisa ? ' ' + words(sisa) : '');
+      }
+      if (num < 1000000000) {
+        const sisa = num % 1000000;
+        return words(Math.floor(num / 1000000)) + ' juta' + (sisa ? ' ' + words(sisa) : '');
+      }
+      if (num < 1000000000000) {
+        const sisa = num % 1000000000;
+        return words(Math.floor(num / 1000000000)) + ' miliar' + (sisa ? ' ' + words(sisa) : '');
+      }
+      return words(Math.floor(num / 1000000000000)) + ' triliun' + (num % 1000000000000 ? ' ' + words(num % 1000000000000) : '');
     }
 
-    alert(`PO/SO berhasil diproses.`);
-    loadApprovalIssues(qrId);
-  } catch (e) {
-    alert("Gagal memproses: " + e.message);
-  }
-}
-
-function terbilang(n) {
-  n = Math.floor(Math.abs(Number(n) || 0));
-  const ones = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh',
-    'sebelas', 'dua belas', 'tiga belas', 'empat belas', 'lima belas', 'enam belas', 'tujuh belas', 'delapan belas', 'sembilan belas'];
-
-  function words(num) {
-    if (num < 20) return ones[num];
-    if (num < 100) {
-      const sisa = num % 10;
-      return words(Math.floor(num / 10)) + ' puluh' + (sisa ? ' ' + words(sisa) : '');
-    }
-    if (num < 200) return 'seratus' + (num % 100 ? ' ' + words(num % 100) : '');
-    if (num < 1000) {
-      const sisa = num % 100;
-      return words(Math.floor(num / 100)) + ' ratus' + (sisa ? ' ' + words(sisa) : '');
-    }
-    if (num < 2000) return 'seribu' + (num % 1000 ? ' ' + words(num % 1000) : '');
-    if (num < 1000000) {
-      const sisa = num % 1000;
-      return words(Math.floor(num / 1000)) + ' ribu' + (sisa ? ' ' + words(sisa) : '');
-    }
-    if (num < 1000000000) {
-      const sisa = num % 1000000;
-      return words(Math.floor(num / 1000000)) + ' juta' + (sisa ? ' ' + words(sisa) : '');
-    }
-    if (num < 1000000000000) {
-      const sisa = num % 1000000000;
-      return words(Math.floor(num / 1000000000)) + ' miliar' + (sisa ? ' ' + words(sisa) : '');
-    }
-    const sisa = num % 1000000000000;
-    return words(Math.floor(num / 1000000000000)) + ' triliun' + (sisa ? ' ' + words(sisa) : '');
+    if (n === 0) return 'nol rupiah';
+    return words(n) + ' rupiah';
   }
 
-  if (n === 0) return 'nol rupiah';
-  return words(n).trim() + ' rupiah';
-}
-
-function generateQrDataUrl(text, size) {
-  size = size || 200;
-  return new Promise((resolve) => {
-    const tempDiv = document.createElement('div');
-    tempDiv.style.cssText = 'position:fixed; left:-9999px; top:-9999px;';
-    document.body.appendChild(tempDiv);
-    new QRCode(tempDiv, { text: text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
-    setTimeout(() => {
-      const canvas = tempDiv.querySelector('canvas');
-      const dataUrl = canvas ? canvas.toDataURL('image/png') : null;
-      document.body.removeChild(tempDiv);
-      resolve(dataUrl);
-    }, 100);
-  });
-}
-
-async function generatePoPdfBase64(poHeader, vendorInfo, termData, items) {
+  async function generatePoPdfBase64(poHeader, vendorInfo, termData, items) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
