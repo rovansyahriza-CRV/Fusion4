@@ -315,12 +315,41 @@ btnRetry.onclick = () => location.reload();
 async function callApi(action, extra) {
   extra = extra || {};
 
-  // Sudah dipindah ke Supabase (RPC, SECURITY DEFINER) -- lihat migrasi_absensi_lembur_ijin_batch1/2.sql
+  // 1. GPS FIND_NEAREST_LOCATION -- Supabase Haversine RPC
+  if (action === "FIND_NEAREST_LOCATION") {
+    const { data, error } = await supabaseClient.rpc('find_nearest_location', {
+      p_lat: extra.lat,
+      p_lng: extra.lng
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // 2. GET_ALL_FACE_DATA -- Supabase RPC
+  if (action === "GET_ALL_FACE_DATA") {
+    const { data, error } = await supabaseClient.rpc('get_all_face_data');
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // 3. GET_PERSON_DATA / GET_FACE_DESCRIPTOR -- Supabase RPC
+  if (action === "GET_PERSON_DATA" || action === "GET_FACE_DESCRIPTOR") {
+    const qrId = extra.qrCodeId || extra.qrcodeid || "";
+    const { data, error } = await supabaseClient.rpc('get_person_face_data', {
+      p_qrcode: qrId
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // 4. CHECK_IJIN_PENDING -- Supabase RPC
   if (action === "CHECK_IJIN_PENDING") {
     const { data, error } = await supabaseClient.rpc('check_ijin_keluar_pending', { p_qrcodeid: extra.qrCodeId });
     if (error) throw new Error(error.message);
     return data;
   }
+
+  // 5. SUBMIT_IJIN_KELUAR -- Supabase RPC
   if (action === "SUBMIT_IJIN_KELUAR") {
     const { data, error } = await supabaseClient.rpc('submit_ijin_keluar', {
       p_qrcodeid: extra.qrCodeId, p_lokasi: extra.lokasi, p_kodeijin: extra.kodeIjin
@@ -328,6 +357,8 @@ async function callApi(action, extra) {
     if (error) throw new Error(error.message);
     return data;
   }
+
+  // 6. SUBMIT_LEMBUR -- Supabase RPC
   if (action === "SUBMIT_LEMBUR") {
     const { data, error } = await supabaseClient.rpc('submit_absensi_lembur', {
       p_qrcodeid: extra.qrCodeId, p_lokasi: extra.lokasi, p_pinvoucher: extra.pinVoucher || ""
@@ -336,7 +367,27 @@ async function callApi(action, extra) {
     return data;
   }
 
-  // Aksi lain masih di Apps Script (belum dimigrasi)
+  // 7. PINDAH LOKASI -- Supabase RPC
+  if (action === "SUBMIT_PINDAH_LOKASI") {
+    const { data, error } = await supabaseClient.rpc('submit_pindah_lokasi', {
+      p_qrcode: extra.qrCodeId,
+      p_lokasi_tujuan: extra.lokasiTujuan,
+      p_alasan: extra.alasan || "",
+      p_lokasi_lama: extra.lokasiLama || ""
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  if (action === "GET_PINDAH_STATUS") {
+    const { data, error } = await supabaseClient.rpc('get_pindah_lokasi_status', {
+      p_qrcode: extra.qrCodeId
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // Fallback jika ada aksi lain
   const body = Object.assign({ action: action }, extra);
   const res = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
