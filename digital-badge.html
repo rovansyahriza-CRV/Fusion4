@@ -295,6 +295,20 @@ async function submitPin() {
       document.getElementById('badgeNama').innerText = hasil.nama || "-";
       document.getElementById('badgeJabatan').innerText = hasil.kualifikasi || "-";
       document.getElementById('badgeId').innerText = qrId;
+
+      // Generate QR Code di kartu
+      const qrbox = document.getElementById('qrbox');
+      if (qrbox && typeof QRCode !== 'undefined') {
+        qrbox.innerHTML = '';
+        new QRCode(qrbox, {
+          text: qrId,
+          width: 115,
+          height: 115,
+          colorDark: "#000000",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
       document.getElementById('linkGantiPassword').href = "change-password.html?QrCodeId=" + encodeURIComponent(qrId);
 
       const fotoEl = document.getElementById('badgeFoto');
