@@ -443,6 +443,20 @@ async function submitPin() {
     }
   }
 
+  async function safeRpc(fnName, params) {
+    try {
+      const { data, error } = await supabaseClient.rpc(fnName, params);
+      if (error) {
+        console.warn("safeRpc error on " + fnName + ":", error);
+        return [];
+      }
+      return data || [];
+    } catch (e) {
+      console.warn("safeRpc exception on " + fnName + ":", e);
+      return [];
+    }
+  }
+
   async function loadApprovalIssues(qrId) {
     const box = document.getElementById('approvalIssuesBox');
     if (!box || !qrId) return;
@@ -450,37 +464,32 @@ async function submitPin() {
     box.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:6px 0;">Memeriksa antrean approval...</div>';
 
     try {
-      // 1. Ambil data dari Supabase (Cepat < 100ms)
-      const [ijinLemburRes, requestRes, vendorRes, rfqRes, poRes] = await Promise.all([
-        supabaseClient.rpc('get_pending_ijin_lembur_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] })),
-        supabaseClient.rpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] })),
-        supabaseClient.rpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] })),
-        supabaseClient.rpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] })),
-        supabaseClient.rpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId }).catch(e => ({ data: [] }))
+      // Ambil semua data approval dari Supabase secara aman & paralel
+      const [ijinLemburData, requestData, vendorData, rfqData, poData] = await Promise.all([
+        safeRpc('get_pending_ijin_lembur_approvals_by_qrcode', { p_qrcode: qrId }),
+        safeRpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
+        safeRpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
+        safeRpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }),
+        safeRpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId })
       ]);
 
-      const ijinLemburData = (ijinLemburRes && ijinLemburRes.data) || [];
-      const requestData = (requestRes && requestRes.data) || [];
-      const vendorData = (vendorRes && vendorRes.data) || [];
-      const rfqData = (rfqRes && rfqRes.data) || [];
-      const poData = (poRes && poRes.data) || [];
-
-      const hasIjinLembur = ijinLemburData.length > 0;
-      const hasRequest = requestData.length > 0;
-      const hasVendor = vendorData.length > 0;
-      const hasRfq = rfqData.length > 0;
-      const hasPo = poData.length > 0;
+      const hasIjinLembur = ijinLemburData && ijinLemburData.length > 0;
+      const hasRequest = requestData && requestData.length > 0;
+      const hasVendor = vendorData && vendorData.length > 0;
+      const hasRfq = rfqData && rfqData.length > 0;
+      const hasPo = poData && poData.length > 0;
 
       if (!hasIjinLembur && !hasRequest && !hasVendor && !hasRfq && !hasPo) {
         box.style.display = "flex";
         box.style.flexDirection = "row";
         box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
-      } else {
-        box.style.display = "block";
-        box.innerHTML = "";
+        return;
       }
 
-      // Render Tiket Ijin & Lembur
+      box.style.display = "block";
+      box.innerHTML = "";
+
+      // 1. Render Tiket Ijin & Lembur
       if (hasIjinLembur) {
         ijinLemburData.forEach(item => {
           const row = document.createElement('div');
@@ -524,7 +533,7 @@ async function submitPin() {
         });
       }
 
-      // Render Request, Vendor, RFQ, PO
+      // 2. Render Request
       if (hasRequest) {
         requestData.forEach(item => {
           const row = document.createElement('div');
@@ -552,6 +561,7 @@ async function submitPin() {
         });
       }
 
+      // 3. Render Vendor
       if (hasVendor) {
         vendorData.forEach(item => {
           const row = document.createElement('div');
@@ -574,6 +584,7 @@ async function submitPin() {
         });
       }
 
+      // 4. Render RFQ
       if (hasRfq) {
         rfqData.forEach(item => {
           const row = document.createElement('div');
@@ -596,6 +607,7 @@ async function submitPin() {
         });
       }
 
+      // 5. Render PO
       if (hasPo) {
         poData.forEach(item => {
           const row = document.createElement('div');
@@ -714,20 +726,16 @@ async function submitPin() {
   }
 
   async function sendRfqApprovalEmail(extra) {
-    const link = "https://rovansyahriza-crv.github.io/SMMS-BIMA/rfq-confirm.html?rfq=" + extra.rfqid + "&vendor=" + extra.vendorid;
+    const link = 'https://rovansyahriza-crv.github.io/SMMS-BIMA/rfq-confirm.html?rfq=' + extra.rfqid + '&vendor=' + extra.vendorid;
+    const emailBody = 'Selamat, ' + extra.vendorname + ' ditunjuk sebagai vendor terpilih untuk RFQ ' + extra.norfq + '.\n\nBuka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:\n' + link + '\n\nMasukkan PIN Anda: ' + extra.pin;
     await fetch(RFQ_EMAIL_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
-        action: "SEND_SIMPLE_EMAIL",
+        action: 'SEND_SIMPLE_EMAIL',
         to: extra.vendoremail,
-        subject: "Hasil Seleksi Vendor RFQ " + extra.norfq,
-        body: "Selamat, " + extra.vendorname + " ditunjuk sebagai vendor terpilih untuk RFQ " + extra.norfq + ".
-
-Buka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:
-" + link + "
-
-Masukkan PIN Anda: " + extra.pin
+        subject: 'Hasil Seleksi Vendor RFQ ' + extra.norfq,
+        body: emailBody
       })
     });
   }
