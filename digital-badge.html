@@ -12,7 +12,43 @@
 <link rel="apple-touch-icon" href="./badge-apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="./badge-favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="./badge-favicon-16.png">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js">
+<div id="cutiOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px;">
+    <h3 style="margin:0 0 6px; font-size:17px; color:var(--charcoal);">🏖️ Form Pengajuan Cuti</h3>
+    <p style="margin:0 0 14px; font-size:12px; color:var(--text-muted);">Sisa kuota cuti tahunan: <b id="cutiModalSaldo" style="color:#2B6CB0;">12 Hari</b></p>
+    
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Jenis Cuti</label>
+    <select id="cutiJenis" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box; margin-bottom:10px;">
+      <option value="CUTI_TAHUNAN">Cuti Tahunan (Potong Saldo)</option>
+      <option value="CUTI_SAKIT">Cuti Sakit (Surat Dokter)</option>
+      <option value="CUTI_MELAHIRKAN">Cuti Melahirkan</option>
+      <option value="CUTI_KHUSUS">Cuti Khusus / Alasan Penting</option>
+    </select>
+
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Mulai</label>
+        <input type="date" id="cutiTglMulai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Selesai</label>
+        <input type="date" id="cutiTglSelesai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+    </div>
+
+    <div id="cutiDurasiInfo" style="font-size:12px; font-weight:600; color:#2B6CB0; margin-bottom:10px; padding:8px 10px; background:#EBF8FF; border-radius:8px; display:none;">Total: 0 Hari Kerja</div>
+
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Alasan / Keterangan</label>
+    <textarea id="cutiAlasan" rows="3" placeholder="Tulis keperluan cuti..." style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box; margin-bottom:12px;"></textarea>
+
+    <button id="btnSubmitCuti" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#2B6CB0; color:#fff; cursor:pointer;">Ajukan Cuti ke Atasan</button>
+    <button id="btnCancelCuti" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
+    <div id="cutiMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
+  </div>
+</div>
+
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -152,13 +188,15 @@
     <button id="btnAbsenSekarang" class="btn-block" style="display:block; width:100%; padding:14px; margin-top:16px; font-size:15px; font-weight:700; letter-spacing:0.5px; border:none; border-radius:12px; background:linear-gradient(135deg, var(--orange), var(--orange-dark)); color:#fff; cursor:pointer; box-shadow:0 8px 20px rgba(232,86,44,0.38); position:relative; z-index:1;">ABSEN</button>
   </div>
   
-  <div style="display:flex; gap:10px; margin:10px 36px 0;">
-    <button id="btnAjukanIjin" style="flex:1; padding:12px; font-size:14px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">IJIN</button>
-    <button id="btnAjukanLembur" style="flex:1; padding:12px; font-size:14px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">LEMBUR</button>
+  <div style="display:flex; gap:8px; margin:10px 16px 0;">
+    <button id="btnAjukanIjin" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer; text-align:center;">🏃 IJIN</button>
+    <button id="btnAjukanLembur" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer; text-align:center;">⚡ LEMBUR</button>
+    <button id="btnAjukanCuti" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid #2B6CB0; border-radius:12px; background:#fff; color:#2B6CB0; cursor:pointer; text-align:center;">🏖️ CUTI</button>
   </div>
-  <div style="display:flex; gap:10px; margin:8px 36px 0;">
-    <div style="flex:1; text-align:center; font-size:12px; color:var(--text-muted);">ID Voucher:<br><span id="voucherIjinId" style="font-size:14px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
-    <div style="flex:1; text-align:center; font-size:12px; color:var(--text-muted);">ID Voucher:<br><span id="voucherLemburId" style="font-size:14px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
+  <div style="display:flex; gap:8px; margin:8px 16px 0;">
+    <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">ID Voucher:<br><span id="voucherIjinId" style="font-size:13px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
+    <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">ID Voucher:<br><span id="voucherLemburId" style="font-size:13px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
+    <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">Sisa Kuota:<br><span id="sisaCutiVal" style="font-size:13px; font-weight:700; color:#2B6CB0; font-family:monospace;">12 Hari</span></div>
   </div>
 
   <div style="background:#fff; border-radius:20px; margin:0 16px 16px; padding:20px; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
@@ -377,6 +415,112 @@ async function submitPin() {
 
   document.getElementById('btnAjukanIjin').onclick = () => openRequestForm("IJIN");
   document.getElementById('btnAjukanLembur').onclick = () => openRequestForm("LEMBUR");
+
+  // CUTI MODAL LOGIC
+  function updateCutiDurasi() {
+    const tglM = document.getElementById('cutiTglMulai').value;
+    const tglS = document.getElementById('cutiTglSelesai').value;
+    const infoEl = document.getElementById('cutiDurasiInfo');
+    if (!tglM || !tglS) {
+      infoEl.style.display = 'none';
+      return;
+    }
+    const d1 = new Date(tglM);
+    const d2 = new Date(tglS);
+    const diffTime = d2 - d1;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    if (diffDays <= 0) {
+      infoEl.style.display = 'block';
+      infoEl.style.color = 'var(--danger)';
+      infoEl.style.background = 'var(--danger-bg)';
+      infoEl.innerText = '⚠️ Tanggal selesai harus sama atau setelah tanggal mulai.';
+    } else {
+      infoEl.style.display = 'block';
+      infoEl.style.color = '#2B6CB0';
+      infoEl.style.background = '#EBF8FF';
+      infoEl.innerText = '⏱️ Total Durasi: ' + diffDays + ' Hari Kerja';
+    }
+  }
+
+  document.getElementById('cutiTglMulai').onchange = updateCutiDurasi;
+  document.getElementById('cutiTglSelesai').onchange = updateCutiDurasi;
+
+  document.getElementById('btnAjukanCuti').onclick = () => {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('cutiTglMulai').value = today;
+    document.getElementById('cutiTglSelesai').value = today;
+    document.getElementById('cutiAlasan').value = '';
+    document.getElementById('cutiMsg').style.display = 'none';
+    updateCutiDurasi();
+    document.getElementById('cutiOverlay').style.display = 'flex';
+  };
+
+  document.getElementById('btnCancelCuti').onclick = () => {
+    document.getElementById('cutiOverlay').style.display = 'none';
+  };
+
+  document.getElementById('btnSubmitCuti').onclick = async () => {
+    const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+    const jenis = document.getElementById('cutiJenis').value;
+    const tglM = document.getElementById('cutiTglMulai').value;
+    const tglS = document.getElementById('cutiTglSelesai').value;
+    const alasan = document.getElementById('cutiAlasan').value.trim();
+    const msgEl = document.getElementById('cutiMsg');
+
+    if (!tglM || !tglS) {
+      msgEl.style.color = "var(--danger)";
+      msgEl.innerText = "⚠️ Tanggal mulai dan selesai wajib diisi.";
+      msgEl.style.display = "block";
+      return;
+    }
+    if (tglS < tglM) {
+      msgEl.style.color = "var(--danger)";
+      msgEl.innerText = "⚠️ Tanggal selesai tidak boleh lebih awal dari tanggal mulai.";
+      msgEl.style.display = "block";
+      return;
+    }
+    if (!alasan) {
+      msgEl.style.color = "var(--danger)";
+      msgEl.innerText = "⚠️ Alasan / keperluan cuti wajib diisi.";
+      msgEl.style.display = "block";
+      return;
+    }
+
+    const btn = document.getElementById('btnSubmitCuti');
+    btn.disabled = true;
+    btn.innerText = "Mengirim Pengajuan...";
+    msgEl.style.display = "none";
+
+    try {
+      const { data: res, error } = await supabaseClient.rpc('submit_pengajuan_cuti', {
+        p_qrcode: qrId,
+        p_jenis_cuti: jenis,
+        p_tgl_mulai: tglM,
+        p_tgl_selesai: tglS,
+        p_alasan: alasan,
+        p_surat_dokter_url: ''
+      });
+      if (error) throw error;
+
+      if (res && res.status === 'SUCCESS') {
+        msgEl.style.color = "var(--green, #178A4C)";
+        msgEl.innerText = "✅ " + res.message;
+        msgEl.style.display = "block";
+        loadMyVouchers(qrId);
+        loadApprovalIssues(qrId);
+        setTimeout(() => { document.getElementById('cutiOverlay').style.display = "none"; }, 2000);
+      } else {
+        throw new Error((res && res.message) || 'Gagal mengajukan cuti.');
+      }
+    } catch (e) {
+      msgEl.style.color = "var(--danger, #D9312E)";
+      msgEl.innerText = "⚠️ " + e.message;
+      msgEl.style.display = "block";
+    }
+
+    btn.disabled = false;
+    btn.innerText = "Ajukan Cuti ke Atasan";
+  };
   document.getElementById('btnBatalRequest').onclick = () => {
     document.getElementById('requestOverlay').style.display = "none";
   };
@@ -509,7 +653,9 @@ async function submitPin() {
           const row = document.createElement('div');
           row.style.cssText = "border:1.5px solid var(--orange); border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#fff;";
           
-          const typeTitle = item.tipe === 'IJIN' ? '🚪 Ijin Pulang' : '⏱️ SPKL Lembur';
+          let typeTitle = '🚪 Ijin Pulang';
+          if (item.tipe === 'LEMBUR') typeTitle = '⏱️ SPKL Lembur';
+          else if (item.tipe === 'CUTI') typeTitle = '🏖️ Pengajuan Cuti (' + (item.jumlah_hari || 1) + ' Hari)';
           const act = item.required_action || 'APPROVE';
           let btnLabel = '✅ Setujui (Approve)';
           let btnBg = 'var(--orange)';
@@ -528,7 +674,7 @@ async function submitPin() {
             </div>
             <div style="font-size:12px; font-weight:600; color:var(--charcoal); margin-bottom:2px;">${item.nama_pemohon || item.qrcodeid} <span style="font-weight:400; color:var(--text-muted);">(${item.kualifikasi || '-'})</span></div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
-              📅 ${item.tanggal || '-'} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}<br>
+              📅 ${item.tipe === 'CUTI' && item.tanggal_selesai ? (item.tanggal_mulai + ' s/d ' + item.tanggal_selesai) : (item.tanggal || '-')} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}<br>
               📝 <em>"${item.alasan || '-'}"</em>
             </div>
             <div style="display:flex; gap:8px;">
@@ -658,6 +804,27 @@ async function submitPin() {
       
       document.getElementById('voucherIjinId').innerText = (hasil && hasil.ijinVoucher) || "-";
       document.getElementById('voucherLemburId').innerText = (hasil && hasil.lemburVoucher) || "-";
+
+      // Load sisa cuti
+      try {
+        const { data: cutiData } = await supabaseClient.rpc('get_sisa_cuti', { p_qrcode: qrId });
+        if (cutiData) {
+          const sisa = cutiData.sisaCuti != null ? cutiData.sisaCuti : 12;
+          document.getElementById('sisaCutiVal').innerText = sisa + " Hari";
+          document.getElementById('cutiModalSaldo').innerText = sisa + " Hari";
+          if (cutiData.hasActiveCuti) {
+            if (cutiData.activeStatus === 'APPROVED') {
+              document.getElementById('sisaCutiVal').innerHTML = '<span style="color:#2E7D32;">🏖️ ' + (cutiData.jumlahHari || 1) + ' Hari</span>';
+            } else if (cutiData.activeStatus === 'PROPOSED') {
+              document.getElementById('sisaCutiVal').innerHTML = '<span style="color:#D97706;">⏳ Diusulkan</span>';
+            } else if (cutiData.activeStatus === 'PENDING') {
+              document.getElementById('sisaCutiVal').innerHTML = '<span style="color:#D97706;">⏳ Pending</span>';
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("get_sisa_cuti error:", e);
+      }
 
       const btnIjin = document.getElementById('btnAjukanIjin');
       const btnLembur = document.getElementById('btnAjukanLembur');
