@@ -12,30 +12,8 @@
 <link rel="apple-touch-icon" href="./badge-apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="./badge-favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="./badge-favicon-16.png">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js">
-<div id="cutiOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
-  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px;">
-    <h3 style="margin:0 0 6px; font-size:17px; color:var(--charcoal);">🏖️ Form Pengajuan Cuti</h3>
-    <p style="margin:0 0 14px; font-size:12px; color:var(--text-muted);">Sisa kuota cuti tahunan: <b id="cutiModalSaldo" style="color:#2B6CB0;">12 Hari</b></p>
-    
-    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Jenis Cuti</label>
-    <select id="cutiJenis" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box; margin-bottom:10px;">
-      <option value="CUTI_TAHUNAN">Cuti Tahunan (Potong Saldo)</option>
-      <option value="CUTI_SAKIT">Cuti Sakit (Surat Dokter)</option>
-      <option value="CUTI_MELAHIRKAN">Cuti Melahirkan</option>
-      <option value="CUTI_KHUSUS">Cuti Khusus / Alasan Penting</option>
-    </select>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-    <div style="display:flex; gap:8px; margin-bottom:10px;">
-      <div style="flex:1;">
-        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Mulai</label>
-        <input type="date" id="cutiTglMulai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
-      </div>
-      <div style="flex:1;">
-        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Selesai</label>
-        <input type="date" id="cutiTglSelesai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
-      </div>
-    </div>
 
     <div id="cutiDurasiInfo" style="font-size:12px; font-weight:600; color:#2B6CB0; margin-bottom:10px; padding:8px 10px; background:#EBF8FF; border-radius:8px; display:none;">Total: 0 Hari Kerja</div>
 
@@ -227,17 +205,58 @@
   </div>
 </div>
 
+
 <div id="requestOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
-  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px;">
-    <h3 id="requestTitle" style="margin:0 0 12px; font-size:17px; color:var(--charcoal);"></h3>
-    <select id="requestArea" style="width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box; margin-bottom:10px;">
-      <option value="">-- Pilih Area --</option>
-    </select>
+  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px; box-sizing:border-box;">
+    <h3 id="requestTitle" style="margin:0 0 12px; font-size:17px; color:var(--charcoal);">Ajukan Ijin Keluar</h3>
+    <div id="requestAreaContainer" style="display:none; margin-bottom:10px;">
+      <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Lokasi Site Lembur</label>
+      <select id="requestArea" style="width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+        <option value="">-- Pilih Lokasi --</option>
+      </select>
+    </div>
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Alasan / Keterangan</label>
     <textarea id="requestAlasan" rows="4" placeholder="Tulis alasan..." style="width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box;"></textarea>
     <button id="btnSubmitRequest" style="width:100%; margin-top:14px; padding:13px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">Kirim Pengajuan</button>
     <button id="btnCancelRequest" style="width:100%; margin-top:8px; padding:12px; font-size:14px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
     <div id="requestMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
   </div>
+</div>
+
+<div id="cutiOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px; box-sizing:border-box;">
+    <h3 style="margin:0 0 6px; font-size:17px; color:var(--charcoal);">🏖️ Form Pengajuan Cuti</h3>
+    <p style="margin:0 0 14px; font-size:12px; color:var(--text-muted);">Sisa kuota cuti tahunan: <b id="cutiModalSaldo" style="color:#2B6CB0;">12 Hari</b></p>
+    
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Jenis Cuti</label>
+    <select id="cutiJenis" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box; margin-bottom:10px;">
+      <option value="CUTI_TAHUNAN">Cuti Tahunan (Potong Saldo)</option>
+      <option value="CUTI_SAKIT">Cuti Sakit (Surat Dokter)</option>
+      <option value="CUTI_MELAHIRKAN">Cuti Melahirkan</option>
+      <option value="CUTI_KHUSUS">Cuti Khusus / Alasan Penting</option>
+    </select>
+
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Mulai</label>
+        <input type="date" id="cutiTglMulai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Selesai</label>
+        <input type="date" id="cutiTglSelesai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+    </div>
+
+    <div id="cutiDurasiInfo" style="font-size:12px; font-weight:600; color:#2B6CB0; margin-bottom:10px; padding:8px 10px; background:#EBF8FF; border-radius:8px; display:none;">Total: 0 Hari Kerja</div>
+
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Alasan / Keterangan</label>
+    <textarea id="cutiAlasan" rows="3" placeholder="Tulis keperluan cuti..." style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box; margin-bottom:12px;"></textarea>
+
+    <button id="btnSubmitCuti" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#2B6CB0; color:#fff; cursor:pointer;">Ajukan Cuti ke Atasan</button>
+    <button id="btnCancelCuti" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
+    <div id="cutiMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
+  </div>
+</div>
 </div>
 
 <script>
@@ -404,17 +423,43 @@ async function submitPin() {
 
   let currentRequestType = "";
 
+  async function populateLokasiDropdown() {
+    const selectEl = document.getElementById('requestArea');
+    if (!selectEl) return;
+    try {
+      const { data, error } = await supabaseClient
+        .from('lokasiTbl')
+        .select('NamaLokasi')
+        .eq('Status', 'Active')
+        .order('NamaLokasi', { ascending: true });
+      if (error) throw error;
+      selectEl.innerHTML = '<option value="">-- Pilih Lokasi --</option>';
+      (data || []).forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.NamaLokasi;
+        opt.textContent = l.NamaLokasi;
+        selectEl.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn("Gagal load lokasi dropdown:", e);
+    }
+  }
+
   async function openRequestForm(type) {
     currentRequestType = type;
-    document.getElementById('requestTitle').innerText = type === "IJIN" ? "Ajukan Ijin Keluar" : "Ajukan Lembur";
-    document.getElementById('requestArea').style.display = type === "LEMBUR" ? "block" : "none";
+    document.getElementById('requestTitle').innerText = type === "IJIN" ? "Ajukan Ijin Keluar" : "Ajukan Lembur (SPKL)";
+    document.getElementById('requestAreaContainer').style.display = type === "LEMBUR" ? "block" : "none";
     document.getElementById('requestAlasan').value = "";
     document.getElementById('requestMsg').style.display = "none";
+    await populateLokasiDropdown();
     document.getElementById('requestOverlay').style.display = "flex";
   }
 
   document.getElementById('btnAjukanIjin').onclick = () => openRequestForm("IJIN");
   document.getElementById('btnAjukanLembur').onclick = () => openRequestForm("LEMBUR");
+  document.getElementById('btnCancelRequest').onclick = () => {
+    document.getElementById('requestOverlay').style.display = "none";
+  };
 
   // CUTI MODAL LOGIC
   function updateCutiDurasi() {
@@ -544,6 +589,16 @@ async function submitPin() {
     try {
       const today = new Date().toISOString().split('T')[0];
       const durasi = currentRequestType === "LEMBUR" ? 2 : 0;
+      const area = document.getElementById('requestArea')?.value || '';
+
+      if (currentRequestType === "LEMBUR" && !area) {
+        msgEl.style.color = "var(--danger)";
+        msgEl.innerText = "⚠️ Silakan pilih lokasi site lembur.";
+        msgEl.style.display = "block";
+        btn.disabled = false;
+        btn.innerText = "Kirim Pengajuan";
+        return;
+      }
 
       const { data: hasil, error } = await supabaseClient.rpc('submit_pengajuan_ijin_lembur', {
         p_pemohon_qrcode: qrId,
@@ -551,7 +606,7 @@ async function submitPin() {
         p_tanggal: today,
         p_alasan: alasan,
         p_durasi_jam: durasi,
-        p_lokasi: ''
+        p_lokasi: area
       });
       if (error) throw error;
 
