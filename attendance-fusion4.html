@@ -325,6 +325,25 @@ function showRetry() {
 }
 btnRetry.onclick = () => location.reload();
 
+// Ambil field dari object "person" hasil RPC Supabase secara case-insensitive.
+// Kenapa perlu: Postgres/Supabase kadang balikin key JSON dalam huruf kecil
+// semua (mis. "namapersonnel") walau di tabel aslinya "NamaPersonnel" --
+// makanya currentPerson.NamaPersonnel bisa jadi undefined padahal datanya ada,
+// dan nampil "Terdeteksi: undefined" di layar.
+function getPersonField(person, fieldName, fallback) {
+  if (person) {
+    if (person[fieldName] !== undefined && person[fieldName] !== null && person[fieldName] !== "") {
+      return person[fieldName];
+    }
+    const target = fieldName.toLowerCase();
+    const key = Object.keys(person).find(k => k.toLowerCase() === target);
+    if (key && person[key] !== undefined && person[key] !== null && person[key] !== "") {
+      return person[key];
+    }
+  }
+  return fallback;
+}
+
 async function callApi(action, extra) {
   extra = extra || {};
 
@@ -827,7 +846,7 @@ btnScanFace.onclick = async () => {
 
       const matchInfoEl = document.getElementById('matchInfo');
       matchInfoEl.style.display = "block";
-      matchInfoEl.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
+      matchInfoEl.innerText = `✅ Terdeteksi: ${getPersonField(currentPerson, 'NamaPersonnel', qrCodeId)} (${qrCodeId})`;
 
       checkSpecialFlowsThenProceed();
     } catch (e) {
@@ -854,7 +873,7 @@ btnScanFace.onclick = async () => {
 
   const matchInfoEl1to1 = document.getElementById('matchInfo');
   matchInfoEl1to1.style.display = "block";
-  matchInfoEl1to1.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
+  matchInfoEl1to1.innerText = `✅ Terdeteksi: ${getPersonField(currentPerson, 'NamaPersonnel', qrCodeId)} (${qrCodeId})`;
 
   checkSpecialFlowsThenProceed();
 };
@@ -949,10 +968,11 @@ function stopCamera() {
 
 // ============ 4. LANJUT KE ABSENSI (setelah wajah cocok) ============
 async function proceedAfterFaceVerified() {
-  if (currentPerson.AuthorizedBy && currentPerson.AuthorizedBy !== "") {
+  const authorizedBy = getPersonField(currentPerson, 'AuthorizedBy', "");
+  if (authorizedBy && authorizedBy !== "") {
     // anggota kelompok -> langsung submit, tanpa password
     doSubmitAbsensi("");
-  } else if (fromBadge && (!currentPerson.AuthorizedBy || currentPerson.AuthorizedBy === "")) {
+  } else if (fromBadge && (!authorizedBy || authorizedBy === "")) {
     // Independen, datang dari Virtual Wallet -- sudah lolos verifikasi PIN,
     // skip password otorisasi.
     doSubmitAbsensi("");
