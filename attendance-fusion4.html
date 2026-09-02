@@ -17,7 +17,6 @@
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="/Fusion4/offline-absen.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -233,6 +232,20 @@ let allFaceData = null; // cache daftar semua descriptor, buat mode 1:N
 let pendingPindahReminder = null;
 let isOfflineMode = false;
 let offlineGPS = null;
+
+const CACHE_KEY_FACES = "fusion4_cached_faces";
+async function getCachedFaces() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_FACES);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+async function syncFaceCache() {
+  try {
+    const { data, error } = await supabaseClient.rpc('get_all_face_data');
+    if (!error && data) localStorage.setItem(CACHE_KEY_FACES, JSON.stringify(data));
+  } catch (e) { console.warn("Sync cache wajah gagal:", e.message); }
+}
 
 const locBanner = document.getElementById('locBanner');
 const resultBanner = document.getElementById('resultBanner');
@@ -713,12 +726,24 @@ btnScanFace.onclick = async () => {
     // FIX UNIVERSAL SAMSUNG (A55/A56/A57 Exynos) & Safari:
     // Alih-alih mengirim elemen <video> langsung ke WebGL (yang menyebabkan GPU deadlock pada chip Exynos Samsung),
     // kita snapshot frame video ke buffer Canvas 2D terlebih dahulu.
+    const snapCanvas = document.createElement('canvas');
+    snapCanvas.width = video.videoWidth || 640;
+    snapCanvas.height = video.videoHeight || 480;
+    const snapCtx = snapCanvas.getContext('2d', { willReadFrequently: true });
+    snapCtx.drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
+
+    detection = await withTimeout(
+      faceapi.detectSingleFace(snapCanvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+        .withFaceLandmarks()
         .withFaceDescriptor(),
       15000,
+      "Deteksi wajah timeout (15 detik). Pastikan pencahayaan cukup dan coba lagi."
     );
   } catch (e) {
     setStatus("❌ " + e.message, "fail");
     btnScanFace.disabled = false;
+    showRetry();
+    return;
   } 
 
   if (!detection) {
