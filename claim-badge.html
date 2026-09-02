@@ -154,8 +154,13 @@
     video { width: 100%; height: 100%; object-fit: cover; }
     .face-oval {
       position: absolute;
-      width: 60%;
-      height: 75%;
+      /* Kotak kamera pakai aspect-ratio 4/3 (landscape), jadi kalau width% dan
+         height% dibuat sama besar hasilnya malah oval melebar ke samping
+         (karena tinggi kotak < lebar kotak). Angka di bawah ini sudah
+         dihitung supaya hasil akhirnya tetap lonjong vertikal (portrait)
+         walau kotaknya sendiri landscape. */
+      width: 42%;
+      height: 84%;
       border: 2.5px dashed rgba(255,255,255,0.8);
       border-radius: 50%;
       box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
@@ -554,14 +559,26 @@
       }
 
       // Matched! Ambil detail profil lengkap dari Supabase
+      // Catatan: QrCodeId di karyawanTbl bisa beda huruf besar/kecil dibanding
+      // data yang dikembalikan get_all_face_data, jadi pakai pencarian yang
+      // tidak case-sensitive (sama seperti pola di attendance-fusion4.html dkk,
+      // yang selalu .trim().toUpperCase() sebelum mencocokkan QrCodeId).
+      const normalizedQrCodeId = String(bestMatch.qrCodeId || '').trim();
       const { data: karData, error: karErr } = await supabaseClient
         .from('karyawanTbl')
         .select('*')
-        .eq('QrCodeId', bestMatch.qrCodeId)
+        .ilike('QrCodeId', normalizedQrCodeId)
         .maybeSingle();
 
-      if (karErr || !karData) {
-        showStatus('step1', 'Data karyawan tidak ditemukan di database.', 'error');
+      if (karErr) {
+        showStatus('step1', 'Gagal mengambil data karyawan: ' + karErr.message, 'error');
+        btn.disabled = false;
+        faceOval.classList.remove('scanning');
+        return;
+      }
+
+      if (!karData) {
+        showStatus('step1', `Wajah dikenali (ID: ${normalizedQrCodeId || '-'}), tapi data karyawan tidak ditemukan di database. Hubungi HR.`, 'error');
         btn.disabled = false;
         faceOval.classList.remove('scanning');
         return;
@@ -739,4 +756,3 @@
 
 </body>
 </html>
-
