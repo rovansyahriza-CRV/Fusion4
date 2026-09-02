@@ -464,18 +464,20 @@ function handleLocationResult(result) {
     showBanner(locBanner, "🔴 Lokasi tidak ditemukan.", "fail");
     return;
   }
-  if (!result.IsInsideRadius) {
-    showBanner(locBanner, "🔴 Di luar area absensi (" + (result.NamaLokasi || "Unmapped") + ")", "fail");
+  const isInside = (result.IsInsideRadius !== undefined) ? result.IsInsideRadius : !!result.inRange;
+  const namaLok = result.NamaLokasi || result.location || "Unmapped";
+  const dist = result.Distance ?? result.distance ?? "-";
+  const rad = result.Radius ?? result.radius ?? "-";
+
+  if (!isInside) {
+    showBanner(locBanner, "🔴 Di luar area absensi (" + namaLok + " - Jarak: " + dist + "m, Radius: " + rad + "m)", "fail");
     return;
   }
-  activeLocation = String(result.NamaLokasi || "").trim();
+  activeLocation = String(namaLok).trim();
   showBanner(locBanner,
-    "🟢 Kelompok: " + activeLocation + " | Jarak: " + (result.Distance ?? "-") + "m | Radius: " + (result.Radius || "-") + "m",
+    "🟢 Kelompok: " + activeLocation + " | Jarak: " + dist + "m | Radius: " + rad + "m",
     "ok");
 
-  // Selalu munculkan pilihan Scan Wajah / Scan QR -- tidak ada lagi jalur
-  // otomatis langsung ke verifikasi 1:1, walau QrCodeId sudah terbawa dari
-  // redirect QR fisik (biar konsisten, user tetap yang pilih caranya).
   setStatus("Pilih cara absen di bawah ini.", "info");
   document.getElementById('entryCard').style.display = "block";
 }
@@ -688,21 +690,15 @@ btnScanFace.onclick = async () => {
 
   let detection;
   try {
-    // PENTING: chain HARUS utuh nggak boleh dipecah jadi await terpisah
-    // (versi dipecah kemarin ternyata malah bikin macet -- versi utuh ini
-    // yang terbukti pernah berhasil waktu enroll Amir Yahya).
-    detection = await withTimeout(
-      faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
-        .withFaceLandmarks()
+    // FIX UNIVERSAL SAMSUNG (A55/A56/A57 Exynos) & Safari:
+    // Alih-alih mengirim elemen <video> langsung ke WebGL (yang menyebabkan GPU deadlock pada chip Exynos Samsung),
+    // kita snapshot frame video ke buffer Canvas 2D terlebih dahulu.
         .withFaceDescriptor(),
-      20000,
-      "Deteksi wajah timeout (20 detik). Coba lagi atau refresh halaman."
+      15000,
     );
   } catch (e) {
     setStatus("❌ " + e.message, "fail");
     btnScanFace.disabled = false;
-    showRetry();
-    return;
   } 
 
   if (!detection) {
