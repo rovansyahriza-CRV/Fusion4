@@ -13,6 +13,7 @@
   
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="driveBridge.js"></script>
@@ -90,6 +91,16 @@
       border-radius: 50%;
       box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
       pointer-events: none;
+    }
+    .qr-guide {
+      position: absolute;
+      width: 62%;
+      aspect-ratio: 1/1;
+      border: 2px dashed var(--primary);
+      border-radius: 12px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+      pointer-events: none;
+      display: none;
     }
 
     .samples-grid {
@@ -178,11 +189,16 @@
       <input type="text" id="inputQrId" readonly style="background:#F2EFEB; color:#666; font-family:monospace;">
     </div>
 
+    <button type="button" id="btnScanQr" class="btn-secondary" onclick="toggleQrScan()" disabled style="margin-top:-4px; margin-bottom:12px;">
+      <span>📷 Scan QR Karyawan (Opsional)</span>
+    </button>
+
     <div id="statusMsg" class="status-msg info">Memuat model kecerdasan buatan (AI)...</div>
 
     <div class="scanner-box">
       <video id="videoElement" playsinline muted autoplay></video>
-      <div class="face-oval"></div>
+      <div id="faceOval" class="face-oval"></div>
+      <div id="qrGuide" class="qr-guide"></div>
       <canvas id="hiddenCanvas" style="display:none;"></canvas>
     </div>
 
@@ -219,15 +235,21 @@
   let capturedDescriptors = [];
   let capturedImages = [];
   let isModelsLoaded = false;
+  let qrScanning = false;
 
   const video = document.getElementById('videoElement');
   const canvas = document.getElementById('hiddenCanvas');
   const statusMsg = document.getElementById('statusMsg');
+  const btnScanQr = document.getElementById('btnScanQr');
+  const faceOval = document.getElementById('faceOval');
+  const qrGuide = document.getElementById('qrGuide');
 
   document.addEventListener('DOMContentLoaded', async () => {
     await initModels();
     await loadKaryawanList();
     await startCamera();
+    // Scan QR baru bisa dipakai kalau kamera & daftar karyawan (buat pencocokan) sudah siap
+    btnScanQr.disabled = false;
   });
 
   async function initModels() {
@@ -262,10 +284,84 @@
   }
 
   function handleKaryawanChange() {
+    if (qrScanning) stopQrScan(true);
     const sel = document.getElementById('selectKaryawan');
     const kar = karyawanList.find(k => k.Id == sel.value);
     document.getElementById('inputQrId').value = kar ? (kar.QrCodeId || '-') : '';
     resetSamples();
+  }
+
+  // ============ SCAN QR KARYAWAN (opsional, alternatif dari pilih manual) ============
+  function toggleQrScan() {
+    if (qrScanning) {
+      stopQrScan();
+    } else {
+      startQrScan();
+    }
+  }
+
+  function startQrScan() {
+    if (!video.videoWidth) {
+      setStatus("Kamera belum siap, tunggu sebentar lalu coba lagi.", "error");
+      return;
+    }
+    qrScanning = true;
+    faceOval.style.display = 'none';
+    qrGuide.style.display = 'block';
+    btnScanQr.innerHTML = '<span>❌ Batal Scan QR</span>';
+    document.getElementById('btnCapture').disabled = true;
+    setStatus("📷 Arahkan kamera ke QR Code badge karyawan...", "info");
+    qrScanLoop();
+  }
+
+  function stopQrScan(silent) {
+    qrScanning = false;
+    qrGuide.style.display = 'none';
+    faceOval.style.display = 'block';
+    btnScanQr.innerHTML = '<span>📷 Scan QR Karyawan (Opsional)</span>';
+    document.getElementById('btnCapture').disabled = !isModelsLoaded;
+    if (!silent) setStatus("Model AI siap. Pilih karyawan dan posisikan wajah di oval.", "info");
+  }
+
+  async function qrScanLoop() {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    while (qrScanning) {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+        if (code && code.data) {
+          handleQrResult(code.data.trim());
+          return;
+        }
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+
+  function handleQrResult(rawData) {
+    // QR bisa berisi URL (kayak QR badge absensi) atau cuma teks QrCodeId polos
+    let extractedId = rawData;
+    try {
+      const url = new URL(rawData);
+      const paramId = url.searchParams.get('QrCodeId') || url.searchParams.get('qrCodeId') || url.searchParams.get('qrcodeid');
+      if (paramId) extractedId = paramId;
+    } catch (e) { /* bukan URL, pakai apa adanya */ }
+    extractedId = extractedId.trim().toUpperCase();
+
+    const kar = karyawanList.find(k => (k.QrCodeId || '').trim().toUpperCase() === extractedId);
+    stopQrScan(true);
+
+    if (!kar) {
+      setStatus(`❌ QR "${extractedId}" tidak cocok dengan data karyawan manapun. Coba scan ulang atau pilih manual dari dropdown.`, "error");
+      return;
+    }
+
+    document.getElementById('selectKaryawan').value = kar.Id;
+    handleKaryawanChange();
+    setStatus(`✅ QR terbaca: ${kar.NamaPersonnel}. Posisikan wajah di oval, lalu ambil sampel foto.`, "success");
   }
 
   async function startCamera() {
@@ -405,4 +501,3 @@
 
 </body>
 </html>
-
