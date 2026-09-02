@@ -406,57 +406,77 @@ async function submitAbsensiCall(qrCodeId, lokasi, password) {
   return data;
 }
 
+function getGeolocationPromise(options) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      return reject(new Error("Browser tidak mendukung GPS."));
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+}
+
 // ============ 1. GPS ============
 async function initGPS() {
-  if (!navigator.onLine) {
+  showBanner(locBanner, "📍 Mendeteksi lokasi GPS Anda...", "info");
+
+  if (!navigator.geolocation) {
+    showBanner(locBanner, "❌ Browser tidak mendukung fitur GPS.", "fail");
+    return;
+  }
+
+  let pos = null;
+
+  // Tier 1: Coba High Accuracy (Satelit) dengan timeout 7 detik & cache 30s
+  try {
+    pos = await getGeolocationPromise({
+      enableHighAccuracy: true,
+      timeout: 7000,
+      maximumAge: 30000
+    });
+  } catch (err1) {
+    console.warn("GPS High Accuracy lambat/indoor, fallback ke Network Location...", err1.message);
+    // Tier 2: Fallback ke Network / WiFi / Cell Location (cepat & tembus indoor)
+    try {
+      pos = await getGeolocationPromise({
+        enableHighAccuracy: false,
+        timeout: 6000,
+        maximumAge: 60000
+      });
+    } catch (err2) {
+      console.error("GPS Fallback gagal:", err2.message);
+      let pesan = "Gagal membaca lokasi GPS.";
+      if (err2.code === 1) pesan = "Izin lokasi ditolak. Aktifkan GPS & Izin Lokasi di browser HP.";
+      else if (err2.code === 2) pesan = "Sinyal GPS tidak terdeteksi. Nyalakan WiFi/GPS di HP.";
+      else if (err2.code === 3) pesan = "Waktu pencarian GPS habis. Pastikan GPS HP aktif.";
+
+      showBanner(locBanner, "🔴 " + pesan, "fail");
+      showRetry();
+      return;
+    }
+  }
+
+  if (!pos || !pos.coords) {
+    showBanner(locBanner, "🔴 Gagal mengunci koordinat GPS. Coba lagi.", "fail");
+    showRetry();
+    return;
+  }
+
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+  offlineGPS = { lat, lng };
+
+  showBanner(locBanner, "🟢 GPS terkunci. Menyelaraskan dengan server...", "info");
+  try {
+    const result = await callApi("FIND_NEAREST_LOCATION", { lat: lat, lng: lng });
+    handleLocationResult(result);
+  } catch (e) {
+    console.warn("Gagal hubungi server lokasi, aktifkan mode offline:", e.message);
     isOfflineMode = true;
-    offlineGPS = await getGPSNonBlocking();
-    showBanner(locBanner, "⚠️ Tidak ada sinyal internet. Mode offline aktif -- lanjut Scan Wajah.", "warn");
-    setStatus("Pilih cara absen di bawah ini (mode offline).", "info");
+    showBanner(locBanner, "⚠️ Server tidak merespon. Mode offline aktif -- lanjut Scan Wajah.", "warn");
+    setStatus("Pilih cara absen di bawah ini.", "info");
     document.getElementById('entryCard').style.display = "block";
     document.getElementById('btnShowQrOption').style.display = "none";
-    return;
   }
-  if (!navigator.geolocation) {
-    showBanner(locBanner, "❌ Browser tidak mendukung GPS.", "fail");
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const lat = pos.coords.latitude, lng = pos.coords.longitude;
-      offlineGPS = { lat, lng };
-      showBanner(locBanner, "🟢 GPS terkunci. Menyelaraskan dengan server...", "info");
-      try {
-        const result = await callApi("FIND_NEAREST_LOCATION", { lat: lat, lng: lng });
-        handleLocationResult(result);
-      } catch (e) {
-        isOfflineMode = true;
-        showBanner(locBanner, "⚠️ Tidak bisa hubungi server. Mode offline aktif -- lanjut Scan Wajah.", "warn");
-        setStatus("Pilih cara absen di bawah ini (mode offline).", "info");
-        document.getElementById('entryCard').style.display = "block";
-        document.getElementById('btnShowQrOption').style.display = "none";
-      }
-    },
-    (err) => {
-      let pesan = "Gagal memproses lokasi.";
-      if (err.code === err.PERMISSION_DENIED) pesan = "Akses lokasi GPS ditolak. Aktifkan izin lokasi di HP.";
-      else if (err.code === err.POSITION_UNAVAILABLE) pesan = "Sinyal GPS tidak tersedia.";
-      else if (err.code === err.TIMEOUT) pesan = "Waktu pencarian lokasi habis.";
-
-      if (!navigator.onLine) {
-        isOfflineMode = true;
-        offlineGPS = null;
-        showBanner(locBanner, "⚠️ GPS & internet tidak tersedia. Mode offline aktif.", "warn");
-        setStatus("Pilih cara absen di bawah ini (mode offline).", "info");
-        document.getElementById('entryCard').style.display = "block";
-        document.getElementById('btnShowQrOption').style.display = "none";
-      } else {
-        showBanner(locBanner, "🔴 " + pesan, "fail");
-        showRetry();
-      }
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
 }
   
 function handleLocationResult(result) {
