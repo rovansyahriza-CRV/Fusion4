@@ -403,17 +403,22 @@ async function submitPin() {
       }
       document.getElementById('linkGantiPassword').href = "change-password.html?QrCodeId=" + encodeURIComponent(qrId);
 
-      // Ambil foto profil terbaru dari database karyawanTbl jika hasil RPC belum memuat foto
-      let rawFotoUrl = hasil.fotoUrl;
-      if (!rawFotoUrl) {
-        try {
-          const { data: karRow } = await supabaseClient
-            .from('karyawanTbl')
-            .select('FotoURL, FotoFileID')
-            .eq('QrCodeId', qrId)
-            .maybeSingle();
-          if (karRow) rawFotoUrl = karRow.FotoURL || (karRow.FotoFileID ? `https://lh3.googleusercontent.com/d/${karRow.FotoFileID}` : null);
-        } catch (e) { console.warn('Direct fetch photo error:', e.message); }
+      // Ambil foto profil terbaru dari database karyawanTbl (case-insensitive)
+      let rawFotoUrl = null;
+      let fileId = null;
+      try {
+        const { data: karRow } = await supabaseClient
+          .from('karyawanTbl')
+          .select('FotoURL, FotoFileID')
+          .ilike('QrCodeId', qrId.trim())
+          .maybeSingle();
+        if (karRow) {
+          rawFotoUrl = karRow.FotoURL || hasil.fotoUrl || null;
+          fileId = karRow.FotoFileID || null;
+        }
+      } catch (e) {
+        console.warn('Direct fetch photo error:', e.message);
+        rawFotoUrl = hasil.fotoUrl;
       }
 
       const fotoEl = document.getElementById('badgeFoto');
@@ -425,6 +430,12 @@ async function submitPin() {
         fotoEl.style.display = "block";
         fallbackEl.style.display = "none";
         fotoEl.onerror = () => {
+          // Jika CDN gagal, coba format thumbnail standar
+          if (fileId && !fotoEl.dataset.retried) {
+            fotoEl.dataset.retried = "1";
+            fotoEl.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
+            return;
+          }
           fotoEl.style.display = "none";
           fallbackEl.style.display = "flex";
           fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
