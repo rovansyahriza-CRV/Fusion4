@@ -708,8 +708,23 @@
     document.getElementById('badgeCardQrId').textContent = matchedPerson.QrCodeId || '-';
     document.getElementById('badgeCardPin').textContent = matchedPerson.DigitalPIN || '123456';
 
+    function formatDriveDirectUrl(url) {
+      if (!url) return '';
+      const str = String(url).trim();
+      if (str.startsWith('data:') || str.startsWith('blob:')) return str;
+      let fileId = null;
+      const m1 = str.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (m1) fileId = m1[1];
+      else {
+        const m2 = str.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (m2) fileId = m2[1];
+      }
+      if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}`;
+      return str;
+    }
+
     if (matchedPerson.FotoURL) {
-      document.getElementById('badgePhotoPreview').src = matchedPerson.FotoURL;
+      document.getElementById('badgePhotoPreview').src = formatDriveDirectUrl(matchedPerson.FotoURL);
     } else {
       document.getElementById('badgePhotoPreview').src = 'fusion4.png';
     }
@@ -756,3 +771,4 @@
 
 </body>
 </html>
+
