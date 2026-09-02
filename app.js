@@ -623,6 +623,9 @@ async function submitLokasi() {
   const radius = parseInt(document.getElementById('lokasiRadius')?.value, 10) || 100;
   const status = document.getElementById('lokasiStatus')?.value || 'Active';
   const type = document.getElementById('lokasiType')?.value.trim() || '';
+  const lat = parseFloat(document.getElementById('lokasiLat')?.value);
+  const lng = parseFloat(document.getElementById('lokasiLng')?.value);
+
   const formatTimeVal = (val, def) => {
     const v = (val || def || '00:00').trim();
     if (v.length === 5) return v + ':00';
