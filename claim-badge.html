@@ -649,33 +649,46 @@
       let fotoUrl = matchedPerson.FotoURL || null;
       let fotoFileId = matchedPerson.FotoFileID || null;
 
-      // 1. Upload foto ke Google Drive jika user memilih foto baru
-      if (selectedPhotoFile && typeof uploadPhotoToDrive === 'function') {
+      // 1. Upload foto ke Google Drive menggunakan prosedur persis seperti Edit Badge di Admin Portal (submitBadge)
+      if (selectedPhotoFile && typeof uploadBase64ToDrive === 'function') {
         try {
-          const fileName = `Foto_${matchedPerson.QrCodeId}_${Date.now()}.jpg`;
-          const uploadRes = await uploadPhotoToDrive(selectedPhotoFile, fileName);
+          const base64 = await fileToBase64(selectedPhotoFile);
+          const subFolder = (matchedPerson.Type || 'PERSON').trim() || 'Lainnya';
+          const ext = selectedPhotoFile.name ? (selectedPhotoFile.name.split('.').pop() || 'jpg') : 'jpg';
+          const fileName = `BADGE_${matchedPerson.Id}_${Date.now()}.${ext}`;
+          const uploadRes = await uploadBase64ToDrive('badge-foto', fileName, selectedPhotoFile.type || 'image/jpeg', base64, subFolder);
           if (uploadRes && uploadRes.directUrl) {
             fotoUrl = uploadRes.directUrl;
             fotoFileId = uploadRes.fileId;
           }
         } catch (uploadErr) {
-          console.warn('Gagal upload ke Drive bridge, simpan email tetap dilanjutkan:', uploadErr.message);
+          console.warn('Gagal upload ke Drive bridge:', uploadErr.message);
         }
       }
 
-      // 2. Update data ke tabel karyawanTbl
-      const updatePayload = { Email: email };
-      if (fotoUrl) updatePayload.FotoURL = fotoUrl;
-      if (fotoFileId) updatePayload.FotoFileID = fotoFileId;
+      // 2. Simpan foto ke database menggunakan RPC update_karyawan_foto
+      if (fotoUrl) {
+        try {
+          await supabaseClient.rpc('update_karyawan_foto', {
+            p_id: parseInt(matchedPerson.Id, 10),
+            p_fotourl: fotoUrl,
+            p_fotofileid: fotoFileId
+          });
+        } catch (fotoRpcErr) {
+          console.warn('Fallback direct table update:', fotoRpcErr.message);
+          await supabaseClient
+            .from('karyawanTbl')
+            .update({ FotoURL: fotoUrl, FotoFileID: fotoFileId })
+            .eq('Id', matchedPerson.Id);
+        }
+      }
 
-      const { error: errKar } = await supabaseClient
+      // 3. Update data Email ke tabel karyawanTbl & paswordTbl
+      await supabaseClient
         .from('karyawanTbl')
-        .update(updatePayload)
+        .update({ Email: email })
         .eq('Id', matchedPerson.Id);
 
-      if (errKar) throw errKar;
-
-      // 3. Update EmailAddress di paswordTbl juga
       await supabaseClient
         .from('paswordTbl')
         .update({ EmailAddress: email })
@@ -683,6 +696,7 @@
 
       matchedPerson.Email = email;
       if (fotoUrl) matchedPerson.FotoURL = fotoUrl;
+      if (fotoFileId) matchedPerson.FotoFileID = fotoFileId;
 
       // 4. Buka Step 3
       renderStep3();
