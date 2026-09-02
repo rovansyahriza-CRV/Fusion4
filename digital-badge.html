@@ -251,11 +251,64 @@ const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+function formatDriveDirectUrl(url) {
+  if (!url) return '';
+  const str = String(url).trim();
+  if (str.startsWith('data:') || str.startsWith('blob:')) return str;
+  let fileId = null;
+  const m1 = str.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m1) fileId = m1[1];
+  else {
+    const m2 = str.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (m2) fileId = m2[1];
+  }
+  if (fileId) {
+    return `https://lh3.googleusercontent.com/d/${fileId}`;
+  }
+  return str;
+}
+
 const pinBoxes = Array.from(document.querySelectorAll('.pin-box'));
 const pinMsg = document.getElementById('pinMsg');
 const btnSubmitPin = document.getElementById('btnSubmitPin');
 const pinOverlay = document.getElementById('pinOverlay');
 const pageContent = document.getElementById('pageContent');
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const pinParam = urlParams.get('pin');
+  const qrParam = urlParams.get('qr') || urlParams.get('QrCodeId') || urlParams.get('qrcodeid');
+
+  if (pinParam && pinParam.length === 6) {
+    pinParam.split('').forEach((ch, i) => {
+      if (pinBoxes[i]) {
+        pinBoxes[i].value = ch;
+        pinBoxes[i].classList.add('filled');
+      }
+    });
+    await submitPin();
+  } else if (qrParam) {
+    // Ambil PIN berdasarkan QrCodeId untuk auto-load
+    try {
+      const { data: karRow } = await supabaseClient
+        .from('karyawanTbl')
+        .select('DigitalPIN')
+        .ilike('QrCodeId', qrParam.trim())
+        .maybeSingle();
+      if (karRow && karRow.DigitalPIN) {
+        String(karRow.DigitalPIN).padStart(6, '0').split('').forEach((ch, i) => {
+          if (pinBoxes[i]) {
+            pinBoxes[i].value = ch;
+            pinBoxes[i].classList.add('filled');
+          }
+        });
+        await submitPin();
+      }
+    } catch (e) {
+      console.warn('Auto-load badge error:', e.message);
+    }
+  }
+});
 
 pinBoxes[0].focus();
 
@@ -350,10 +403,25 @@ async function submitPin() {
       }
       document.getElementById('linkGantiPassword').href = "change-password.html?QrCodeId=" + encodeURIComponent(qrId);
 
+      // Ambil foto profil terbaru dari database karyawanTbl jika hasil RPC belum memuat foto
+      let rawFotoUrl = hasil.fotoUrl;
+      if (!rawFotoUrl) {
+        try {
+          const { data: karRow } = await supabaseClient
+            .from('karyawanTbl')
+            .select('FotoURL, FotoFileID')
+            .eq('QrCodeId', qrId)
+            .maybeSingle();
+          if (karRow) rawFotoUrl = karRow.FotoURL || (karRow.FotoFileID ? `https://lh3.googleusercontent.com/d/${karRow.FotoFileID}` : null);
+        } catch (e) { console.warn('Direct fetch photo error:', e.message); }
+      }
+
       const fotoEl = document.getElementById('badgeFoto');
       const fallbackEl = document.getElementById('badgeFotoFallback');
-      if (hasil.fotoUrl) {
-        fotoEl.src = hasil.fotoUrl;
+      const directFoto = formatDriveDirectUrl(rawFotoUrl);
+
+      if (directFoto) {
+        fotoEl.src = directFoto;
         fotoEl.style.display = "block";
         fallbackEl.style.display = "none";
         fotoEl.onerror = () => {
