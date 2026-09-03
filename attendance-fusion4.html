@@ -325,30 +325,6 @@ function showRetry() {
 }
 btnRetry.onclick = () => location.reload();
 
-// Ambil field dari object "person" hasil RPC Supabase.
-// Kenapa perlu: RPC get_person_face_data() balikin JSON pakai nama key sendiri
-// (mis. "nama", bukan nama kolom asli "NamaPersonnel" di tabel karyawanTbl --
-// samain kayak GET_ALL_FACE_DATA yang balikin { qrCodeId, nama, ... }), jadi
-// currentPerson.NamaPersonnel selalu undefined dan nampil "Terdeteksi: undefined".
-// Coba beberapa kemungkinan nama key (case-insensitive juga, buat jaga-jaga),
-// baru fallback kalau beneran nggak ketemu sama sekali.
-function getPersonField(person, fieldNames, fallback) {
-  if (person) {
-    const candidates = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
-    for (const fieldName of candidates) {
-      if (person[fieldName] !== undefined && person[fieldName] !== null && person[fieldName] !== "") {
-        return person[fieldName];
-      }
-      const target = fieldName.toLowerCase();
-      const key = Object.keys(person).find(k => k.toLowerCase() === target);
-      if (key && person[key] !== undefined && person[key] !== null && person[key] !== "") {
-        return person[key];
-      }
-    }
-  }
-  return fallback;
-}
-
 async function callApi(action, extra) {
   extra = extra || {};
 
@@ -589,10 +565,16 @@ let faceModelsAlreadyLoaded = false;
 async function loadFaceModelsWithBackendFix() {
   if (faceModelsAlreadyLoaded) return;
 
-  // CATATAN: sempat dicoba paksa backend CPU khusus iOS, ternyata itu
-  // yang bikin lebih parah (bukan solusi) -- WebGL default terbukti
-  // pernah jalan normal sebelumnya. Jadi TIDAK dipaksa lagi, biarkan
-  // browser pakai default (WebGL kalau tersedia).
+  try {
+    if (faceapi.tf && faceapi.tf.ENV) {
+      faceapi.tf.ENV.set('WEBGL_PACK', false);
+      faceapi.tf.ENV.set('WEBGL_CHECK_NUMERICAL_PROBLEMS', false);
+      faceapi.tf.ENV.set('WEBGL_FORCE_F16_TEXTURES', false);
+      faceapi.tf.enableProdMode();
+    }
+  } catch (e) {
+    console.warn("TF ENV config:", e);
+  }
 
   const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
   await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
@@ -600,6 +582,33 @@ async function loadFaceModelsWithBackendFix() {
   await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
   faceModelsAlreadyLoaded = true;
   console.log('TF.js backend aktif:', faceapi.tf.getBackend());
+}
+
+async function executeFaceDetection(inputCanvas) {
+  const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 });
+  const doInference = async () => {
+    return await faceapi.detectSingleFace(inputCanvas, detectorOptions)
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+  };
+
+  try {
+    // 1. Coba dengan WebGL (cepat ~100ms) dengan batas waktu 5 detik
+    return await withTimeout(doInference(), 5000, "WebGL stall");
+  } catch (webglErr) {
+    console.warn("WebGL timeout/gagal di perangkat ini, beralih ke backend CPU fallback:", webglErr.message);
+    // 2. Auto-fallback ke CPU Backend jika WebGL GPU hang di HP tertentu (Samsung/Android)
+    try {
+      if (faceapi.tf && faceapi.tf.getBackend() !== 'cpu') {
+        await faceapi.tf.setBackend('cpu');
+        console.log("Backend sukses switch ke CPU");
+      }
+      return await withTimeout(doInference(), 8000, "Gagal memproses wajah di perangkat.");
+    } catch (cpuErr) {
+      console.error("CPU fallback error:", cpuErr);
+      throw cpuErr;
+    }
+  }
 }
 
 // Bungkus promise dengan batas waktu -- kalau lebih dari `ms` belum selesai,
@@ -747,31 +756,22 @@ btnScanFace.onclick = async () => {
 
   let detection;
   try {
-    // FIX UNIVERSAL SAMSUNG (A55/A56/A57 Exynos) & Safari:
-    // Alih-alih mengirim elemen <video> langsung ke WebGL (yang menyebabkan GPU deadlock pada chip Exynos Samsung),
-    // kita snapshot frame video ke buffer Canvas 2D terlebih dahulu.
     const snapCanvas = document.createElement('canvas');
     snapCanvas.width = video.videoWidth || 640;
     snapCanvas.height = video.videoHeight || 480;
-    const snapCtx = snapCanvas.getContext('2d', { willReadFrequently: true });
+    const snapCtx = snapCanvas.getContext('2d');
     snapCtx.drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
 
-    detection = await withTimeout(
-      faceapi.detectSingleFace(snapCanvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
-        .withFaceLandmarks()
-        .withFaceDescriptor(),
-      15000,
-      "Deteksi wajah timeout (15 detik). Pastikan pencahayaan cukup dan coba lagi."
-    );
+    detection = await executeFaceDetection(snapCanvas);
   } catch (e) {
-    setStatus("❌ " + e.message, "fail");
+    setStatus("❌ " + (e.message || "Gagal memproses deteksi wajah. Coba lagi."), "fail");
     btnScanFace.disabled = false;
     showRetry();
     return;
   } 
 
   if (!detection) {
-    setStatus("❌ Wajah tidak terdeteksi. Coba lagi.", "fail");
+    setStatus("❌ Wajah tidak terdeteksi. Posisikan wajah Anda tepat di dalam oval lalu tekan Scan Wajah.", "fail");
     btnScanFace.disabled = false;
     guideLoop();
     return;
@@ -851,7 +851,7 @@ btnScanFace.onclick = async () => {
 
       const matchInfoEl = document.getElementById('matchInfo');
       matchInfoEl.style.display = "block";
-      matchInfoEl.innerText = `✅ Terdeteksi: ${getPersonField(currentPerson, ['nama', 'NamaPersonnel', 'Nama', 'name'], qrCodeId)} (${qrCodeId})`;
+      matchInfoEl.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
 
       checkSpecialFlowsThenProceed();
     } catch (e) {
@@ -878,7 +878,7 @@ btnScanFace.onclick = async () => {
 
   const matchInfoEl1to1 = document.getElementById('matchInfo');
   matchInfoEl1to1.style.display = "block";
-  matchInfoEl1to1.innerText = `✅ Terdeteksi: ${getPersonField(currentPerson, ['nama', 'NamaPersonnel', 'Nama', 'name'], qrCodeId)} (${qrCodeId})`;
+  matchInfoEl1to1.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
 
   checkSpecialFlowsThenProceed();
 };
@@ -973,11 +973,10 @@ function stopCamera() {
 
 // ============ 4. LANJUT KE ABSENSI (setelah wajah cocok) ============
 async function proceedAfterFaceVerified() {
-  const authorizedBy = getPersonField(currentPerson, ['authorizedBy', 'AuthorizedBy'], "");
-  if (authorizedBy && authorizedBy !== "") {
+  if (currentPerson.AuthorizedBy && currentPerson.AuthorizedBy !== "") {
     // anggota kelompok -> langsung submit, tanpa password
     doSubmitAbsensi("");
-  } else if (fromBadge && (!authorizedBy || authorizedBy === "")) {
+  } else if (fromBadge && (!currentPerson.AuthorizedBy || currentPerson.AuthorizedBy === "")) {
     // Independen, datang dari Virtual Wallet -- sudah lolos verifikasi PIN,
     // skip password otorisasi.
     doSubmitAbsensi("");
