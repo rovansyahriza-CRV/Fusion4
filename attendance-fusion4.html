@@ -279,7 +279,6 @@ document.getElementById('btnSwitchFaceCam').onclick = async () => {
 };
 
 function evaluateFaceBox(box) {
-  if (!video.videoWidth || !video.videoHeight) return { ok: false, reason: "Kamera belum siap" };
   if (!video.videoWidth || !video.videoHeight) return { ok: true, reason: "Posisi bagus" };
   const widthRatio = box.width / video.videoWidth;
   const centerX = box.x + box.width / 2;
@@ -287,9 +286,6 @@ function evaluateFaceBox(box) {
   const offsetX = Math.abs(centerX - video.videoWidth / 2) / video.videoWidth;
   const offsetY = Math.abs(centerY - video.videoHeight / 2) / video.videoHeight;
 
-  if (widthRatio < 0.28) return { ok: false, reason: "Terlalu jauh, dekatkan wajah" };
-  if (widthRatio > 0.68) return { ok: false, reason: "Terlalu dekat, jauhkan sedikit" };
-  if (offsetX > 0.18 || offsetY > 0.18) return { ok: false, reason: "Geser wajah ke tengah" };
   // Toleransi luas agar karyawan tidak dipersulit saat selfie
   if (widthRatio < 0.15) return { ok: false, reason: "Terlalu jauh, dekatkan wajah ke kamera" };
   if (widthRatio > 0.95) return { ok: false, reason: "Terlalu dekat, jauhkan sedikit dari kamera" };
@@ -854,9 +850,10 @@ btnScanFace.onclick = async () => {
       currentPerson = paketData.person;
       currentPerson._needAuth = !!(paketData.authReq && paketData.authReq.needAuth);
 
+      const namaTampil = currentPerson.nama || currentPerson.NamaPersonnel || currentPerson.namapersonnel || (best && best.nama) || qrCodeId;
       const matchInfoEl = document.getElementById('matchInfo');
       matchInfoEl.style.display = "block";
-      matchInfoEl.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
+      matchInfoEl.innerText = `✅ Terdeteksi: ${namaTampil} (${qrCodeId})`;
 
       checkSpecialFlowsThenProceed();
     } catch (e) {
@@ -881,9 +878,10 @@ btnScanFace.onclick = async () => {
   stopCamera();
   faceVerified = true;
 
+  const namaTampil1to1 = currentPerson.nama || currentPerson.NamaPersonnel || currentPerson.namapersonnel || qrCodeId;
   const matchInfoEl1to1 = document.getElementById('matchInfo');
   matchInfoEl1to1.style.display = "block";
-  matchInfoEl1to1.innerText = `✅ Terdeteksi: ${currentPerson.NamaPersonnel} (${qrCodeId})`;
+  matchInfoEl1to1.innerText = `✅ Terdeteksi: ${namaTampil1to1} (${qrCodeId})`;
 
   checkSpecialFlowsThenProceed();
 };
@@ -978,12 +976,12 @@ function stopCamera() {
 
 // ============ 4. LANJUT KE ABSENSI (setelah wajah cocok) ============
 async function proceedAfterFaceVerified() {
-  if (currentPerson.AuthorizedBy && currentPerson.AuthorizedBy !== "") {
+  const authBy = currentPerson.AuthorizedBy || currentPerson.authorizedBy || currentPerson.Author || currentPerson.author || "";
+  if (authBy && authBy !== "") {
     // anggota kelompok -> langsung submit, tanpa password
     doSubmitAbsensi("");
-  } else if (fromBadge && (!currentPerson.AuthorizedBy || currentPerson.AuthorizedBy === "")) {
-    // Independen, datang dari Virtual Wallet -- sudah lolos verifikasi PIN,
-    // skip password otorisasi.
+  } else if (fromBadge && (!authBy || authBy === "")) {
+    // Independen, datang dari Virtual Wallet -- sudah lolos verifikasi PIN, skip password
     doSubmitAbsensi("");
   } else if (currentPerson._needAuth) {
     // Supervisor / independen (bukan dari badge) -> perlu password dulu
