@@ -512,8 +512,13 @@ function handleLocationResult(result) {
     "🟢 Kelompok: " + activeLocation + " | Jarak: " + dist + "m | Radius: " + rad + "m",
     "ok");
 
-  setStatus("Pilih cara absen di bawah ini.", "info");
-  document.getElementById('entryCard').style.display = "block";
+  if (qrCodeId) {
+    // Datang dari Digital Badge atau QR fisik -- langsung verifikasi wajah 1:1
+    proceedWithQr();
+  } else {
+    setStatus("Pilih cara absen di bawah ini.", "info");
+    document.getElementById('entryCard').style.display = "block";
+  }
 }
 
 // ============ 2. AMBIL DATA PERSON ============
