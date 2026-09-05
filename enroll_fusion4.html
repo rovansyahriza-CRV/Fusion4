@@ -107,6 +107,18 @@
       box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
       pointer-events: none;
     }
+    .qr-frame {
+      position: absolute;
+      width: 68%;
+      aspect-ratio: 1;
+      border: 3px solid #27AE60;
+      border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.42);
+      pointer-events: none;
+      display: none;
+    }
+    .scanner-box.qr-mode .face-oval { display: none; }
+    .scanner-box.qr-mode .qr-frame { display: block; }
 
     .samples-grid {
       display: grid;
@@ -202,6 +214,7 @@
     <div class="scanner-box">
       <video id="videoElement" playsinline muted autoplay></video>
       <div class="face-oval"></div>
+      <div class="qr-frame" aria-hidden="true"></div>
       <canvas id="hiddenCanvas" style="display:none;"></canvas>
     </div>
 
@@ -245,6 +258,7 @@
   const video = document.getElementById('videoElement');
   const canvas = document.getElementById('hiddenCanvas');
   const statusMsg = document.getElementById('statusMsg');
+  const scannerBox = document.querySelector('.scanner-box');
 
   document.addEventListener('DOMContentLoaded', async () => {
     await initModels();
@@ -333,6 +347,7 @@
     const btn = document.getElementById('btnScanQr');
     btn.textContent = '⏹ Batal Scan';
     btn.disabled = false;
+    scannerBox.classList.add('qr-mode');
     setStatus("Arahkan QR Code ke kamera...", "info");
 
     try {
@@ -349,6 +364,7 @@
     isQrScanning = false;
     const btn = document.getElementById('btnScanQr');
     btn.textContent = '📷 Scan QR';
+    scannerBox.classList.remove('qr-mode');
   }
 
   async function scanQrLoop() {
