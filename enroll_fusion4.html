@@ -13,6 +13,7 @@
   
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="driveBridge.js"></script>
@@ -59,6 +60,21 @@
     }
     .form-group { margin-bottom: 12px; }
     .form-group label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+    .selection-row { display: flex; gap: 8px; align-items: stretch; }
+    .selection-row select { flex: 1; min-width: 0; }
+    .btn-scan {
+      flex: 0 0 auto;
+      background: var(--navy);
+      color: #FFF;
+      border: none;
+      border-radius: 10px;
+      padding: 0 12px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-scan:disabled { opacity: 0.6; cursor: not-allowed; }
     select, input {
       width: 100%;
       padding: 11px 12px;
@@ -168,9 +184,12 @@
   <div class="card">
     <div class="form-group">
       <label for="selectKaryawan">Pilih Nama Karyawan:</label>
-      <select id="selectKaryawan" onchange="handleKaryawanChange()">
-        <option value="">-- Memuat daftar karyawan... --</option>
-      </select>
+      <div class="selection-row">
+        <select id="selectKaryawan" onchange="handleKaryawanChange()">
+          <option value="">-- Memuat daftar karyawan... --</option>
+        </select>
+        <button type="button" id="btnScanQr" class="btn-scan" onclick="toggleQrScanner()">📷 Scan QR</button>
+      </div>
     </div>
 
     <div class="form-group">
@@ -219,6 +238,9 @@
   let capturedDescriptors = [];
   let capturedImages = [];
   let isModelsLoaded = false;
+  let isQrScanning = false;
+  let qrCanvas = document.createElement('canvas');
+  let qrContext = qrCanvas.getContext('2d', { willReadFrequently: true });
 
   const video = document.getElementById('videoElement');
   const canvas = document.getElementById('hiddenCanvas');
@@ -289,8 +311,86 @@
   }
 
   async function switchCamera() {
+    if (isQrScanning) stopQrScanner();
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     await startCamera();
+  }
+
+  async function toggleQrScanner() {
+    if (isQrScanning) {
+      stopQrScanner();
+      currentFacingMode = 'user';
+      await startCamera();
+      setStatus("Scan QR dibatalkan. Kamera wajah siap digunakan.", "info");
+      return;
+    }
+
+    isQrScanning = true;
+    const btn = document.getElementById('btnScanQr');
+    btn.textContent = '⏹ Batal Scan';
+    btn.disabled = false;
+    setStatus("Arahkan QR Code ke kamera...", "info");
+
+    try {
+      currentFacingMode = 'environment';
+      await startCamera();
+      scanQrLoop();
+    } catch (e) {
+      stopQrScanner();
+      setStatus("Gagal akses kamera untuk scan QR: " + e.message, "error");
+    }
+  }
+
+  function stopQrScanner() {
+    isQrScanning = false;
+    const btn = document.getElementById('btnScanQr');
+    btn.textContent = '📷 Scan QR';
+  }
+
+  async function scanQrLoop() {
+    while (isQrScanning) {
+      if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+        qrCanvas.width = video.videoWidth;
+        qrCanvas.height = video.videoHeight;
+        qrContext.drawImage(video, 0, 0, qrCanvas.width, qrCanvas.height);
+        const imageData = qrContext.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth'
+        });
+
+        if (code && code.data) {
+          const rawValue = code.data.trim();
+          let qrId = rawValue;
+          try {
+            const url = new URL(rawValue);
+            qrId = url.searchParams.get('QrCodeId') ||
+              url.searchParams.get('qrCodeId') ||
+              url.searchParams.get('qrcodeid') ||
+              rawValue;
+          } catch (_) {
+            // QR berisi QrCodeId teks biasa.
+          }
+
+          const kar = karyawanList.find(k =>
+            String(k.QrCodeId || '').trim().toLowerCase() === qrId.trim().toLowerCase()
+          );
+
+          stopQrScanner();
+          stopQrScanner();
+          if (!kar) {
+            await startCamera();
+            setStatus(`QrCodeId "${qrId}" tidak ditemukan di daftar karyawan.`, "error");
+          } else {
+            document.getElementById('selectKaryawan').value = String(kar.Id);
+            handleKaryawanChange();
+            await startCamera();
+            setStatus(`✅ Karyawan terpilih: ${kar.NamaPersonnel}`, "success");
+          }
+          return;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
   }
 
   async function captureSample() {
@@ -424,4 +524,3 @@
 
 </body>
 </html>
-
