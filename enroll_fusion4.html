@@ -255,9 +255,13 @@
   async function initModels() {
     try {
       if (faceapi.tf && faceapi.tf.ENV) {
-        faceapi.tf.ENV.set('WEBGL_PACK', false);
-        faceapi.tf.ENV.set('WEBGL_CHECK_NUMERICAL_PROBLEMS', false);
-        faceapi.tf.ENV.set('WEBGL_FORCE_F16_TEXTURES', false);
+        const flags = faceapi.tf.ENV.getFlags();
+        if (Object.prototype.hasOwnProperty.call(flags, 'WEBGL_PACK')) {
+          faceapi.tf.ENV.set('WEBGL_PACK', false);
+        }
+        if (Object.prototype.hasOwnProperty.call(flags, 'WEBGL_FORCE_F16_TEXTURES')) {
+          faceapi.tf.ENV.set('WEBGL_FORCE_F16_TEXTURES', false);
+        }
         faceapi.tf.enableProdMode();
       }
 
