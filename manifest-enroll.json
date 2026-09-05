@@ -1,6 +1,6 @@
 {
-  "name": "Fusion4 Enroll Wajah",
-  "short_name": "Enroll",
+  "name": "Enroll Wajah Fusion4",
+  "short_name": "Enroll Wajah",
   "description": "Enroll wajah karyawan untuk sistem absensi Fusion4",
   "start_url": "/Fusion4/enroll_fusion4.html",
   "scope": "/Fusion4/",
