@@ -317,7 +317,13 @@
   }
 
   async function startCamera() {
-    if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+    if (videoStream) {
+      videoStream.getTracks().forEach(t => t.stop());
+      videoStream = null;
+    }
+    video.pause();
+    video.srcObject = null;
+    await new Promise(resolve => setTimeout(resolve, 150));
     try {
       videoStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: currentFacingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -326,6 +332,7 @@
       await video.play();
     } catch (e) {
       setStatus("Gagal akses kamera: " + e.message, "error");
+      throw e;
     }
   }
 
@@ -359,6 +366,7 @@
       scanQrLoop();
     } catch (e) {
       stopQrScanner();
+      currentFacingMode = 'user';
       setStatus("Gagal akses kamera untuk scan QR: " + e.message, "error");
     }
   }
