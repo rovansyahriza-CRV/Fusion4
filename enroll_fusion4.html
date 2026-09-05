@@ -98,6 +98,7 @@
       margin-bottom: 12px;
     }
     video { width: 100%; height: 100%; object-fit: cover; }
+    .scanner-box.face-front:not(.qr-mode) video { transform: scaleX(-1); }
     .face-oval {
       position: absolute;
       width: 55%;
@@ -211,7 +212,7 @@
 
     <div id="statusMsg" class="status-msg info">Memuat model kecerdasan buatan (AI)...</div>
 
-    <div class="scanner-box">
+    <div class="scanner-box face-front">
       <video id="videoElement" playsinline muted autoplay></video>
       <div class="face-oval"></div>
       <div class="qr-frame" aria-hidden="true"></div>
@@ -331,6 +332,7 @@
   async function switchCamera() {
     if (isQrScanning) stopQrScanner();
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    scannerBox.classList.toggle('face-front', currentFacingMode === 'user');
     await startCamera();
   }
 
@@ -348,6 +350,7 @@
     btn.textContent = '⏹ Batal Scan';
     btn.disabled = false;
     scannerBox.classList.add('qr-mode');
+    scannerBox.classList.remove('face-front');
     setStatus("Arahkan QR Code ke kamera...", "info");
 
     try {
@@ -365,6 +368,7 @@
     const btn = document.getElementById('btnScanQr');
     btn.textContent = '📷 Scan QR';
     scannerBox.classList.remove('qr-mode');
+    scannerBox.classList.add('face-front');
   }
 
   async function scanQrLoop() {
@@ -396,7 +400,7 @@
           );
 
           stopQrScanner();
-          stopQrScanner();
+          currentFacingMode = 'user';
           if (!kar) {
             await startCamera();
             setStatus(`QrCodeId "${qrId}" tidak ditemukan di daftar karyawan.`, "error");

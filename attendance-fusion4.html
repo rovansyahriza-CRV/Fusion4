@@ -86,6 +86,7 @@
     overflow: hidden; border-radius: var(--radius-lg); background: #0B0D10; display: none;
   }
   video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+  #wrap.face-front:not(.qr-mode) video { transform: scaleX(-1); }
   .reticle { position: absolute; inset: 22px; pointer-events: none; }
   .reticle span { position: absolute; width: 26px; height: 26px; border: 3px solid var(--accent); }
   .reticle span:nth-child(1){ top:0; left:0; border-right:none; border-bottom:none; border-top-left-radius:6px; }
@@ -268,6 +269,7 @@ let currentFacingModeFace = "user"; // default depan buat wajah sendiri
 
 document.getElementById('btnSwitchFaceCam').onclick = async () => {
   currentFacingModeFace = currentFacingModeFace === "user" ? "environment" : "user";
+  wrap.classList.toggle('face-front', currentFacingModeFace === "user");
   stopGuideLoop();
   try {
     await restartCameraStream(currentFacingModeFace);
@@ -635,6 +637,8 @@ function withTimeout(promise, ms, timeoutMessage) {
 
 async function startFaceOnlyCapture() {
   matchMode = "1:N";
+  wrap.classList.add('face-front');
+  wrap.classList.remove('qr-mode');
   setStatus("Memuat model wajah...", "info");
   statusEl.style.display = "block";
   try {
@@ -681,6 +685,8 @@ async function startFaceOnlyCapture() {
 // ============ 3. VERIFIKASI WAJAH (mode 1:1, identitas sudah pasti dari QR) ============
 async function startFaceVerification() {
   matchMode = "1:1";
+  wrap.classList.add('face-front');
+  wrap.classList.remove('qr-mode');
   setStatus("Memuat model wajah...", "info");
   try {
     await withTimeout(loadFaceModelsWithBackendFix(), 15000, "Timeout memuat model (15 detik). Coba refresh halaman.");
@@ -898,6 +904,8 @@ document.getElementById('btnFallbackToQr').onclick = async () => {
   btnScanFace.style.display = "none";
   stopGuideLoop();
   matchMode = "1:1";
+  wrap.classList.add('qr-mode');
+  wrap.classList.remove('face-front');
   qrGuide.style.display = "block";
   document.getElementById('btnSwitchQrCam').style.display = "block";
   setStatus("Arahkan QR badge Anda ke kamera...", "info");
@@ -1120,6 +1128,8 @@ document.getElementById('btnStartQrScan').onclick = async () => {
   document.getElementById('btnStartQrScan').disabled = true;
   try {
     await ensureCameraStream(currentFacingModeQR);
+    wrap.classList.add('qr-mode');
+    wrap.classList.remove('face-front');
     qrGuide.style.display = "block";
     document.getElementById('btnSwitchQrCam').style.display = "block";
     setStatus("Arahkan QR badge Anda ke kamera...", "info");
