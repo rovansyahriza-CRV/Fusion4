@@ -1,0 +1,34 @@
+name: Keep Supabase awake
+
+on:
+  schedule:
+    # Run every three days, safely inside Supabase's seven-day pause window.
+    - cron: '17 2 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Supabase projects
+        env:
+          SUPABASE_URL_1: https://nhmpwjriextmbotmvvbu.supabase.co
+          SUPABASE_KEY_1: sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz
+          SUPABASE_URL_2: https://wvzajdnxmjegblqrvgfs.supabase.co
+          SUPABASE_KEY_2: sb_publishable_BsYvIC-QEgxEfE2UP1siZg_85Rx0XYP
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "apikey: ${SUPABASE_KEY_1}" \
+            --header "Authorization: Bearer ${SUPABASE_KEY_1}" \
+            --header "Content-Type: application/json" \
+            --data '{}' \
+            --output /dev/null \
+            "${SUPABASE_URL_1}/rest/v1/rpc/get_active_karyawan"
+
+          curl --fail-with-body --silent --show-error \
+            --request GET \
+            --header "apikey: ${SUPABASE_KEY_2}" \
+            --output /dev/null \
+            "${SUPABASE_URL_2}/auth/v1/health"
