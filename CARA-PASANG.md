@@ -53,3 +53,9 @@
   saat offline. Kalau nanti mau tambah mode "benar-benar offline" (misal buat
   area site yang sinyalnya jelek), perlu strategi cache berbeda untuk model
   face-api.js — kasih tau saja kalau butuh itu.
+
+## Supabase keep-alive
+
+Workflow `.github/workflows/supabase-keepalive.yml` melakukan ping read-only ke
+Supabase setiap 3 hari supaya project tidak melewati batas standby 7 hari.
+Workflow juga bisa dijalankan manual dari tab **Actions** melalui **Run workflow**.
