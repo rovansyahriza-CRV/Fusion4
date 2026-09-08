@@ -884,8 +884,10 @@ function editKaryawan(id) {
 
 function resetKaryawanForm() {
   ['karyawanNama','karyawanType','karyawanKualifikasi','karyawanDepartemen','karyawanDivisi',
-   'karyawanTglMasuk','karyawanPassword','karyawanAuthor','karyawanPic','karyawanEditId']
+   'karyawanTglMasuk','karyawanAuthor','karyawanPic','karyawanEditId']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const passEl = document.getElementById('karyawanPassword');
+  if (passEl) passEl.value = '12345';
   setKaryawanEditMode(false);
   document.getElementById('karyawanFormTitle').textContent = '+ Tambah Karyawan Baru';
 }
@@ -2465,6 +2467,21 @@ function openEmployeeRequestDetail(id) {
           ${req.catatanapproval ? `<strong style="color:#166534;">Catatan Evaluasi:</strong> ${escapeHtml(req.catatanapproval)}` : ''}
         </div>
       ` : ''}
+
+      <!-- Shortcut Pre-Fill Form Tambah Karyawan Baru -->
+      <div style="background:#f0fdfa; border:1.5px dashed #0d9488; border-radius:8px; padding:12px; margin-top:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="flex:1; min-width:200px;">
+          <strong style="color:#0f766e; font-size:13px; display:flex; align-items:center; gap:5px;">
+            <span>👤</span> Registrasi Karyawan dari Request Ini
+          </strong>
+          <span style="font-size:11px; color:#115e59; display:block; margin-top:2px;">
+            Salin Divisi, Dept, Posisi &amp; Site langsung ke Form Karyawan Baru (Password default: <strong>12345</strong>).
+          </span>
+        </div>
+        <button type="button" class="btn-primary" style="background:#0d9488; font-size:12px; padding:7px 14px; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" onclick="prefillKaryawanFromRequest(${req.id})">
+          ➕ Isi Form Karyawan Baru
+        </button>
+      </div>
     `;
   }
 
@@ -2479,6 +2496,53 @@ function openEmployeeRequestDetail(id) {
 function closeModalEmpReqDetail() {
   const modal = document.getElementById('modalEmpReqDetail');
   if (modal) modal.style.display = 'none';
+}
+
+function prefillKaryawanFromRequest(reqId) {
+  const req = (empReqState.rows || []).find(r => r.id === reqId) || empReqState.selectedRequest;
+  if (!req) return;
+
+  // Tutup modal detail request
+  closeModalEmpReqDetail();
+
+  // Buka menu Data Karyawan
+  const btnNav = document.getElementById('btnNavKaryawan');
+  attemptNav('DK', 'sec-karyawan', btnNav, () => loadKaryawanPage());
+
+  // Reset form ke mode Tambah Baru
+  resetKaryawanForm();
+
+  // Isi field otomatis dari request
+  const divEl = document.getElementById('karyawanDivisi');
+  const deptEl = document.getElementById('karyawanDepartemen');
+  const kualEl = document.getElementById('karyawanKualifikasi');
+  const typeEl = document.getElementById('karyawanType');
+  const tglEl = document.getElementById('karyawanTglMasuk');
+  const passEl = document.getElementById('karyawanPassword');
+  const namaEl = document.getElementById('karyawanNama');
+
+  if (divEl) divEl.value = req.divisi || '';
+  if (deptEl) deptEl.value = req.departemen || '';
+  if (kualEl) kualEl.value = req.posisijabatan || '';
+  if (typeEl) typeEl.value = req.projectcode || req.lokasisite || 'Project';
+  if (tglEl) tglEl.value = req.tanggaldibutuhkan || getTodayDateString();
+  if (passEl) passEl.value = '12345'; // Password default 12345
+
+  // Scroll ke form dan fokus ke input nama personel
+  setTimeout(() => {
+    const formTitle = document.getElementById('karyawanFormTitle');
+    if (formTitle) formTitle.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (namaEl) {
+      namaEl.focus();
+      namaEl.style.borderColor = '#0d9488';
+      namaEl.style.boxShadow = '0 0 0 3px rgba(13, 148, 136, 0.2)';
+      setTimeout(() => {
+        namaEl.style.borderColor = '';
+        namaEl.style.boxShadow = '';
+      }, 3000);
+    }
+    showToast(`Data request #${req.requestno || req.id} berhasil disalin ke form! Password default: 12345. Silakan isi Nama Personel.`, 'success', 5000);
+  }, 300);
 }
 
 async function executeEmpReqDecision(newStatus) {
