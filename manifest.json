@@ -1,31 +1,24 @@
 {
-  "name": "Fusion4 SmartGate",
-  "short_name": "Fusion4",
-  "description": "Sistem absensi Fusion4 dengan face verification, GPS geofencing, Pindah Lokasi, dan Ijin Keluar",
-  "start_url": "/Fusion4/attendance-fusion4.html",
-  "scope": "/Fusion4/",
+  "name": "Fusion4 SmartGate Admin Portal",
+  "short_name": "Fusion4 SmartGate",
+  "description": "SmartGate AI Attendance & Workforce Management - PT BIMA",
+  "start_url": "./index.html",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#243463",
-  "theme_color": "#243463",
+  "background_color": "#F7F5F0",
+  "theme_color": "#E04D23",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "fusion4.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
-      "src": "icon-512.png",
+      "src": "fusion4.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ]
 }
+

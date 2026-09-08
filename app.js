@@ -19,9 +19,9 @@ async function initAuthSession() {
   if (savedUser) {
     currentUser = JSON.parse(savedUser);
     updateUIAuth();
-    // Refresh PIC dari database tiap buka app, biar kalau admin baru ubah PIC-nya,
-    // gak perlu logout/login dulu buat efeknya kerasa.
+    // Refresh PIC & Author dari database tiap buka app
     currentUser.pic = await fetchKaryawanPic(currentUser.id);
+    currentUser.author = await fetchKaryawanAuthor(currentUser.id);
     localStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
     applySidebarAccess();
   } else {
@@ -46,8 +46,10 @@ async function loginUser(idKaryawan, password) {
         nama: userRow.nama,
         kualifikasi: userRow.kualifikasi,
         pic: '',
+        author: '',
       };
       currentUser.pic = await fetchKaryawanPic(currentUser.id);
+      currentUser.author = await fetchKaryawanAuthor(currentUser.id);
       localStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
       updateUIAuth();
       showToast(`Selamat datang, ${currentUser.nama}!`, 'success');
@@ -77,6 +79,7 @@ const SIDEBAR_ACCESS_MAP = [
   { key: 'DK', label: 'Data Karyawan', sectionId: 'sec-karyawan', btnId: 'btnNavKaryawan' },
   { key: 'KDB', label: 'Kelola Digital Badge', sectionId: 'sec-badge', btnId: 'btnNavBadge' },
   { key: 'KK', label: 'Kontrak Karyawan', sectionId: 'sec-kontrak', btnId: 'btnNavKontrak' },
+  { key: 'ER', label: 'Permintaan Karyawan', sectionId: 'sec-employee-request', btnId: 'btnNavEmployeeRequest' },
   { key: 'OIL', label: 'Otorisasi Ijin & Lembur', sectionId: 'sec-otorisasi', btnId: 'btnNavOtorisasi' },
 ];
 
@@ -87,6 +90,16 @@ async function fetchKaryawanPic(id) {
     return data || '';
   } catch (err) {
     console.error('Error fetchKaryawanPic:', err);
+    return '';
+  }
+}
+
+async function fetchKaryawanAuthor(id) {
+  try {
+    const { data, error } = await supabaseClient.from('paswordTbl').select('Author').eq('Id', parseInt(id, 10)).maybeSingle();
+    if (!error && data) return data.Author || '';
+    return '';
+  } catch (err) {
     return '';
   }
 }
@@ -1798,4 +1811,719 @@ async function executeApprovalDecision(isApprove) {
     if (btnReject) btnReject.disabled = false;
   }
 }
+
+// ==========================================
+// EMPLOYEE REQUEST (PERMINTAAN KARYAWAN)
+// Author: "Employee Request"
+// Matrix Organisasi: 5 Divisi, 30 Departemen, & Kualifikasi Jabatan
+// ==========================================
+
+const BIMA_ORG_MATRIX = {
+  "Finance": {
+    "Accounts Receivable (AR)": [
+      "Accounts Receivable (AR)",
+      "AR Supervisor",
+      "Billing & Invoicing Specialist",
+      "AR Collection Officer",
+      "Credit Analyst"
+    ],
+    "Treasury & Cash Management": [
+      "Treasury & Cash Management",
+      "Treasury Supervisor",
+      "Cash Flow Analyst",
+      "Bank Relation Officer",
+      "Project / Petty Cashier"
+    ],
+    "Financial Planning & Analysis (FP&A)": [
+      "Financial Planning & Analysis (FP&A)",
+      "FP&A Lead",
+      "Corporate Budgeting Analyst",
+      "Financial Modeling Analyst",
+      "Business Performance Analyst"
+    ],
+    "Accounting & Financial Reporting": [
+      "Accounting & Financial Reporting",
+      "General Accounting Supervisor",
+      "GL Accountant",
+      "Fixed Asset Accountant",
+      "Financial Reporting Specialist"
+    ],
+    "Taxation (Perpajakan)": [
+      "Taxation (Perpajakan)",
+      "Tax Supervisor",
+      "Corporate Tax Specialist",
+      "VAT & Withholding Officer",
+      "Tax Compliance Officer"
+    ],
+    "Payroll (Penggajian)": [
+      "Payroll (Penggajian)",
+      "Payroll Lead",
+      "Payroll Processor",
+      "BPJS & Tax Deduction Analyst",
+      "Time Attendance Admin"
+    ]
+  },
+  "Operation": {
+    "Engineering": [
+      "Engineering Manager",
+      "Lead / Chief Engineer",
+      "Civil & Structural Engineer",
+      "Mechanical & Piping Engineer",
+      "Electrical & Instrument Engineer",
+      "Drafter / BIM Modeler"
+    ],
+    "HSE": [
+      "HSE Manager",
+      "HSE Coordinator / Lead",
+      "Safety Officer / Inspector",
+      "Environmental Officer",
+      "Project Paramedic",
+      "HSE Admin & Doc Control"
+    ],
+    "Project Control": [
+      "Project Control Manager",
+      "Project Control Lead",
+      "Planner & Scheduler",
+      "Cost Controller",
+      "Quantity Surveyor (QS)",
+      "Document Controller"
+    ],
+    "Project": [
+      "Project Manager",
+      "Site Manager",
+      "Site Engineer",
+      "Site Supervisor",
+      "General Superintendent",
+      "Site Admin"
+    ],
+    "QAC": [
+      "QAC Manager",
+      "QA/QC Coordinator",
+      "QA Auditor / Specialist",
+      "QC Inspector",
+      "Welding / NDT Inspector",
+      "Material / Lab Technician"
+    ],
+    "Equipment": [
+      "Equipment Manager",
+      "Equipment / Plant Lead",
+      "Maintenance Planner",
+      "Equipment Mechanic",
+      "Auto Electrician",
+      "Dispatcher / Fleet Admin"
+    ]
+  },
+  "Human Resources": {
+    "Talent Acquisition / Recruitment": [
+      "Talent Acquisition / Recruitment",
+      "Talent Acquisition Lead",
+      "Technical Recruiter",
+      "Sourcing Specialist",
+      "Onboarding Coordinator"
+    ],
+    "Compensation & Benefits (CompBen)": [
+      "Compensation & Benefits (CompBen)",
+      "CompBen Lead",
+      "Salary Grading Analyst",
+      "Insurance Administrator",
+      "Remuneration Officer"
+    ],
+    "Learning & Development (L&D)": [
+      "Learning & Development (L&D)",
+      "L&D Lead",
+      "Training Needs Analyst",
+      "Corporate Trainer",
+      "LMS Administrator"
+    ],
+    "Employee Relations (ER)": [
+      "Employee Relations (ER)",
+      "Industrial Relations Specialist",
+      "Dispute & Compliance Officer",
+      "Employee Engagement Officer",
+      "Company Culture Officer"
+    ],
+    "Performance Management": [
+      "Performance Management",
+      "Performance Management Lead",
+      "KPI & OKR Specialist",
+      "Appraisal Officer",
+      "Succession Planning Officer"
+    ],
+    "HR Operations / HR Admin": [
+      "HR Operations / HR Admin",
+      "HR Operations Supervisor",
+      "HRIS Administrator",
+      "Personnel Contract Admin",
+      "Expatriate / Permit Admin"
+    ]
+  },
+  "Supply Chains": {
+    "Procurement / Purchasing": [
+      "Procurement / Purchasing",
+      "Procurement Lead",
+      "Project Buyer",
+      "Service Procurement Officer",
+      "Expeditor / PO Admin"
+    ],
+    "Warehousing & Inventory Control": [
+      "Warehousing & Inventory Control",
+      "Warehouse Supervisor",
+      "Inventory Controller",
+      "Material Receiver",
+      "Storekeeper / Toolman"
+    ],
+    "Logistics & Distribution": [
+      "Logistics & Distribution",
+      "Logistics Supervisor",
+      "Freight Planner",
+      "Fleet Coordinator",
+      "Logistics Safety Officer"
+    ],
+    "Supply & Demand Planning": [
+      "Supply & Demand Planning",
+      "Supply & Demand Lead",
+      "Material Requirement Planner",
+      "Demand Planner",
+      "Inventory Forecast Specialist"
+    ],
+    "Import-Export (Exim) & Customs": [
+      "Import-Export (Exim) & Customs",
+      "Exim Supervisor",
+      "Customs Clearance Specialist",
+      "Forwarding Coordinator",
+      "Shipping & LC Admin"
+    ],
+    "Vendor Management": [
+      "Vendor Management",
+      "Vendor Management Lead",
+      "Vendor Auditor",
+      "Supplier Performance Analyst",
+      "Vendor Database Admin"
+    ]
+  },
+  "Bussiness Development": {
+    "Tender & Proposal (Bidding)": [
+      "Tender & Proposal (Bidding)",
+      "Bid & Proposal Lead",
+      "Technical Proposal Writer",
+      "Commercial Estimator",
+      "Bidding Doc Controller"
+    ],
+    "Market Intelligence & Strategy": [
+      "Market Intelligence & Strategy",
+      "Market Intelligence Specialist",
+      "Business Strategy Analyst",
+      "Competitor Benchmark Analyst",
+      "Business Feasibility Analyst"
+    ],
+    "Key Account Management & Sales": [
+      "Key Account Management & Sales",
+      "Key Account Manager",
+      "Business Development Executive",
+      "Client Relationship Officer",
+      "Pre-Sales Solutionist"
+    ],
+    "Strategic Partnership & Alliances": [
+      "Strategic Partnership & Alliances",
+      "Partnership Manager",
+      "Consortium / JV Specialist",
+      "Government Relations Officer",
+      "Stakeholder Relations Officer"
+    ],
+    "Commercial & Contract Review": [
+      "Commercial & Contract Review",
+      "Commercial Lead",
+      "Contract Negotiation Specialist",
+      "Legal Risk Assessment Officer",
+      "Post-Award Commercial Officer"
+    ],
+    "Brand & Corporate Communications": [
+      "Brand & Corporate Communications",
+      "Corp Comm Lead",
+      "PR Specialist",
+      "Brand & Marketing Specialist",
+      "Digital Media Specialist"
+    ]
+  }
+};
+
+let empReqState = {
+  rows: [],
+  currentTab: 'ALL',
+  selectedRequest: null
+};
+
+function hasEmployeeRequestAuthor() {
+  if (!currentUser) return false;
+  const authorStr = String(currentUser.author || currentUser.Author || '').toUpperCase();
+  const kualifikasiStr = String(currentUser.kualifikasi || '').toUpperCase();
+  const picStr = String(currentUser.pic || '').toUpperCase();
+
+  return (
+    authorStr.includes('EMPLOYEE REQUEST') ||
+    authorStr.includes('LEAD') ||
+    authorStr.includes('ADMIN') ||
+    authorStr.includes('HR') ||
+    kualifikasiStr.includes('ADMIN') ||
+    kualifikasiStr.includes('HR') ||
+    picStr.includes('ALL') ||
+    picStr.includes('ER')
+  );
+}
+
+function handleEmpReqDivisiChange() {
+  const divSelect = document.getElementById('empReqDivisi');
+  const deptSelect = document.getElementById('empReqDepartemen');
+  const posSelect = document.getElementById('empReqPosisi');
+  const customGroup = document.getElementById('groupEmpReqPosisiCustom');
+
+  if (!deptSelect || !posSelect) return;
+
+  const selectedDiv = divSelect ? divSelect.value : '';
+  deptSelect.innerHTML = '<option value="">-- Pilih Departemen --</option>';
+  posSelect.innerHTML = '<option value="">-- Pilih Departemen Terlebih Dahulu --</option>';
+  if (customGroup) customGroup.style.display = 'none';
+
+  if (!selectedDiv || !BIMA_ORG_MATRIX[selectedDiv]) return;
+
+  const depts = Object.keys(BIMA_ORG_MATRIX[selectedDiv]);
+  depts.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    deptSelect.appendChild(opt);
+  });
+}
+
+function handleEmpReqDepartemenChange() {
+  const divSelect = document.getElementById('empReqDivisi');
+  const deptSelect = document.getElementById('empReqDepartemen');
+  const posSelect = document.getElementById('empReqPosisi');
+  const customGroup = document.getElementById('groupEmpReqPosisiCustom');
+
+  if (!posSelect) return;
+
+  const selectedDiv = divSelect ? divSelect.value : '';
+  const selectedDept = deptSelect ? deptSelect.value : '';
+
+  posSelect.innerHTML = '<option value="">-- Pilih Posisi / Kualifikasi Jabatan --</option>';
+  if (customGroup) customGroup.style.display = 'none';
+
+  if (!selectedDiv || !selectedDept || !BIMA_ORG_MATRIX[selectedDiv] || !BIMA_ORG_MATRIX[selectedDiv][selectedDept]) {
+    return;
+  }
+
+  // 1. Ambil posisi standar dari Matriks Organisasi
+  const defaultPositions = BIMA_ORG_MATRIX[selectedDiv][selectedDept] || [];
+
+  // 2. Ambil posisi kustom yang pernah diinput sebelumnya dari riwayat database
+  const historicalPositions = (empReqState.rows || [])
+    .filter(r => r.divisi === selectedDiv && r.departemen === selectedDept && r.posisijabatan)
+    .map(r => String(r.posisijabatan).trim());
+
+  // 3. Gabungkan dan hapus duplikat (Unique)
+  const combinedPositions = [...new Set([...defaultPositions, ...historicalPositions])];
+
+  combinedPositions.forEach(p => {
+    if (!p || p === 'CUSTOM') return;
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    posSelect.appendChild(opt);
+  });
+
+  // 4. Tambahkan opsi Posisi Lainnya (Ketik Sendiri)
+  const customOpt = document.createElement('option');
+  customOpt.value = 'CUSTOM';
+  customOpt.textContent = '➕ Posisi Lainnya (Ketik Sendiri)...';
+  posSelect.appendChild(customOpt);
+}
+
+function handleEmpReqPosisiChange() {
+  const posSelect = document.getElementById('empReqPosisi');
+  const customGroup = document.getElementById('groupEmpReqPosisiCustom');
+  const customInput = document.getElementById('empReqPosisiCustom');
+
+  if (!posSelect || !customGroup) return;
+
+  if (posSelect.value === 'CUSTOM') {
+    customGroup.style.display = 'block';
+    if (customInput) customInput.focus();
+  } else {
+    customGroup.style.display = 'none';
+    if (customInput) customInput.value = '';
+  }
+}
+
+async function loadEmployeeRequestPage(tab = 'ALL', tabBtn = null) {
+  empReqState.currentTab = tab;
+
+  // Update tabs UI
+  if (tabBtn) {
+    document.querySelectorAll('#empReqTabs .tab-btn').forEach(b => b.classList.remove('active'));
+    tabBtn.classList.add('active');
+  }
+
+  // Pre-fill pemohon name
+  const pemohonInput = document.getElementById('empReqPemohon');
+  if (pemohonInput && currentUser) {
+    pemohonInput.value = `${currentUser.nama} (ID: ${currentUser.id})`;
+  }
+
+  // Default tanggal butuh: 14 hari ke depan
+  const tglButuhInput = document.getElementById('empReqTanggalButuh');
+  if (tglButuhInput && !tglButuhInput.value) {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    tglButuhInput.value = d.toISOString().split('T')[0];
+  }
+
+  // Load dropdown lokasi
+  await loadEmployeeRequestLokasiDropdown();
+
+  const tbody = document.getElementById('empReqTableBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">Memuat data...</td></tr>';
+
+  try {
+    const { data, error } = await supabaseClient.rpc('list_employee_requests', { p_status: tab });
+    if (error) throw error;
+    empReqState.rows = data || [];
+    renderEmployeeRequestTable();
+    updateEmpReqBadgeCounts();
+  } catch (err) {
+    console.error('Error loadEmployeeRequestPage:', err);
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">Gagal memuat data: ${err.message}</td></tr>`;
+  }
+}
+
+async function updateEmpReqBadgeCounts() {
+  try {
+    const { data, error } = await supabaseClient.rpc('list_employee_requests', { p_status: 'ALL' });
+    if (error || !data) return;
+
+    const all = data.length;
+    const pending = data.filter(r => String(r.status).toUpperCase() === 'PENDING').length;
+    const approved = data.filter(r => String(r.status).toUpperCase() === 'APPROVED').length;
+    const inProgress = data.filter(r => String(r.status).toUpperCase() === 'IN PROGRESS').length;
+    const fulfilled = data.filter(r => String(r.status).toUpperCase() === 'FULFILLED').length;
+    const rejected = data.filter(r => String(r.status).toUpperCase() === 'REJECTED').length;
+
+    const setC = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setC('countEmpReqAll', all);
+    setC('countEmpReqPending', pending);
+    setC('countEmpReqApproved', approved);
+    setC('countEmpReqProgress', inProgress);
+    setC('countEmpReqFulfilled', fulfilled);
+    setC('countEmpReqRejected', rejected);
+  } catch (e) {}
+}
+
+async function loadEmployeeRequestLokasiDropdown() {
+  const selectEl = document.getElementById('empReqLokasi');
+  if (!selectEl) return;
+
+  selectEl.innerHTML = '<option value="">-- Memuat Lokasi... --</option>';
+  try {
+    let locs = [];
+    // 1. Coba RPC list_lokasi_with_timelimit (sumber utama lokasiTbl)
+    const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('list_lokasi_with_timelimit');
+    if (!rpcErr && rpcData && rpcData.length > 0) {
+      locs = rpcData.map(l => l.namalokasi || l.NamaLokasi).filter(Boolean);
+    } else {
+      // 2. Fallback ke list_lokasi_full
+      const { data: fullData, error: fullErr } = await supabaseClient.rpc('list_lokasi_full');
+      if (!fullErr && fullData && fullData.length > 0) {
+        locs = fullData.map(l => l.namalokasi || l.NamaLokasi).filter(Boolean);
+      } else {
+        // 3. Fallback direct table
+        const { data: tblData } = await supabaseClient.from('lokasiTbl').select('NamaLokasi');
+        if (tblData) locs = tblData.map(l => l.NamaLokasi).filter(Boolean);
+      }
+    }
+
+    // Filter unique & sort alfabetis
+    locs = [...new Set(locs)].filter(name => name && name.trim()).sort((a, b) => a.localeCompare(b, 'id'));
+
+    selectEl.innerHTML = '<option value="">-- Pilih Lokasi / Site --</option>';
+    locs.forEach(nama => {
+      const opt = document.createElement('option');
+      opt.value = nama;
+      opt.textContent = `📍 ${nama}`;
+      selectEl.appendChild(opt);
+    });
+  } catch (err) {
+    console.error('Error loadEmployeeRequestLokasiDropdown:', err);
+    selectEl.innerHTML = '<option value="">Gagal memuat lokasi</option>';
+  }
+}
+
+function renderEmployeeRequestTable() {
+  const tbody = document.getElementById('empReqTableBody');
+  const badgeCountEl = document.getElementById('empReqBadgeCount');
+  if (!tbody) return;
+
+  const keyword = (document.getElementById('empReqSearch')?.value || '').toLowerCase().trim();
+  const filtered = (empReqState.rows || []).filter(r => {
+    if (!keyword) return true;
+    const haystack = [
+      r.requestno, r.pemohonnama, r.divisi, r.departemen, r.posisijabatan, r.lokasisite, r.projectcode, r.status
+    ].join(' ').toLowerCase();
+    return haystack.includes(keyword);
+  });
+
+  if (badgeCountEl) badgeCountEl.textContent = `${filtered.length} Permintaan`;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">Belum ada data permintaan karyawan.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => {
+    const status = String(r.status || 'PENDING').toUpperCase();
+    let badgeBg = '#fef3c7';
+    let badgeColor = '#b45309';
+
+    if (status === 'APPROVED') { badgeBg = '#dcfce7'; badgeColor = '#15803d'; }
+    else if (status === 'IN PROGRESS') { badgeBg = '#dbeafe'; badgeColor = '#1d4ed8'; }
+    else if (status === 'FULFILLED') { badgeBg = '#ecfdf5'; badgeColor = '#047857'; }
+    else if (status === 'REJECTED') { badgeBg = '#fee2e2'; badgeColor = '#b91c1c'; }
+
+    const isAuthor = hasEmployeeRequestAuthor();
+
+    return `
+      <tr>
+        <td><strong style="font-family:monospace; color:#1e293b;">${escapeHtml(r.requestno)}</strong></td>
+        <td>${r.tanggalrequest || '-'}</td>
+        <td><strong>${escapeHtml(r.pemohonnama)}</strong></td>
+        <td>
+          <span style="font-weight:700; color:#0f172a;">${escapeHtml(r.divisi || '-')}</span><br>
+          <span style="font-size:11px; color:#64748b;">${escapeHtml(r.departemen || '-')}</span>
+        </td>
+        <td><span style="font-weight:600; color:#2563eb;">${escapeHtml(r.posisijabatan)}</span></td>
+        <td><span style="font-weight:700; background:#f1f5f9; padding:2px 8px; border-radius:6px;">${r.jumlahorang || 1} Org</span></td>
+        <td>${escapeHtml(r.lokasisite || '-')}</td>
+        <td>${r.tanggaldibutuhkan || '-'}</td>
+        <td>
+          <span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:${badgeBg}; color:${badgeColor};">
+            ${status}
+          </span>
+        </td>
+        <td style="text-align:center; white-space:nowrap;">
+          <button type="button" class="btn-primary" style="padding:4px 8px; font-size:11px;" onclick="openEmployeeRequestDetail(${r.id})">
+            👁️ Detail
+          </button>
+          ${isAuthor ? `
+            <button type="button" class="btn-logout-card" style="padding:4px 8px; font-size:11px; color:#dc2626; border-color:#fca5a5; margin-left:4px;" onclick="deleteEmployeeRequest(${r.id})">
+              🗑️
+            </button>
+          ` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function scrollToEmpReqForm() {
+  const formCard = document.getElementById('cardEmpReqForm');
+  if (formCard) {
+    formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const divSelect = document.getElementById('empReqDivisi');
+    if (divSelect) divSelect.focus();
+  }
+}
+
+async function submitEmployeeRequest() {
+  if (!currentUser) {
+    showToast('Silakan login terlebih dahulu.', 'error');
+    return;
+  }
+
+  const divisi = document.getElementById('empReqDivisi')?.value.trim();
+  const dept = document.getElementById('empReqDepartemen')?.value.trim();
+  let posisi = document.getElementById('empReqPosisi')?.value.trim();
+  if (posisi === 'CUSTOM') {
+    posisi = document.getElementById('empReqPosisiCustom')?.value.trim();
+  }
+
+  const proj = document.getElementById('empReqProject')?.value.trim();
+  const lokasi = document.getElementById('empReqLokasi')?.value.trim();
+  const jml = parseInt(document.getElementById('empReqJumlah')?.value, 10) || 1;
+  const tglButuh = document.getElementById('empReqTanggalButuh')?.value;
+  const durasi = document.getElementById('empReqDurasi')?.value;
+  const gender = document.getElementById('empReqGender')?.value;
+  const pendidikan = document.getElementById('empReqPendidikan')?.value;
+  const pengalaman = document.getElementById('empReqPengalaman')?.value;
+  const alasan = document.getElementById('empReqAlasan')?.value;
+  const kualifikasi = document.getElementById('empReqKualifikasi')?.value.trim();
+
+  if (!divisi || !dept || !posisi || !lokasi || !tglButuh || !durasi || !alasan) {
+    showToast('Mohon lengkapi Divisi, Departemen, Posisi, Lokasi, Target Tanggal, dan Alasan!', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitEmpReq');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Mengirim...'; }
+
+  try {
+    const { data, error } = await supabaseClient.rpc('submit_employee_request', {
+      p_pemohon_id: currentUser.id,
+      p_pemohon_nama: currentUser.nama,
+      p_divisi: divisi,
+      p_departemen: dept,
+      p_project_code: proj,
+      p_lokasi_site: lokasi,
+      p_posisi_jabatan: posisi,
+      p_jumlah_orang: jml,
+      p_tanggal_dibutuhkan: tglButuh,
+      p_durasi_kerja: durasi,
+      p_jenis_kelamin: gender,
+      p_pendidikan: pendidikan,
+      p_pengalaman: pengalaman,
+      p_kualifikasi: kualifikasi,
+      p_alasan: alasan
+    });
+
+    if (error) throw error;
+
+    showToast(data?.message || 'Permintaan karyawan berhasil dikirim!', 'success');
+    resetEmployeeRequestForm();
+    await loadEmployeeRequestPage(empReqState.currentTab);
+  } catch (err) {
+    console.error('Error submitEmployeeRequest:', err);
+    showToast('Gagal mengirim permintaan: ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Kirim Permintaan Karyawan'; }
+  }
+}
+
+function resetEmployeeRequestForm() {
+  const form = document.getElementById('formEmployeeRequest');
+  if (form) form.reset();
+  const pemohonInput = document.getElementById('empReqPemohon');
+  if (pemohonInput && currentUser) {
+    pemohonInput.value = `${currentUser.nama} (ID: ${currentUser.id})`;
+  }
+  handleEmpReqDivisiChange();
+}
+
+function openEmployeeRequestDetail(id) {
+  const req = (empReqState.rows || []).find(r => r.id === id);
+  if (!req) return;
+
+  empReqState.selectedRequest = req;
+
+  const modal = document.getElementById('modalEmpReqDetail');
+  const bodyEl = document.getElementById('modalEmpReqBody');
+  const boxApproval = document.getElementById('boxEmpReqApprovalAction');
+  const notesInput = document.getElementById('empReqApprovalNotes');
+
+  if (notesInput) notesInput.value = req.catatanapproval || '';
+
+  const status = String(req.status || 'PENDING').toUpperCase();
+  let badgeBg = '#fef3c7'; let badgeColor = '#b45309';
+  if (status === 'APPROVED') { badgeBg = '#dcfce7'; badgeColor = '#15803d'; }
+  else if (status === 'IN PROGRESS') { badgeBg = '#dbeafe'; badgeColor = '#1d4ed8'; }
+  else if (status === 'FULFILLED') { badgeBg = '#ecfdf5'; badgeColor = '#047857'; }
+  else if (status === 'REJECTED') { badgeBg = '#fee2e2'; badgeColor = '#b91c1c'; }
+
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:8px; margin-bottom:12px;">
+        <div>
+          <span style="font-size:11px; color:#64748b; font-weight:700;">NO. REQUEST</span>
+          <div style="font-size:16px; font-weight:800; font-family:monospace; color:#0f172a;">${escapeHtml(req.requestno)}</div>
+        </div>
+        <span style="padding:4px 10px; font-size:12px; font-weight:700; border-radius:12px; background:${badgeBg}; color:${badgeColor};">
+          ${status}
+        </span>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px 14px; margin-bottom:12px;">
+        <div><strong style="color:#64748b; font-size:11px;">PEMOHON:</strong><br><strong>${escapeHtml(req.pemohonnama)}</strong></div>
+        <div><strong style="color:#64748b; font-size:11px;">DIVISI:</strong><br><strong style="color:#0f172a;">${escapeHtml(req.divisi || '-')}</strong></div>
+        <div><strong style="color:#64748b; font-size:11px;">DEPARTEMEN:</strong><br>${escapeHtml(req.departemen || '-')}</div>
+        <div><strong style="color:#64748b; font-size:11px;">KODE / NAMA PROYEK:</strong><br>${escapeHtml(req.projectcode || '-')}</div>
+        <div><strong style="color:#64748b; font-size:11px;">LOKASI PENEMPATAN / SITE:</strong><br><strong style="color:#2563eb;">📍 ${escapeHtml(req.lokasisite || '-')}</strong></div>
+        <div><strong style="color:#64748b; font-size:11px;">POSISI / KUALIFIKASI:</strong><br><strong style="font-size:14px; color:#2563eb;">${escapeHtml(req.posisijabatan)}</strong></div>
+        <div><strong style="color:#64748b; font-size:11px;">JUMLAH KEBUTUHAN:</strong><br><strong style="color:#e8562c;">${req.jumlahorang || 1} Orang</strong></div>
+        <div><strong style="color:#64748b; font-size:11px;">TARGET ON-BOARD:</strong><br>${req.tanggaldibutuhkan || '-'}</div>
+        <div><strong style="color:#64748b; font-size:11px;">ESTIMASI DURASI KERJA:</strong><br>${escapeHtml(req.durasikerja || '-')}</div>
+        <div><strong style="color:#64748b; font-size:11px;">PREFERENSI GENDER:</strong><br>${escapeHtml(req.jeniskelamin || '-')}</div>
+        <div><strong style="color:#64748b; font-size:11px;">PENDIDIKAN MINIMAL:</strong><br>${escapeHtml(req.pendidikanminimal || '-')}</div>
+        <div><strong style="color:#64748b; font-size:11px;">PENGALAMAN MINIMAL:</strong><br>${escapeHtml(req.pengalamanminimal || '-')}</div>
+        <div><strong style="color:#64748b; font-size:11px;">ALASAN PERMINTAAN:</strong><br>${escapeHtml(req.alasanpermintaan || '-')}</div>
+      </div>
+
+      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:10px; margin-top:8px;">
+        <strong style="color:#475569; font-size:11px; display:block; margin-bottom:4px;">KUALIFIKASI KHUSUS &amp; URAIAN TUGAS:</strong>
+        <div style="white-space:pre-line; color:#1e293b;">${escapeHtml(req.kualifikasikhusus || 'Tidak ada catatan khusus.')}</div>
+      </div>
+
+      ${req.approvedby ? `
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px; margin-top:10px; font-size:12px;">
+          <strong style="color:#166534;">Ditinjau Oleh:</strong> ${escapeHtml(req.approvedby)} (${req.approvedat ? new Date(req.approvedat).toLocaleString('id-ID') : '-'})<br>
+          ${req.catatanapproval ? `<strong style="color:#166534;">Catatan Evaluasi:</strong> ${escapeHtml(req.catatanapproval)}` : ''}
+        </div>
+      ` : ''}
+    `;
+  }
+
+  // Tampilkan box approval jika user punya Author Employee Request
+  if (boxApproval) {
+    boxApproval.style.display = hasEmployeeRequestAuthor() ? 'block' : 'none';
+  }
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeModalEmpReqDetail() {
+  const modal = document.getElementById('modalEmpReqDetail');
+  if (modal) modal.style.display = 'none';
+}
+
+async function executeEmpReqDecision(newStatus) {
+  if (!empReqState.selectedRequest) return;
+  if (!hasEmployeeRequestAuthor()) {
+    showToast('Anda tidak memiliki otorisasi untuk mengubah status permintaan.', 'error');
+    return;
+  }
+
+  const reqId = empReqState.selectedRequest.id;
+  const notes = (document.getElementById('empReqApprovalNotes')?.value || '').trim();
+  const approver = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'Author';
+
+  try {
+    const { data, error } = await supabaseClient.rpc('process_employee_request_approval', {
+      p_id: reqId,
+      p_approved_by: approver,
+      p_status: newStatus,
+      p_catatan: notes
+    });
+
+    if (error) throw error;
+
+    showToast(data?.message || `Status permintaan diubah menjadi ${newStatus}`, 'success');
+    closeModalEmpReqDetail();
+    await loadEmployeeRequestPage(empReqState.currentTab);
+  } catch (err) {
+    console.error('Error executeEmpReqDecision:', err);
+    showToast('Gagal memproses keputusan: ' + err.message, 'error');
+  }
+}
+
+async function deleteEmployeeRequest(id) {
+  if (!confirm('Apakah Anda yakin ingin menghapus pengajuan permintaan karyawan ini?')) return;
+
+  try {
+    const { data, error } = await supabaseClient.rpc('delete_employee_request', { p_id: id });
+    if (error) throw error;
+    showToast(data?.message || 'Permintaan karyawan berhasil dihapus.', 'success');
+    await loadEmployeeRequestPage(empReqState.currentTab);
+  } catch (err) {
+    console.error('Error deleteEmployeeRequest:', err);
+    showToast('Gagal menghapus permintaan: ' + err.message, 'error');
+  }
+}
+
+
 

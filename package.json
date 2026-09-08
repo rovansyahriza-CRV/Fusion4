@@ -1,0 +1,15 @@
+{
+  "name": "fusion4-smartgate",
+  "version": "1.0.0",
+  "description": "Fusion4 SmartGate Admin Desktop App",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-packager . \"Fusion4-SmartGate\" --platform=win32 --arch=x64 --icon=icon.ico --out=dist --overwrite --asar --app-copyright=\"PT. Bilal Mitra Aryatama\" --win32metadata.CompanyName=\"PT. Bilal Mitra Aryatama\" --win32metadata.ProductName=\"Fusion4 SmartGate\" --win32metadata.FileDescription=\"Fusion4 SmartGate Admin Desktop App\""
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-packager": "^17.1.2"
+  }
+}

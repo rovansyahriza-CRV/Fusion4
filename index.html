@@ -86,6 +86,18 @@
         <span>Kontrak Karyawan</span>
       </button>
 
+      <button type="button" class="sidebar-nav-btn" id="btnNavEmployeeRequest" onclick="attemptNav('ER', 'sec-employee-request', this, () => loadEmployeeRequestPage());">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          <line x1="19" y1="8" x2="19" y2="14"></line>
+          <line x1="22" y1="11" x2="16" y2="11"></line>
+        </svg>
+        <span>Permintaan Karyawan</span>
+      </button>
+
       <button type="button" class="sidebar-nav-btn" id="btnNavOtorisasi" onclick="attemptNav('OIL', 'sec-otorisasi', this, () => loadOtorisasiPage('queue'));">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -606,7 +618,225 @@
       </div>
     </section>
 
+    <!-- ============ SECTION: EMPLOYEE REQUEST (PERMINTAAN KARYAWAN) ============ -->
+    <section id="sec-employee-request" class="app-section" style="display:none;">
+      <div class="page-title-section">
+        <span class="category-tag">MANPOWER REQUISITION</span>
+        <h2>Permintaan Karyawan (Employee Request)</h2>
+        <p>Formulir pengajuan dan otorisasi kebutuhan tenaga kerja baru untuk site / proyek PT BIMA.</p>
+      </div>
+
+      <div class="category-tabs" id="empReqTabs">
+        <button type="button" class="tab-btn active" data-status="ALL" onclick="loadEmployeeRequestPage('ALL', this)">📋 Semua (<span id="countEmpReqAll">0</span>)</button>
+        <button type="button" class="tab-btn" data-status="PENDING" onclick="loadEmployeeRequestPage('PENDING', this)">⏳ Pending (<span id="countEmpReqPending">0</span>)</button>
+        <button type="button" class="tab-btn" data-status="APPROVED" onclick="loadEmployeeRequestPage('APPROVED', this)">✅ Disetujui (<span id="countEmpReqApproved">0</span>)</button>
+        <button type="button" class="tab-btn" data-status="IN PROGRESS" onclick="loadEmployeeRequestPage('IN PROGRESS', this)">🚀 In Progress (<span id="countEmpReqProgress">0</span>)</button>
+        <button type="button" class="tab-btn" data-status="FULFILLED" onclick="loadEmployeeRequestPage('FULFILLED', this)">🎯 Selesai (<span id="countEmpReqFulfilled">0</span>)</button>
+        <button type="button" class="tab-btn" data-status="REJECTED" onclick="loadEmployeeRequestPage('REJECTED', this)">❌ Ditolak (<span id="countEmpReqRejected">0</span>)</button>
+      </div>
+
+      <div class="card table-card" style="margin-top:14px;">
+        <div class="card-header space-between">
+          <div>
+            <h3 id="empReqTableTitle">📄 Daftar Permintaan Karyawan</h3>
+            <p class="card-subtitle">Riwayat pengajuan kebutuhan tenaga kerja dan status persetujuan.</p>
+          </div>
+          <span class="badge-count" id="empReqBadgeCount">0 Permintaan</span>
+        </div>
+
+        <div style="padding:0 4px 12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="empReqSearch" placeholder="Cari posisi, site, pemohon, no. req..." oninput="renderEmployeeRequestTable()"
+            style="flex:1; min-width:200px; max-width:340px; padding:8px 12px; border-radius:8px; border:1.5px solid #e6ded9;">
+          <button type="button" class="btn-primary" onclick="scrollToEmpReqForm()" style="display:inline-flex; align-items:center; gap:6px; padding:8px 16px; font-size:13px;">
+            ➕ Buat Permintaan Baru
+          </button>
+        </div>
+
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>No. Request</th>
+                <th>Tanggal</th>
+                <th>Pemohon</th>
+                <th>Divisi &amp; Dept</th>
+                <th>Posisi / Kualifikasi</th>
+                <th>Jml</th>
+                <th>Lokasi Site</th>
+                <th>Target Butuh</th>
+                <th>Status</th>
+                <th style="text-align:center;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="empReqTableBody">
+              <tr><td colspan="10" style="text-align:center; color:#777;">Memuat data...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Form Pengajuan Baru -->
+      <div class="card form-card" id="cardEmpReqForm" style="margin-top:16px;">
+        <div class="card-header">
+          <h3 id="empReqFormTitle">➕ Form Pengajuan Permintaan Karyawan (Manpower Requisition)</h3>
+        </div>
+
+        <form id="formEmployeeRequest" onsubmit="event.preventDefault(); submitEmployeeRequest();">
+          <div class="form-grid">
+            <div class="input-group">
+              <label for="empReqPemohon">Pemohon (Requester)</label>
+              <input type="text" id="empReqPemohon" readonly style="background:#f1f5f9; font-weight:600; cursor:not-allowed;">
+            </div>
+
+            <div class="input-group">
+              <label for="empReqDivisi">Divisi (Division)</label>
+              <select id="empReqDivisi" required onchange="handleEmpReqDivisiChange()">
+                <option value="">-- Pilih Divisi --</option>
+                <option value="Finance">Finance</option>
+                <option value="Operation">Operation</option>
+                <option value="Human Resources">Human Resources</option>
+                <option value="Supply Chains">Supply Chains</option>
+                <option value="Bussiness Development">Bussiness Development</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqDepartemen">Departemen (Department)</label>
+              <select id="empReqDepartemen" required onchange="handleEmpReqDepartemenChange()">
+                <option value="">-- Pilih Divisi Terlebih Dahulu --</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqPosisi">Posisi / Kualifikasi Jabatan (Qualification)</label>
+              <select id="empReqPosisi" required onchange="handleEmpReqPosisiChange()">
+                <option value="">-- Pilih Departemen Terlebih Dahulu --</option>
+              </select>
+            </div>
+
+            <div class="input-group" id="groupEmpReqPosisiCustom" style="display:none;">
+              <label for="empReqPosisiCustom">Nama Posisi Kustom (Lainnya)</label>
+              <input type="text" id="empReqPosisiCustom" placeholder="Tuliskan nama posisi / jabatan spesifik...">
+            </div>
+
+            <div class="input-group">
+              <label for="empReqProject">Kode / Nama Proyek</label>
+              <input type="text" id="empReqProject" placeholder="Contoh: PHM Balikpapan Project / BPN-2026">
+            </div>
+
+            <div class="input-group">
+              <label for="empReqLokasi">Lokasi Penempatan / Site</label>
+              <select id="empReqLokasi" required>
+                <option value="">-- Memuat Lokasi... --</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqJumlah">Jumlah Kebutuhan (Orang)</label>
+              <input type="number" id="empReqJumlah" min="1" max="100" value="1" required>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqTanggalButuh">Tanggal Dibutuhkan (Target On-Board)</label>
+              <input type="date" id="empReqTanggalButuh" required>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqDurasi">Estimasi Durasi Kerja</label>
+              <select id="empReqDurasi" required>
+                <option value="PKWT 3 Bulan">PKWT 3 Bulan</option>
+                <option value="PKWT 6 Bulan">PKWT 6 Bulan</option>
+                <option value="PKWT 1 Tahun">PKWT 1 Tahun</option>
+                <option value="Project-Based (Sesuai Proyek)">Project-Based (Sesuai Proyek)</option>
+                <option value="Permanen (PKWTT)">Permanen (PKWTT)</option>
+                <option value="Harian Lepas">Harian Lepas</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqGender">Preferensi Jenis Kelamin</label>
+              <select id="empReqGender">
+                <option value="Laki-laki / Perempuan">Laki-laki / Perempuan (Bebas)</option>
+                <option value="Laki-laki">Laki-laki</option>
+                <option value="Perempuan">Perempuan</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqPendidikan">Pendidikan Minimal</label>
+              <select id="empReqPendidikan">
+                <option value="SMA / SMK Sederajat">SMA / SMK Sederajat</option>
+                <option value="Diploma (D3)">Diploma (D3)</option>
+                <option value="Sarjana (S1)">Sarjana (S1)</option>
+                <option value="Tidak Ada Syarat Khusus">Tidak Ada Syarat Khusus</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqPengalaman">Pengalaman Kerja Minimal</label>
+              <select id="empReqPengalaman">
+                <option value="Fresh Graduate / Pemula">Fresh Graduate / Pemula</option>
+                <option value="1 - 2 Tahun">1 - 2 Tahun</option>
+                <option value="3 - 5 Tahun">3 - 5 Tahun</option>
+                <option value="> 5 Tahun (Senior)">> 5 Tahun (Senior)</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="empReqAlasan">Alasan Permintaan</label>
+              <select id="empReqAlasan" required>
+                <option value="Proyek Baru">Proyek Baru</option>
+                <option value="Tambahan Beban Kerja (Overload)">Tambahan Beban Kerja (Overload)</option>
+                <option value="Penggantian Karyawan Resign / Pindah">Penggantian Karyawan Resign / Pindah</option>
+                <option value="Backfill / Penugasan Khusus">Backfill / Penugasan Khusus</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="input-group" style="margin-top:14px;">
+            <label for="empReqKualifikasi">Kualifikasi Khusus &amp; Uraian Tugas</label>
+            <textarea id="empReqKualifikasi" rows="3" placeholder="Tuliskan sertifikasi wajib (misal: Sertifikat Migas / BNSP 6G, SIO Rigger, K3 Umum), keahlian khusus, atau tanggung jawab utama..."></textarea>
+          </div>
+
+          <div class="form-action flex-action" style="margin-top:16px;">
+            <button type="submit" id="btnSubmitEmpReq" class="btn-primary">💾 Kirim Permintaan Karyawan</button>
+            <button type="button" class="btn-logout-card" onclick="resetEmployeeRequestForm()">↺ Reset Form</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
   </main>
+
+  <!-- Modal Detail & Approval Employee Request -->
+  <div id="modalEmpReqDetail" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 id="modalEmpReqTitle">📋 Detail Permintaan Karyawan</h3>
+        <p id="modalEmpReqSubtitle">Rincian pengajuan kebutuhan tenaga kerja</p>
+      </div>
+      <div id="modalEmpReqBody" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 14px; font-size: 13px; line-height: 1.7;">
+        <!-- Body generated via JS -->
+      </div>
+      
+      <!-- Box Approval Action khusus Author Employee Request / HR -->
+      <div id="boxEmpReqApprovalAction" style="display:none; border-top: 1.5px dashed #cbd5e1; padding-top: 14px; margin-top: 12px;">
+        <label for="empReqApprovalNotes" style="font-weight:600; font-size:13px; color:#334155; display:block; margin-bottom:6px;">Catatan Approval / Evaluasi:</label>
+        <textarea id="empReqApprovalNotes" rows="2" placeholder="Tuliskan catatan persetujuan atau alasan penolakan..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit; font-size:13px;"></textarea>
+        
+        <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap:wrap;">
+          <button type="button" id="btnEmpReqApprove" class="btn-primary" style="flex: 1; min-width: 110px; background: #16a34a;" onclick="executeEmpReqDecision('APPROVED')">✅ Setujui</button>
+          <button type="button" id="btnEmpReqProgress" class="btn-primary" style="flex: 1; min-width: 110px; background: #2563eb;" onclick="executeEmpReqDecision('IN PROGRESS')">🚀 In Progress</button>
+          <button type="button" id="btnEmpReqFulfill" class="btn-primary" style="flex: 1; min-width: 110px; background: #059669;" onclick="executeEmpReqDecision('FULFILLED')">🎯 Selesai</button>
+          <button type="button" id="btnEmpReqReject" class="btn-logout-card" style="flex: 1; min-width: 110px; color: #dc2626; border-color: #fca5a5;" onclick="executeEmpReqDecision('REJECTED')">❌ Tolak</button>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 14px;">
+        <button type="button" class="btn-logout-card" onclick="closeModalEmpReqDetail()" style="padding: 10px 18px;">Tutup</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal Buat Pengajuan Baru -->
   <div id="modalPengajuanIjinLembur" class="modal-overlay" style="display: none;">
