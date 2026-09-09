@@ -472,11 +472,18 @@
   async function initScanner() {
     showStatus('step1', 'Memuat model kecerdasan buatan (AI)...', 'info');
     try {
-      if (faceapi.tf && faceapi.tf.ENV) {
-        faceapi.tf.ENV.set('WEBGL_PACK', false);
-        faceapi.tf.ENV.set('WEBGL_CHECK_NUMERICAL_PROBLEMS', false);
-        faceapi.tf.ENV.set('WEBGL_FORCE_F16_TEXTURES', false);
-        faceapi.tf.enableProdMode();
+      try {
+        if (faceapi.tf) {
+          if (typeof faceapi.tf.enableProdMode === 'function') faceapi.tf.enableProdMode();
+          const env = faceapi.tf.ENV || (typeof faceapi.tf.env === 'function' ? faceapi.tf.env() : null);
+          if (env && typeof env.set === 'function') {
+            try { env.set('WEBGL_PACK', false); } catch (e) {}
+            try { env.set('WEBGL_FORCE_F16_TEXTURES', false); } catch (e) {}
+            try { env.set('WEBGL_CHECK_NUMERICAL_PROBLEMS', false); } catch (e) {}
+          }
+        }
+      } catch (tfErr) {
+        console.warn('TF backend flag init:', tfErr);
       }
 
       const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
