@@ -1,0 +1,764 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Portal Penawaran Harga RFQ — PT. Bilal Mitra Aryatama</title>
+  
+  <link rel="icon" type="image/png" href="fusion4.png">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root {
+      --primary: #E04D23;
+      --primary-dark: #C23912;
+      --navy: #1B365D;
+      --navy-dark: #12243E;
+      --bg: #F7F5F0;
+      --surface: #FFFFFF;
+      --surface-2: #FAF8F5;
+      --border: #E6DED9;
+      --text: #2A2826;
+      --muted: #7A7571;
+      --success: #27AE60;
+      --success-bg: #E8F8F0;
+      --error: #E53935;
+      --error-bg: #FDE8E8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 60px;
+      min-height: 100vh;
+    }
+    .container { width: 100%; max-width: 820px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* HEADER */
+    .brand-header {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+      color: #FFF;
+      padding: 24px;
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(27, 54, 93, 0.2);
+    }
+    .brand-header h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+    .brand-header p { font-size: 13px; color: #FFA37B; margin-top: 4px; font-weight: 500; }
+
+    .card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.03);
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 14px;
+      border-radius: 12px;
+      margin-bottom: 18px;
+    }
+    .meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .meta-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .meta-val { font-size: 13.5px; font-weight: 700; color: var(--text); }
+    .meta-val.rfq-no { color: var(--primary); font-family: 'IBM Plex Mono', monospace; font-size: 14px; }
+
+    /* TABLE */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 18px;
+    }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13.5px; }
+    th {
+      background: #1B365D;
+      color: #FFF;
+      padding: 12px 14px;
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td { padding: 12px 14px; border-bottom: 1px solid #EEE; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #FAF9F7; }
+
+    /* FORM INPUTS */
+    input[type="text"], input[type="number"], input[type="date"], select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13.5px;
+      background: #FFF;
+      color: var(--text);
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
+
+    .input-price {
+      font-family: 'IBM Plex Mono', monospace;
+      font-weight: 700;
+      color: #111;
+      text-align: right;
+    }
+    .subtotal-cell {
+      font-family: 'IBM Plex Mono', monospace;
+      font-weight: 700;
+      color: var(--primary);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    /* COMMERCIAL TERMS */
+    .terms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 12px; font-weight: 700; color: var(--text); }
+
+    /* SUMMARY BOX */
+    .summary-box {
+      background: #FAF8F5;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13.5px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .summary-row.total {
+      border-top: 2px dashed var(--border);
+      padding-top: 10px;
+      margin-top: 4px;
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .summary-row.total .total-amount { color: var(--primary); font-family: 'IBM Plex Mono', monospace; }
+
+    /* BUTTONS */
+    .btn-primary {
+      width: 100%;
+      background: var(--primary);
+      color: #FFF;
+      border: none;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(224, 77, 35, 0.25);
+      transition: all 0.2s;
+    }
+    .btn-primary:active { transform: scale(0.98); background: var(--primary-dark); }
+    .btn-primary:disabled { background: #CCC; cursor: not-allowed; box-shadow: none; }
+
+    /* PIN GATE CARD */
+    .pin-card {
+      max-width: 400px;
+      margin: 40px auto;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .pin-input {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 26px;
+      font-weight: 800;
+      text-align: center;
+      letter-spacing: 12px;
+      padding: 12px;
+      width: 220px;
+      border-radius: 12px;
+      border: 2px solid var(--border);
+      background: var(--surface-2);
+    }
+    .pin-input:focus { border-color: var(--primary); background: #FFF; }
+
+    /* ALERTS */
+    .alert {
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .alert.error { background: var(--error-bg); color: var(--error); border: 1px solid #F5C6CB; }
+    .alert.success { background: var(--success-bg); color: var(--success); border: 1px solid #A3E9C4; }
+    .alert.info { background: #E8F4FD; color: #1E88E5; border: 1px solid #BBDEFB; }
+
+    .badge-status {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-status.submitted { background: var(--success-bg); color: var(--success); border: 1px solid #A3E9C4; }
+    .badge-status.pending { background: #FFF3CD; color: #856404; border: 1px solid #FFEEBA; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- BRAND HEADER -->
+  <div class="brand-header">
+    <h1>Portal Penawaran Harga RFQ</h1>
+    <p>PT. Bilal Mitra Aryatama — Pengadaan Barang & Jasa</p>
+  </div>
+
+  <div id="alertBox" style="display:none;" class="alert"></div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div id="mainContent">
+    <div class="card" style="text-align:center; padding: 30px;">
+      <p style="color: var(--muted); font-size: 14px;">Memuat data undangan RFQ...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const rfqIdParam = Number(urlParams.get('rfq'));
+  const vendorIdParam = Number(urlParams.get('vendor'));
+
+  let rfqHeader = null;
+  let vendorData = null;
+  let rfqVendorRow = null;
+  let rfqItems = [];
+  let existingQuotes = {};
+  let existingTerm = null;
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    await initQuotationPortal();
+  });
+
+  function showAlert(msg, type) {
+    const el = document.getElementById('alertBox');
+    el.textContent = msg;
+    el.className = 'alert ' + (type || 'info');
+    el.style.display = 'block';
+  }
+
+  async function initQuotationPortal() {
+    if (!rfqIdParam || !vendorIdParam) {
+      document.getElementById('mainContent').innerHTML = `
+        <div class="card" style="text-align:center;">
+          <div style="font-size: 36px; margin-bottom: 8px;">⚠️</div>
+          <h3 style="font-size: 16px; margin-bottom: 6px;">Link Tidak Lengkap</h3>
+          <p style="font-size: 13px; color: var(--muted);">Pastikan Anda membuka tautan lengkap yang dikirimkan melalui email undangan RFQ.</p>
+        </div>`;
+      return;
+    }
+
+    try {
+      const [
+        { data: rfqRows, error: rfqErr },
+        { data: venRows, error: venErr },
+        { data: rvRows, error: rvErr }
+      ] = await Promise.all([
+        supabaseClient.from('rfq').select('*').eq('RFQID', rfqIdParam),
+        supabaseClient.from('vendor').select('*').eq('VendorID', vendorIdParam),
+        supabaseClient.from('rfqVendor').select('*').eq('RFQID', rfqIdParam).eq('VendorID', vendorIdParam)
+      ]);
+
+      if (rfqErr) throw rfqErr;
+      if (venErr) throw venErr;
+      if (rvErr) throw rvErr;
+
+      rfqHeader = (rfqRows || [])[0];
+      vendorData = (venRows || [])[0];
+      rfqVendorRow = (rvRows || [])[0];
+
+      if (!rfqHeader || !vendorData || !rfqVendorRow) {
+        document.getElementById('mainContent').innerHTML = `
+          <div class="card" style="text-align:center;">
+            <div style="font-size: 36px; margin-bottom: 8px;">🔍</div>
+            <h3 style="font-size: 16px; margin-bottom: 6px;">Data RFQ Tidak Ditemukan</h3>
+            <p style="font-size: 13px; color: var(--muted);">Undangan RF ini tidak ditemukan atau telah kadaluarsa.</p>
+          </div>`;
+        return;
+      }
+
+      // Tampilkan PIN Security Gate
+      renderPinGate();
+
+    } catch (err) {
+      document.getElementById('mainContent').innerHTML = `
+        <div class="card" style="text-align:center; color: var(--error);">
+          <p>Terjadi kendala memuat data: ${err.message}</p>
+        </div>`;
+    }
+  }
+
+  function renderPinGate() {
+    document.getElementById('mainContent').innerHTML = `
+      <div class="card pin-card">
+        <div style="font-size: 32px;">🔐</div>
+        <div>
+          <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 4px;">Autentikasi PIN Vendor</h3>
+          <p style="font-size: 13px; color: var(--muted);">Masukkan 5-digit PIN keamanan yang dikirimkan ke email <strong>${vendorData.Email || 'vendor'}</strong>.</p>
+        </div>
+
+        <input type="password" id="inputPin" class="pin-input" maxlength="5" placeholder="•••••" autofocus>
+
+        <div id="pinErrMsg" style="display:none; color: var(--error); font-size: 12.5px; font-weight: 700;">
+          ❌ PIN tidak sesuai. Periksa kembali email undangan Anda.
+        </div>
+
+        <button type="button" id="btnVerifyPin" class="btn-primary" onclick="verifyPin()">
+          <span>Buka Form Penawaran</span>
+        </button>
+      </div>`;
+
+    document.getElementById('inputPin').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') verifyPin();
+    });
+  }
+
+  function verifyPin() {
+    const entered = document.getElementById('inputPin').value.trim();
+    const expected = String(rfqVendorRow.PIN || '').trim();
+
+    if (entered === expected) {
+      loadQuotationForm();
+    } else {
+      document.getElementById('pinErrMsg').style.display = 'block';
+    }
+  }
+
+  async function loadQuotationForm() {
+    document.getElementById('mainContent').innerHTML = `
+      <div class="card" style="text-align:center; padding: 30px;">
+        <p style="color: var(--muted); font-size: 14px;">Memuat rincian item permintaan...</p>
+      </div>`;
+
+    try {
+      const [
+        { data: itemRows, error: itemErr },
+        { data: quoteRows, error: quoteErr },
+        { data: termRows, error: termErr }
+      ] = await Promise.all([
+        supabaseClient.from('rfqDetail').select('*').eq('RFQID', rfqIdParam),
+        supabaseClient.from('rfqQuote').select('*').eq('VendorID', vendorIdParam),
+        supabaseClient.from('rfqVendorTerm').select('*').eq('RFQVendorID', rfqVendorRow.RFQVendorID)
+      ]);
+
+      if (itemErr) throw itemErr;
+      if (quoteErr) throw quoteErr;
+      if (termErr) throw termErr;
+
+      rfqItems = itemRows || [];
+      existingQuotes = {};
+      (quoteRows || []).forEach(q => {
+        existingQuotes[q.RFQDetailID] = q;
+      });
+      existingTerm = (termRows || [])[0] || null;
+
+      renderForm();
+
+    } catch (err) {
+      document.getElementById('mainContent').innerHTML = `
+        <div class="card" style="text-align:center; color: var(--error);">
+          <p>Gagal memuat item RFQ: ${err.message}</p>
+        </div>`;
+    }
+  }
+
+  function renderForm() {
+    const isAlreadySubmitted = rfqVendorRow.ConfirmationStatus === 'Submitted';
+    const statusBadge = isAlreadySubmitted 
+      ? '<span class="badge-status submitted">Sudah Terkirim</span>' 
+      : '<span class="badge-status pending">Menunggu Penawaran</span>';
+
+    const rowsHtml = rfqItems.map((item, idx) => {
+      const q = existingQuotes[item.RFQDetailID] || {};
+      const unitPriceVal = q.UnitPrice !== undefined ? q.UnitPrice : '';
+      const deliveryDateVal = q.VendorDeliveryDate ? String(q.VendorDeliveryDate).split('T')[0] : '';
+      const subtotalVal = (Number(unitPriceVal) || 0) * (Number(item.Qty) || 0);
+
+      return `
+        <tr data-detailid="${item.RFQDetailID}" data-qty="${item.Qty}">
+          <td style="text-align:center; font-weight:700;">${idx + 1}</td>
+          <td>
+            <strong>${item.ItemDescription || '-'}</strong>
+          </td>
+          <td style="text-align:center; font-weight:700;">
+            ${item.Qty || 1} ${item.Unit || 'ea'}
+          </td>
+          <td style="width: 170px;">
+            <input type="number" class="input-price item-price" min="0" step="100" placeholder="0" value="${unitPriceVal}" oninput="recalcTotals()">
+          </td>
+          <td style="width: 150px;">
+            <input type="date" class="item-deliv-date" value="${deliveryDateVal}">
+          </td>
+          <td class="subtotal-cell item-subtotal">
+            Rp ${subtotalVal.toLocaleString('id-ID')}
+          </td>
+        </tr>`;
+    }).join('');
+
+    const mobilisasiVal = existingTerm ? (existingTerm.MobilisasiCost || 0) : 0;
+    const otherCostVal = existingTerm ? (existingTerm.OtherServiceCost || 0) : 0;
+    const ppnAmountVal = existingTerm ? (existingTerm.PPNAmount || 0) : 0;
+    const paymentTermVal = existingTerm ? (existingTerm.PaymentTermType || 'Net 30') : 'Net 30';
+    const dpPercentVal = existingTerm ? (existingTerm.DPPercentage || '') : '';
+    const notesVal = rfqVendorRow.Notes || '';
+
+    document.getElementById('mainContent').innerHTML = `
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px;">
+          <h2 style="font-size: 17px; font-weight: 800;">Informasi Permintaan Penawaran</h2>
+          ${statusBadge}
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">Nomor RFQ</span>
+            <span class="meta-val rfq-no">${rfqHeader.NoRFQ || '-'}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Nama Vendor</span>
+            <span class="meta-val">${vendorData.VendorName || '-'}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Titik Pengiriman</span>
+            <span class="meta-val">${rfqHeader.DeliveryPoint || 'Balikpapan (Bima Office)'}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Catatan RFQ</span>
+            <span class="meta-val" style="font-weight:500;">${rfqHeader.Notes || '-'}</span>
+          </div>
+        </div>
+
+        <h3 style="font-size: 15px; font-weight: 800; margin-bottom: 10px;">1. Rincian Harga Item</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px; text-align:center;">No</th>
+                <th>Deskripsi Barang / Jasa</th>
+                <th style="width:100px; text-align:center;">Qty</th>
+                <th>Harga Satuan (Rp)</th>
+                <th>Estimasi Tgl. Kirim</th>
+                <th style="text-align:right;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody id="rfqItemsTbody">
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style="font-size: 15px; font-weight: 800; margin-bottom: 10px; margin-top: 20px;">2. Syarat Komersial & Biaya Tambahan</h3>
+        <div class="terms-grid">
+          <div class="form-group">
+            <label>Biaya Mobilisasi / Ekspedisi (Rp):</label>
+            <input type="number" id="inputMobilisasi" class="input-price" min="0" step="1000" placeholder="0" value="${mobilisasiVal}" oninput="recalcTotals()">
+          </div>
+          <div class="form-group">
+            <label>Biaya Jasa / Lain-lain (Rp):</label>
+            <input type="number" id="inputOtherCost" class="input-price" min="0" step="1000" placeholder="0" value="${otherCostVal}" oninput="recalcTotals()">
+          </div>
+          <div class="form-group">
+            <label>PPN (Pajak Pertambahan Nilai):</label>
+            <select id="selectPpnType" onchange="handlePpnChange()">
+              <option value="none">Bebas PPN (0%)</option>
+              <option value="11" selected>PPN 11% (Otomatis)</option>
+              <option value="custom">Nominal PPN Khusus</option>
+            </select>
+          </div>
+          <div class="form-group" id="groupPpnCustom" style="display:none;">
+            <label>Nominal PPN (Rp):</label>
+            <input type="number" id="inputPpnAmount" class="input-price" min="0" value="${ppnAmountVal}" oninput="recalcTotals()">
+          </div>
+          <div class="form-group">
+            <label>Termin Pembayaran:</label>
+            <select id="selectPaymentTerm" onchange="handlePaymentTermChange()">
+              <option value="Net 30">Net 30 Hari</option>
+              <option value="Net 14">Net 14 Hari</option>
+              <option value="COD / Cash on Delivery">COD / Cash on Delivery</option>
+              <option value="DP + Pelunasan">DP + Pelunasan</option>
+              <option value="Sesuai Kontrak">Sesuai Kontrak / Progress</option>
+            </select>
+          </div>
+          <div class="form-group" id="groupDpPercent" style="display:none;">
+            <label>Persentase Uang Muka / DP (%):</label>
+            <input type="number" id="inputDpPercent" min="1" max="100" placeholder="Contoh: 30" value="${dpPercentVal}">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label>Catatan Tambahan dari Vendor (Opsional):</label>
+          <textarea id="inputVendorNotes" rows="2" placeholder="Contoh: Harga sudah termasuk garansi 1 tahun, franco Balikpapan...">${notesVal}</textarea>
+        </div>
+
+        <!-- SUMMARY TOTAL -->
+        <div class="summary-box">
+          <div class="summary-row">
+            <span>Subtotal Item:</span>
+            <span id="sumItemSubtotal">Rp 0</span>
+          </div>
+          <div class="summary-row">
+            <span>Biaya Mobilisasi / Tambahan:</span>
+            <span id="sumExtraCost">Rp 0</span>
+          </div>
+          <div class="summary-row">
+            <span>PPN (11%):</span>
+            <span id="sumPpn">Rp 0</span>
+          </div>
+          <div class="summary-row total">
+            <span>TOTAL PENAWARAN (GRAND TOTAL):</span>
+            <span id="sumGrandTotal" class="total-amount">Rp 0</span>
+          </div>
+        </div>
+
+        <button type="button" id="btnSubmitQuote" class="btn-primary" onclick="submitQuotation()">
+          <span>💾 ${isAlreadySubmitted ? 'Perbarui Penawaran Harga' : 'Kirim Penawaran Harga'}</span>
+        </button>
+      </div>`;
+
+    document.getElementById('selectPaymentTerm').value = paymentTermVal;
+    handlePaymentTermChange();
+    recalcTotals();
+  }
+
+  function handlePpnChange() {
+    const val = document.getElementById('selectPpnType').value;
+    document.getElementById('groupPpnCustom').style.display = (val === 'custom') ? 'flex' : 'none';
+    recalcTotals();
+  }
+
+  function handlePaymentTermChange() {
+    const val = document.getElementById('selectPaymentTerm').value;
+    document.getElementById('groupDpPercent').style.display = (val === 'DP + Pelunasan') ? 'flex' : 'none';
+  }
+
+  function recalcTotals() {
+    let itemSubtotal = 0;
+    const trs = document.querySelectorAll('#rfqItemsTbody tr');
+    trs.forEach(tr => {
+      const qty = Number(tr.dataset.qty) || 0;
+      const priceInput = tr.querySelector('.item-price');
+      const price = Number(priceInput.value) || 0;
+      const sub = qty * price;
+      itemSubtotal += sub;
+      tr.querySelector('.item-subtotal').textContent = `Rp ${sub.toLocaleString('id-ID')}`;
+    });
+
+    const mobilisasi = Number(document.getElementById('inputMobilisasi')?.value) || 0;
+    const otherCost = Number(document.getElementById('inputOtherCost')?.value) || 0;
+    const extraTotal = mobilisasi + otherCost;
+
+    const ppnType = document.getElementById('selectPpnType')?.value || '11';
+    let ppnAmount = 0;
+    if (ppnType === '11') {
+      ppnAmount = Math.round((itemSubtotal + extraTotal) * 0.11);
+    } else if (ppnType === 'custom') {
+      ppnAmount = Number(document.getElementById('inputPpnAmount')?.value) || 0;
+    }
+
+    const grandTotal = itemSubtotal + extraTotal + ppnAmount;
+
+    if (document.getElementById('sumItemSubtotal')) {
+      document.getElementById('sumItemSubtotal').textContent = `Rp ${itemSubtotal.toLocaleString('id-ID')}`;
+      document.getElementById('sumExtraCost').textContent = `Rp ${extraTotal.toLocaleString('id-ID')}`;
+      document.getElementById('sumPpn').textContent = `Rp ${ppnAmount.toLocaleString('id-ID')}`;
+      document.getElementById('sumGrandTotal').textContent = `Rp ${grandTotal.toLocaleString('id-ID')}`;
+    }
+  }
+
+  async function submitQuotation() {
+    const btn = document.getElementById('btnSubmitQuote');
+    btn.disabled = true;
+    btn.textContent = 'Mengirimkan Penawaran...';
+
+    const trs = document.querySelectorAll('#rfqItemsTbody tr');
+    let hasFilledPrice = false;
+    const quotePayloads = [];
+
+    // Ambil max RFQQuoteID saat ini untuk auto-increment aman
+    let currentMaxQuoteId = 0;
+    try {
+      const { data: maxRows } = await supabaseClient
+        .from('rfqQuote')
+        .select('RFQQuoteID')
+        .order('RFQQuoteID', { ascending: false })
+        .limit(1);
+      if (maxRows && maxRows.length > 0) {
+        currentMaxQuoteId = Number(maxRows[0].RFQQuoteID) || 0;
+      }
+    } catch (e) {
+      console.warn('Get max quote ID:', e);
+    }
+
+    for (const tr of trs) {
+      const detailId = Number(tr.dataset.detailid);
+      const qty = Number(tr.dataset.qty) || 0;
+      const price = Number(tr.querySelector('.item-price').value) || 0;
+      const delivDate = tr.querySelector('.item-deliv-date').value || null;
+
+      if (price > 0) hasFilledPrice = true;
+
+      const existingQ = existingQuotes[detailId];
+      currentMaxQuoteId++;
+
+      quotePayloads.push({
+        RFQQuoteID: existingQ ? existingQ.RFQQuoteID : currentMaxQuoteId,
+        RFQDetailID: detailId,
+        VendorID: vendorIdParam,
+        UnitPrice: price,
+        Qty: qty,
+        VendorDeliveryDate: delivDate,
+        IsSelected: existingQ ? existingQ.IsSelected : 'No'
+      });
+    }
+
+    if (!hasFilledPrice) {
+      alert("Harap isi harga satuan minimal 1 item.");
+      btn.disabled = false;
+      btn.textContent = '💾 Kirim Penawaran Harga';
+      return;
+    }
+
+    const mobilisasi = Number(document.getElementById('inputMobilisasi').value) || 0;
+    const otherCost = Number(document.getElementById('inputOtherCost').value) || 0;
+    const ppnType = document.getElementById('selectPpnType').value;
+    let ppnAmount = 0;
+    let itemSub = 0;
+    quotePayloads.forEach(q => { itemSub += (q.UnitPrice * q.Qty); });
+    if (ppnType === '11') {
+      ppnAmount = Math.round((itemSub + mobilisasi + otherCost) * 0.11);
+    } else if (ppnType === 'custom') {
+      ppnAmount = Number(document.getElementById('inputPpnAmount').value) || 0;
+    }
+
+    const paymentTerm = document.getElementById('selectPaymentTerm').value;
+    const dpPercent = paymentTerm === 'DP + Pelunasan' ? (Number(document.getElementById('inputDpPercent').value) || 0) : null;
+    const notes = document.getElementById('inputVendorNotes').value.trim() || null;
+
+    try {
+      // 1. Simpan Quote Items (Upsert)
+      for (const qp of quotePayloads) {
+        const { error: qErr } = await supabaseClient.from('rfqQuote').upsert(qp, { onConflict: 'RFQQuoteID' });
+        if (qErr) {
+          console.warn('Upsert quote item error:', qErr.message);
+          // Fallback delete then insert
+          await supabaseClient.from('rfqQuote').delete().eq('RFQDetailID', qp.RFQDetailID).eq('VendorID', qp.VendorID);
+          await supabaseClient.from('rfqQuote').insert(qp);
+        }
+      }
+
+      // 2. Simpan Commercial Term
+      // Cari max RFQVendorTermID jika baru
+      let nextTermId = 1;
+      if (existingTerm && existingTerm.RFQVendorTermID) {
+        nextTermId = existingTerm.RFQVendorTermID;
+      } else {
+        const { data: maxTermRows } = await supabaseClient
+          .from('rfqVendorTerm')
+          .select('RFQVendorTermID')
+          .order('RFQVendorTermID', { ascending: false })
+          .limit(1);
+        if (maxTermRows && maxTermRows.length > 0) nextTermId = (Number(maxTermRows[0].RFQVendorTermID) || 0) + 1;
+      }
+
+      const termPayload = {
+        RFQVendorTermID: nextTermId,
+        RFQVendorID: rfqVendorRow.RFQVendorID,
+        MobilisasiCost: mobilisasi,
+        OtherServiceCost: otherCost,
+        PPNAmount: ppnAmount,
+        PaymentTermType: paymentTerm,
+        DPPercentage: dpPercent,
+        SubmitDate: new Date().toISOString()
+      };
+
+      const { error: termErr } = await supabaseClient.from('rfqVendorTerm').upsert(termPayload, { onConflict: 'RFQVendorTermID' });
+      if (termErr) {
+        console.warn('Upsert term error:', termErr.message);
+        await supabaseClient.from('rfqVendorTerm').delete().eq('RFQVendorID', rfqVendorRow.RFQVendorID);
+        await supabaseClient.from('rfqVendorTerm').insert(termPayload);
+      }
+
+      // 3. Update Status di rfqVendor
+      await supabaseClient.from('rfqVendor').update({
+        ConfirmationStatus: 'Submitted',
+        ConfirmationDate: new Date().toISOString(),
+        Notes: notes
+      }).eq('RFQVendorID', rfqVendorRow.RFQVendorID);
+
+      // Render Sukses
+      document.getElementById('mainContent').innerHTML = `
+        <div class="card" style="text-align:center; padding: 40px 20px;">
+          <div style="font-size: 48px; margin-bottom: 12px;">🎉</div>
+          <h2 style="font-size: 20px; font-weight: 800; color: var(--success); margin-bottom: 8px;">Penawaran Harga Berhasil Dikirim!</h2>
+          <p style="font-size: 14px; color: var(--text); max-width: 520px; margin: 0 auto 18px; line-height: 1.5;">
+            Terima kasih kepada <strong>${vendorData.VendorName}</strong> telah memberikan penawaran harga untuk RFQ <strong>${rfqHeader.NoRFQ}</strong>.
+            Data penawaran Anda telah tersimpan di sistem pengadaan PT BIMA.
+          </p>
+          <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; max-width: 400px; margin: 0 auto; font-size: 13px; text-align: left;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+              <span style="color:var(--muted);">Total Penawaran:</span>
+              <strong style="color:var(--primary); font-family:monospace; font-size:14px;">${document.getElementById('sumGrandTotal')?.textContent || '-'}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:var(--muted);">Waktu Pengiriman:</span>
+              <span>${new Date().toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+          <div style="margin-top: 24px;">
+            <button type="button" class="btn-primary" style="max-width:240px; margin:0 auto;" onclick="loadQuotationForm()">
+              <span>✏️ Lihat / Edit Kembali</span>
+            </button>
+          </div>
+        </div>`;
+
+    } catch (err) {
+      alert("Gagal mengirim penawaran: " + err.message);
+      btn.disabled = false;
+      btn.textContent = '💾 Kirim Penawaran Harga';
+    }
+  }
+</script>
+
+</body>
+</html>
