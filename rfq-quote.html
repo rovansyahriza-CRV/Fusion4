@@ -698,30 +698,15 @@
         SubmitDate: new Date().toISOString()
       };
 
-      if (existingTerm && existingTerm.RFQVendorTermID) {
-        await supabaseClient
-          .from('rfqVendorTerm')
-          .update(termPayload)
-          .eq('RFQVendorTermID', existingTerm.RFQVendorTermID);
-      } else {
-        const { data: checkTerm } = await supabaseClient
-          .from('rfqVendorTerm')
-          .select('RFQVendorTermID')
-          .eq('RFQVendorID', rfqVendorRow.RFQVendorID)
-          .limit(1);
+      await supabaseClient
+        .from('rfqVendorTerm')
+        .delete()
+        .eq('RFQVendorID', rfqVendorRow.RFQVendorID);
 
-        if (checkTerm && checkTerm.length > 0) {
-          await supabaseClient
-            .from('rfqVendorTerm')
-            .update(termPayload)
-            .eq('RFQVendorID', rfqVendorRow.RFQVendorID);
-        } else {
-          const { error: insErr } = await supabaseClient
-            .from('rfqVendorTerm')
-            .insert(termPayload);
-          if (insErr) console.warn('Insert rfqVendorTerm error:', insErr.message);
-        }
-      }
+      const { error: insErr } = await supabaseClient
+        .from('rfqVendorTerm')
+        .insert(termPayload);
+      if (insErr) console.warn('Insert rfqVendorTerm error:', insErr.message);
 
       // 3. Update Status di rfqVendor
       await supabaseClient.from('rfqVendor').update({
