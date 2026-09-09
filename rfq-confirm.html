@@ -298,11 +298,11 @@ function renderDetail(rfqHeader, vendorInfo, rv, winningQuotes, detailById, term
     </div>
   `;
 
-  document.getElementById("btnConfirm").addEventListener("click", () => submitDecision(rv, 'Confirmed', rfqHeader, vendorInfo, grandTotal));
-  document.getElementById("btnReject").addEventListener("click", () => submitDecision(rv, 'Rejected', rfqHeader, vendorInfo, grandTotal));
+  document.getElementById("btnConfirm").addEventListener("click", () => submitDecision(rv, 'Confirmed', rfqHeader, vendorInfo, grandTotal, winningQuotes, detailById));
+  document.getElementById("btnReject").addEventListener("click", () => submitDecision(rv, 'Rejected', rfqHeader, vendorInfo, grandTotal, winningQuotes, detailById));
 }
 
-async function submitDecision(rv, decision, rfqHeader, vendorInfo, grandTotal) {
+async function submitDecision(rv, decision, rfqHeader, vendorInfo, grandTotal, winningQuotes, detailById) {
   const btnConfirm = document.getElementById("btnConfirm");
   const btnReject = document.getElementById("btnReject");
   const notes = document.getElementById("vendorNotes") ? document.getElementById("vendorNotes").value.trim() : null;
@@ -320,13 +320,91 @@ async function submitDecision(rv, decision, rfqHeader, vendorInfo, grandTotal) {
     }).eq('RFQVendorID', rv.RFQVendorID);
     if (error) throw error;
 
+    // Jika vendor mengonfirmasi kesediaan, otomatis generate Draft PO / SO
+    if (decision === 'Confirmed') {
+      try {
+        const { data: existingPo } = await supabaseClient
+          .from('purchaseOrder')
+          .select('POID')
+          .eq('RFQID', rv.RFQID)
+          .eq('VendorID', rv.VendorID)
+          .maybeSingle();
+
+        if (!existingPo) {
+          const { data: maxPo } = await supabaseClient
+            .from('purchaseOrder')
+            .select('POID')
+            .order('POID', { ascending: false })
+            .limit(1);
+          const nextPoId = (maxPo && maxPo.length > 0 && maxPo[0].POID != null) ? (Number(maxPo[0].POID) || 0) + 1 : 1;
+
+          const isSO = (winningQuotes || []).some(q => {
+            const d = (detailById && detailById[String(q.RFQDetailID)]) || {};
+            return (d.ItemGroup || '').toLowerCase().includes('service') || (d.ItemDescription || '').toLowerCase().includes('jasa');
+          });
+          const docType = isSO ? 'SO' : 'PO';
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          const docNumber = `${docType}-${dateStr}-${String(nextPoId).padStart(4, '0')}`;
+
+          const { error: poInsErr } = await supabaseClient
+            .from('purchaseOrder')
+            .insert({
+              POID: nextPoId,
+              RFQID: rv.RFQID,
+              RFQVendorID: rv.RFQVendorID,
+              VendorID: rv.VendorID,
+              DocType: docType,
+              DocNumber: docNumber,
+              TotalAmount: Number(grandTotal) || 0,
+              Status: 'Draft',
+              CreatedDate: new Date().toISOString(),
+              DeliveryPoint: rfqHeader ? rfqHeader.DeliveryPoint : null
+            });
+
+          if (!poInsErr) {
+            const { data: maxPod } = await supabaseClient
+              .from('purchaseOrderDetail')
+              .select('PODetailID')
+              .order('PODetailID', { ascending: false })
+              .limit(1);
+            let nextPodId = (maxPod && maxPod.length > 0 && maxPod[0].PODetailID != null) ? (Number(maxPod[0].PODetailID) || 0) + 1 : 1;
+
+            const podItems = (winningQuotes || []).map(q => {
+              const d = (detailById && detailById[String(q.RFQDetailID)]) || {};
+              const qty = Number(q.Qty) || 0;
+              const unitPrice = Number(q.UnitPrice) || 0;
+              return {
+                PODetailID: nextPodId++,
+                POID: nextPoId,
+                RFQDetailID: q.RFQDetailID,
+                ItemDescription: d.ItemDescription || '-',
+                Unit: d.Unit || '',
+                Qty: qty,
+                UnitPrice: unitPrice,
+                Subtotal: qty * unitPrice,
+                VendorDeliveryDate: q.VendorDeliveryDate || null,
+                ItemGroup: d.ItemGroup || null,
+                ItemID: d.ItemID || null
+              };
+            });
+
+            if (podItems.length > 0) {
+              await supabaseClient.from('purchaseOrderDetail').insert(podItems);
+            }
+          }
+        }
+      } catch (poGenErr) {
+        console.warn('Gagal generate draft PO:', poGenErr);
+      }
+    }
+
     // Kirim notifikasi email ke Admin Perusahaan (HO)
     if (HO_EMAIL) {
       const noRFQ = rfqHeader ? rfqHeader.NoRFQ : `RFQID ${rv.RFQID}`;
       const vendorName = vendorInfo ? vendorInfo.VendorName : `Vendor #${rv.VendorID}`;
       const statusLabel = decision === 'Confirmed' ? 'BERSEDIA MEMENUHI PESANAN' : 'MENOLAK / TIDAK BISA MEMENUHI';
       const emailSubject = `[RESPON VENDOR] RFQ ${noRFQ} - ${vendorName} (${decision === 'Confirmed' ? 'BERSEDIA' : 'MENOLAK'})`;
-      const emailBody = `Pemberitahuan SMMS BIMA:\n\nVendor ${vendorName} telah memberikan respon konfirmasi untuk RFQ ${noRFQ}.\n\nKeputusan: ${statusLabel}\nTanggal Respon: ${new Date().toLocaleString('id-ID')}\nCatatan Vendor: ${notes || '-'}\nTotal Penawaran: Rp ${(Number(grandTotal) || 0).toLocaleString('id-ID')}\n\n${decision === 'Confirmed' ? 'Vendor siap memenuhi pesanan. Silakan buka aplikasi SMMS BIMA untuk menerbitkan PO/SO (Draft PO).' : 'Vendor menyatakan tidak dapat memenuhi pesanan ini. Silakan tinjau kembali seleksi vendor atau tunjuk vendor alternatif.'}`;
+      const emailBody = `Pemberitahuan SMMS BIMA:\n\nVendor ${vendorName} telah memberikan respon konfirmasi untuk RFQ ${noRFQ}.\n\nKeputusan: ${statusLabel}\nTanggal Respon: ${new Date().toLocaleString('id-ID')}\nCatatan Vendor: ${notes || '-'}\nTotal Penawaran: Rp ${(Number(grandTotal) || 0).toLocaleString('id-ID')}\n\n${decision === 'Confirmed' ? 'Vendor siap memenuhi pesanan dan Draft PO/SO telah dibuat secara otomatis. Silakan buka aplikasi SMMS BIMA (Menu Submit PO/SO) untuk mengajukan approval ke Direktur.' : 'Vendor menyatakan tidak dapat memenuhi pesanan ini. Silakan tinjau kembali seleksi vendor atau tunjuk vendor alternatif.'}`;
       
       fetch(RFQ_EMAIL_URL, {
         method: "POST",
