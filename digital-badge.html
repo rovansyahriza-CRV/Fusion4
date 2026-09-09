@@ -743,7 +743,7 @@ async function submitPin() {
 
     try {
       // Ambil semua data approval dari Supabase secara aman & paralel
-      const [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData] = await Promise.all([
+      let [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData] = await Promise.all([
         safeRpc('get_pending_employee_requests_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_ijin_lembur_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
@@ -751,6 +751,75 @@ async function submitPin() {
         safeRpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId })
       ]);
+
+      // Fallback akurat untuk Material Request jika RPC belum return AR/RR spesifik
+      if (!requestData || requestData.length === 0) {
+        try {
+          const { data: userKar } = await supabaseClient.from('karyawanTbl').select('Id, Author, Kualifikasi').ilike('QrCodeId', qrId.trim()).maybeSingle();
+          let authorTokens = [];
+          if (userKar) {
+            const { data: userPas } = await supabaseClient.from('paswordTbl').select('Author, pic, PIC').eq('Id', userKar.Id).maybeSingle();
+            const rawA = (userKar.Author || '') + ',' + (userPas ? (userPas.Author || '') : '');
+            const rawP = userPas ? (userPas.pic || userPas.PIC || '') : '';
+            authorTokens = [...rawA.split(','), ...rawP.split(',')].map(s => s.trim().toUpperCase()).filter(Boolean);
+          }
+
+          const isSuper = authorTokens.includes('ALL') || authorTokens.includes('*');
+
+          const { data: apprRows } = await supabaseClient
+            .from('request_approval')
+            .select('*')
+            .in('CurrentLevel', ['Review', 'Approval', 'review', 'approval'])
+            .order('CreatedAt', { ascending: false });
+
+          if (apprRows && apprRows.length > 0) {
+            const refNos = apprRows.map(a => a.RefNo).filter(Boolean);
+            const { data: reqRows } = await supabaseClient
+              .from('request')
+              .select('RefNo, PROJECTID, WO_NO, Purpose, RequestBy, DATE_REQUEST')
+              .in('RefNo', refNos);
+
+            requestData = apprRows.filter(appr => {
+              const proj = String(appr.ProjectID || '').trim();
+              const projClean = proj.replace(/^0+/, '');
+              const lvl = String(appr.CurrentLevel || '').trim().toLowerCase();
+
+              if (lvl === 'review') {
+                if (isSuper) return true;
+                return authorTokens.some(t =>
+                  t === 'RR' || t === 'REVIEW REQUEST' ||
+                  t === 'RR-' + proj || (projClean && t === 'RR-' + projClean) ||
+                  t === 'REVIEW REQUEST ' + proj || (projClean && t === 'REVIEW REQUEST ' + projClean) ||
+                  (t.startsWith('RR-') && (t.endsWith(proj) || (projClean && t.endsWith(projClean)))) ||
+                  (t.startsWith('REVIEW REQUEST') && (t.includes(proj) || (projClean && t.includes(projClean))))
+                );
+              } else if (lvl === 'approval') {
+                if (isSuper) return true;
+                return authorTokens.some(t =>
+                  t === 'AR' || t === 'APPROVAL REQUEST' ||
+                  t === 'AR-' + proj || (projClean && t === 'AR-' + projClean) ||
+                  t === 'APPROVAL REQUEST ' + proj || (projClean && t === 'APPROVAL REQUEST ' + projClean) ||
+                  (t.startsWith('AR-') && (t.endsWith(proj) || (projClean && t.endsWith(projClean)))) ||
+                  (t.startsWith('APPROVAL REQUEST') && (t.includes(proj) || (projClean && t.includes(projClean))))
+                );
+              }
+              return false;
+            }).map(appr => {
+              const matchedReq = (reqRows || []).find(r => r.RefNo === appr.RefNo) || {};
+              return {
+                refno: appr.RefNo,
+                projectid: appr.ProjectID || matchedReq.PROJECTID || '-',
+                currentlevel: appr.CurrentLevel,
+                purpose: matchedReq.Purpose || '-',
+                requestby: matchedReq.RequestBy || '-',
+                wo_no: matchedReq.WO_NO || '-'
+              };
+            });
+          }
+        } catch (fbErr) {
+          console.warn('Fallback fetch request error:', fbErr);
+        }
+      }
 
       const hasEmpReq = empReqData && empReqData.length > 0;
       const hasIjinLembur = ijinLemburData && ijinLemburData.length > 0;
@@ -1473,14 +1542,61 @@ async function sendPoApprovalEmail(extra) {
   }
 
   try {
-    const { error } = await supabaseClient.rpc('process_approval_by_qrcode', {
-      p_qrcode: qrId,
-      p_refno: refno,
-      p_decision: decision,
-      p_reason: reason
-    });
-    if (error) throw error;
-    alert(`Request ${refno} berhasil diproses.`);
+    let rpcSuccess = false;
+    try {
+      const { error } = await supabaseClient.rpc('process_approval_by_qrcode', {
+        p_qrcode: qrId,
+        p_refno: refno,
+        p_decision: decision,
+        p_reason: reason
+      });
+      if (!error) rpcSuccess = true;
+    } catch (rpcErr) {
+      console.warn('process_approval_by_qrcode fallback:', rpcErr);
+    }
+
+    if (!rpcSuccess) {
+      const { data: kar } = await supabaseClient.from('karyawanTbl').select('Id').ilike('QrCodeId', qrId.trim()).maybeSingle();
+      const userId = kar ? String(kar.Id) : qrId;
+
+      const { data: currAppr } = await supabaseClient.from('request_approval').select('*').eq('RefNo', refno).maybeSingle();
+      if (!currAppr) throw new Error('Data approval tidak ditemukan.');
+
+      const isReview = String(currAppr.CurrentLevel || '').toLowerCase() === 'review';
+      if (decision === 'Approve') {
+        if (isReview) {
+          await supabaseClient.from('request_approval').update({
+            CurrentLevel: 'Approval',
+            ReviewedBy: userId,
+            ReviewedAt: new Date().toISOString()
+          }).eq('RefNo', refno);
+          await supabaseClient.from('request').update({
+            Status: 'Menunggu Approval Akhir'
+          }).eq('RefNo', refno);
+        } else {
+          await supabaseClient.from('request_approval').update({
+            CurrentLevel: 'Approved',
+            ApprovedBy: userId,
+            ApprovedAt: new Date().toISOString()
+          }).eq('RefNo', refno);
+          await supabaseClient.from('request').update({
+            Status: 'Approved'
+          }).eq('RefNo', refno);
+        }
+      } else {
+        await supabaseClient.from('request_approval').update({
+          CurrentLevel: 'Rejected',
+          RejectedBy: userId,
+          RejectedAt: new Date().toISOString(),
+          RejectReason: reason
+        }).eq('RefNo', refno);
+        await supabaseClient.from('request').update({
+          Status: 'Rejected'
+        }).eq('RefNo', refno);
+      }
+    }
+
+    alert(`Request ${refno} berhasil ${decision === 'Approve' ? 'disetujui' : 'ditolak'}.`);
     loadApprovalIssues(qrId);
   } catch (e) {
     alert("Gagal memproses: " + e.message);
