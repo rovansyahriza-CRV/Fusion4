@@ -46,9 +46,21 @@ UPDATE "paswordTbl"
 SET "pic" = 'PER', "PIC" = 'PER', "Author" = 'AER' 
 WHERE "Id" = 21 AND "PIC" = 'PER';
 
--- 4. Perbarui RPC create_karyawan_full (Penanganan Eksplisit & Robust)
-DROP FUNCTION IF EXISTS create_karyawan_full(TEXT, TEXT, TEXT, TEXT, TEXT, DATE, TEXT, TEXT, TEXT);
-DROP FUNCTION IF EXISTS create_karyawan_full(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT);
+-- 4. Bersihkan seluruh overload function lama agar tidak terjadi ambigu
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT p.proname, pg_get_function_identity_arguments(p.oid) as args
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public' 
+          AND p.proname IN ('create_karyawan_full', 'update_karyawan_core', 'get_karyawan_pic', 'list_karyawan_all')
+    ) LOOP
+        EXECUTE 'DROP FUNCTION IF EXISTS public.' || quote_ident(r.proname) || '(' || r.args || ') CASCADE;';
+    END LOOP;
+END $$;
 
 CREATE OR REPLACE FUNCTION create_karyawan_full(
     p_nama TEXT,
@@ -178,8 +190,6 @@ END;
 $$;
 
 -- 5. Perbarui RPC update_karyawan_core
-DROP FUNCTION IF EXISTS update_karyawan_core(BIGINT, TEXT, TEXT, TEXT, TEXT);
-
 CREATE OR REPLACE FUNCTION update_karyawan_core(
     p_id BIGINT,
     p_departemen TEXT DEFAULT NULL,
@@ -216,9 +226,6 @@ END;
 $$;
 
 -- 6. RPC get_karyawan_pic (kompatibel dengan pic & PIC)
-DROP FUNCTION IF EXISTS get_karyawan_pic(BIGINT);
-DROP FUNCTION IF EXISTS get_karyawan_pic(INT);
-
 CREATE OR REPLACE FUNCTION get_karyawan_pic(p_id BIGINT)
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -235,8 +242,6 @@ END;
 $$;
 
 -- 7. Perbarui RPC list_karyawan_all
-DROP FUNCTION IF EXISTS list_karyawan_all();
-
 CREATE OR REPLACE FUNCTION list_karyawan_all()
 RETURNS TABLE (
     id BIGINT,
@@ -277,6 +282,6 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION get_karyawan_pic(BIGINT) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION create_karyawan_full TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION update_karyawan_core TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION list_karyawan_all TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION create_karyawan_full(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION update_karyawan_core(BIGINT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION list_karyawan_all() TO anon, authenticated, service_role;
