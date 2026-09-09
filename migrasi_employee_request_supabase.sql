@@ -1,4 +1,4 @@
-﻿-- =====================================================================================
+-- =====================================================================================
 -- Fusion4 SmartGate — Migrasi Workflow Employee Request Berjenjang (3-Level Lifecycle)
 -- Level 1 (Atasan/PM: AER-xxx) ➔ Level 2 (HRD: PER) ➔ Level 3 (Direksi: APER)
 -- =====================================================================================
@@ -282,3 +282,164 @@ GRANT EXECUTE ON FUNCTION list_employee_requests TO anon, authenticated, service
 GRANT EXECUTE ON FUNCTION submit_employee_request TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION process_employee_request_step TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION process_employee_request_approval TO anon, authenticated, service_role;
+
+-- 8. RPC Khusus Digital Badge: Ambil antrean approval permintaan karyawan berdasarkan QR Code Approver
+DROP FUNCTION IF EXISTS get_pending_employee_requests_by_qrcode(TEXT);
+
+CREATE OR REPLACE FUNCTION get_pending_employee_requests_by_qrcode(p_qrcode TEXT)
+RETURNS TABLE (
+    id INT,
+    requestno TEXT,
+    tanggalrequest DATE,
+    pemohonid INT,
+    pemohonnama TEXT,
+    divisi TEXT,
+    departemen TEXT,
+    projectcode TEXT,
+    lokasisite TEXT,
+    posisijabatan TEXT,
+    jumlahorang INT,
+    tanggaldibutuhkan DATE,
+    durasikerja TEXT,
+    jeniskelamin TEXT,
+    pendidikanminimal TEXT,
+    pengalamanminimal TEXT,
+    kualifikasikhusus TEXT,
+    alasanpermintaan TEXT,
+    status TEXT,
+    stage TEXT,
+    createdat TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_author TEXT := '';
+    v_user_nama TEXT := '';
+BEGIN
+    -- 1. Identifikasi Author user berdasarkan QR Code / ID
+    SELECT 
+        COALESCE(p."Author", ''),
+        COALESCE(k."NamaPersonnel", p."Nama", '')
+    INTO v_user_author, v_user_nama
+    FROM "karyawanTbl" k
+    LEFT JOIN "paswordTbl" p ON k."Id" = p."Id"
+    WHERE k."QrCodeId" = p_qrcode 
+       OR p."QrCodeId" = p_qrcode
+       OR k."Id"::TEXT = p_qrcode
+       OR p."Id"::TEXT = p_qrcode;
+
+    IF v_user_author IS NULL OR v_user_author = '' THEN
+        RETURN;
+    END IF;
+
+    v_user_author := UPPER(v_user_author);
+
+    -- 2. Query tiket Level 1 (AER) jika user memiliki otorisasi AER
+    IF v_user_author LIKE '%AER%' OR v_user_author LIKE '%ALL%' OR v_user_author LIKE '%ADMIN%' THEN
+        RETURN QUERY
+        SELECT 
+            r."Id" AS id,
+            r."RequestNo" AS requestno,
+            r."TanggalRequest" AS tanggalrequest,
+            r."PemohonId" AS pemohonid,
+            r."PemohonNama" AS pemohonnama,
+            r."Divisi" AS divisi,
+            r."Departemen" AS departemen,
+            r."ProjectCode" AS projectcode,
+            r."LokasiSite" AS lokasisite,
+            r."PosisiJabatan" AS posisijabatan,
+            r."JumlahOrang" AS jumlahorang,
+            r."TanggalDibutuhkan" AS tanggaldibutuhkan,
+            r."DurasiKerja" AS durasikerja,
+            r."JenisKelamin" AS jeniskelamin,
+            r."PendidikanMinimal" AS pendidikanminimal,
+            r."PengalamanMinimal" AS pengalamanminimal,
+            r."KualifikasiKhusus" AS kualifikasikhusus,
+            r."AlasanPermintaan" AS alasanpermintaan,
+            r."Status" AS status,
+            'AER'::TEXT AS stage,
+            r."CreatedAt" AS createdat
+        FROM "employeeRequestTbl" r
+        WHERE (r."Status" = 'PENDING_AER' OR r."Status" = 'PENDING')
+          AND (
+              v_user_author LIKE '%AER-ALL%' 
+              OR v_user_author = 'AER' 
+              OR v_user_author LIKE '%,AER,%'
+              OR v_user_author LIKE 'AER,%'
+              OR v_user_author LIKE '%,AER'
+              OR v_user_author LIKE '%ALL%'
+              OR v_user_author LIKE '%ADMIN%'
+              OR (r."ProjectCode" IS NOT NULL AND v_user_author LIKE '%AER-' || UPPER(TRIM(r."ProjectCode")) || '%')
+          )
+        ORDER BY r."CreatedAt" ASC;
+    END IF;
+
+    -- 3. Query tiket Level 3 (APER) jika user memiliki otorisasi APER / BOD / Direksi
+    IF v_user_author LIKE '%APER%' OR v_user_author LIKE '%BOD%' OR v_user_author LIKE '%DIR%' OR v_user_author LIKE '%ALL%' OR v_user_author LIKE '%ADMIN%' THEN
+        RETURN QUERY
+        SELECT 
+            r."Id" AS id,
+            r."RequestNo" AS requestno,
+            r."TanggalRequest" AS tanggalrequest,
+            r."PemohonId" AS pemohonid,
+            r."PemohonNama" AS pemohonnama,
+            r."Divisi" AS divisi,
+            r."Departemen" AS departemen,
+            r."ProjectCode" AS projectcode,
+            r."LokasiSite" AS lokasisite,
+            r."PosisiJabatan" AS posisijabatan,
+            r."JumlahOrang" AS jumlahorang,
+            r."TanggalDibutuhkan" AS tanggaldibutuhkan,
+            r."DurasiKerja" AS durasikerja,
+            r."JenisKelamin" AS jeniskelamin,
+            r."PendidikanMinimal" AS pendidikanminimal,
+            r."PengalamanMinimal" AS pengalamanminimal,
+            r."KualifikasiKhusus" AS kualifikasikhusus,
+            r."AlasanPermintaan" AS alasanpermintaan,
+            r."Status" AS status,
+            'APER'::TEXT AS stage,
+            r."CreatedAt" AS createdat
+        FROM "employeeRequestTbl" r
+        WHERE r."Status" = 'PENDING_APER'
+        ORDER BY r."CreatedAt" ASC;
+    END IF;
+END;
+$$;
+
+-- 9. RPC Eksekusi Approval/Reject dari Digital Badge via QR Code
+DROP FUNCTION IF EXISTS process_employee_request_step_by_qrcode(TEXT, INT, TEXT, TEXT);
+
+CREATE OR REPLACE FUNCTION process_employee_request_step_by_qrcode(
+    p_qrcode TEXT,
+    p_id INT,
+    p_step_action TEXT,
+    p_notes TEXT DEFAULT ''
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_actor_name TEXT := '';
+BEGIN
+    -- Dapatkan nama approver dari QrCodeId
+    SELECT COALESCE(k."NamaPersonnel", p."Nama", 'Approver')
+    INTO v_actor_name
+    FROM "karyawanTbl" k
+    LEFT JOIN "paswordTbl" p ON k."Id" = p."Id"
+    WHERE k."QrCodeId" = p_qrcode 
+       OR p."QrCodeId" = p_qrcode
+       OR k."Id"::TEXT = p_qrcode
+       OR p."Id"::TEXT = p_qrcode;
+
+    IF v_actor_name IS NULL OR v_actor_name = '' THEN
+        v_actor_name := 'Approver (' || p_qrcode || ')';
+    END IF;
+
+    RETURN process_employee_request_step(p_id, v_actor_name, p_step_action, p_notes);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_pending_employee_requests_by_qrcode(TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION process_employee_request_step_by_qrcode(TEXT, INT, TEXT, TEXT) TO anon, authenticated, service_role;

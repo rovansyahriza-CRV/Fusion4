@@ -743,7 +743,8 @@ async function submitPin() {
 
     try {
       // Ambil semua data approval dari Supabase secara aman & paralel
-      const [ijinLemburData, requestData, vendorData, rfqData, poData] = await Promise.all([
+      const [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData] = await Promise.all([
+        safeRpc('get_pending_employee_requests_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_ijin_lembur_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
@@ -751,13 +752,14 @@ async function submitPin() {
         safeRpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId })
       ]);
 
+      const hasEmpReq = empReqData && empReqData.length > 0;
       const hasIjinLembur = ijinLemburData && ijinLemburData.length > 0;
       const hasRequest = requestData && requestData.length > 0;
       const hasVendor = vendorData && vendorData.length > 0;
       const hasRfq = rfqData && rfqData.length > 0;
       const hasPo = poData && poData.length > 0;
 
-      if (!hasIjinLembur && !hasRequest && !hasVendor && !hasRfq && !hasPo) {
+      if (!hasEmpReq && !hasIjinLembur && !hasRequest && !hasVendor && !hasRfq && !hasPo) {
         box.style.display = "flex";
         box.style.flexDirection = "row";
         box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
@@ -766,6 +768,43 @@ async function submitPin() {
 
       box.style.display = "block";
       box.innerHTML = "";
+
+      // 0. Render Permintaan Karyawan (AER / APER)
+      if (hasEmpReq) {
+        empReqData.forEach(item => {
+          const row = document.createElement('div');
+          row.style.cssText = "border:1.5px solid #2563eb; border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#fff;";
+          row.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <div style="font-size:13px; font-weight:700; color:#1e40af;">👥 Permintaan Karyawan (${item.stage})</div>
+              <span style="font-size:11px; padding:2px 8px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-weight:700;">${item.requestno}</span>
+            </div>
+            <div style="font-size:13px; font-weight:700; color:var(--charcoal); margin-bottom:2px;">
+              ${item.posisijabatan} <span style="font-size:11px; font-weight:700; color:var(--orange);">(${item.jumlahorang || 1} Orang)</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
+              Pemohon: <strong>${item.pemohonnama}</strong> • Proyek: <strong style="color:#0284c7;">${item.projectcode || '-'}</strong> • 📍 ${item.lokasisite || '-'}<br>
+              Target: ${item.tanggaldibutuhkan || '-'} • ${item.durasikerja || '-'} • <em>"${item.alasanpermintaan || '-'}"</em>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btnApproveEmpReq" data-id="${item.id}" data-action="${item.stage === 'AER' ? 'AER_APPROVE' : 'APER_APPROVE'}" data-stage="${item.stage}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:#16a34a; color:#fff; cursor:pointer;">
+                ✅ Setujui (${item.stage})
+              </button>
+              <button class="btnRejectEmpReq" data-id="${item.id}" data-action="${item.stage === 'AER' ? 'AER_REJECT' : 'APER_REJECT'}" data-stage="${item.stage}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--danger, #D9312E); cursor:pointer;">
+                ❌ Tolak
+              </button>
+            </div>
+          `;
+          box.appendChild(row);
+        });
+
+        box.querySelectorAll('.btnApproveEmpReq').forEach(btn => {
+          btn.onclick = () => handleEmpReqApprovalDecision(btn.dataset.id, btn.dataset.action, qrId, btn.dataset.stage);
+        });
+        box.querySelectorAll('.btnRejectEmpReq').forEach(btn => {
+          btn.onclick = () => handleEmpReqApprovalDecision(btn.dataset.id, btn.dataset.action, qrId, btn.dataset.stage);
+        });
+      }
 
       // 1. Render Tiket Ijin & Lembur
       if (hasIjinLembur) {
@@ -1067,6 +1106,33 @@ async function submitPin() {
       loadApprovalIssues(qrId);
     } catch (e) {
       alert("Gagal memproses: " + e.message);
+    }
+  }
+
+  async function handleEmpReqApprovalDecision(id, action, qrId, stage) {
+    const isApprove = action.includes('APPROVE');
+    const confirmMsg = isApprove ? `Setujui permintaan karyawan ini (${stage})?` : `Tolak permintaan karyawan ini (${stage})?`;
+    if (!confirm(confirmMsg)) return;
+
+    let notes = '';
+    if (!isApprove) {
+      notes = prompt('Alasan penolakan (opsional):') || '';
+    } else {
+      notes = prompt('Catatan persetujuan (opsional):') || '';
+    }
+
+    try {
+      const { data, error } = await supabaseClient.rpc('process_employee_request_step_by_qrcode', {
+        p_qrcode: qrId,
+        p_id: Number(id),
+        p_step_action: action,
+        p_notes: notes
+      });
+      if (error) throw error;
+      alert((data && data.message) || 'Permintaan karyawan berhasil diproses.');
+      loadApprovalIssues(qrId);
+    } catch (e) {
+      alert("Gagal memproses permintaan karyawan: " + e.message);
     }
   }
 
