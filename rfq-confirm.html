@@ -342,7 +342,7 @@ async function submitDecision(rv, decision, rfqHeader, vendorInfo, grandTotal, w
             .select('POID')
             .order('POID', { ascending: false })
             .limit(1);
-          const nextPoId = (maxPo && maxPo.length > 0 && maxPo[0].POID != null) ? (Number(maxPo[0].POID) || 0) + 1 : 1;
+          const nextPoNum = (maxPo && maxPo.length > 0 && maxPo[0].POID != null) ? (Number(maxPo[0].POID) || 0) + 1 : 1;
 
           const isSO = (winningQuotes || []).some(q => {
             const d = (detailById && detailById[String(q.RFQDetailID)]) || {};
@@ -350,12 +350,11 @@ async function submitDecision(rv, decision, rfqHeader, vendorInfo, grandTotal, w
           });
           const docType = isSO ? 'SO' : 'PO';
           const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-          const docNumber = `${docType}-${dateStr}-${String(nextPoId).padStart(4, '0')}`;
+          const docNumber = `${docType}-${dateStr}-${String(nextPoNum).padStart(4, '0')}`;
 
-          const { error: poInsErr } = await supabaseClient
+          const { data: insertedPo, error: poInsErr } = await supabaseClient
             .from('purchaseOrder')
             .insert({
-              POID: nextPoId,
               RFQID: rv.RFQID,
               RFQVendorID: rv.RFQVendorID,
               VendorID: rv.VendorID,
@@ -365,23 +364,18 @@ async function submitDecision(rv, decision, rfqHeader, vendorInfo, grandTotal, w
               Status: 'Draft',
               CreatedDate: new Date().toISOString(),
               DeliveryPoint: rfqHeader ? rfqHeader.DeliveryPoint : null
-            });
+            })
+            .select('POID')
+            .single();
 
-          if (!poInsErr) {
-            const { data: maxPod } = await supabaseClient
-              .from('purchaseOrderDetail')
-              .select('PODetailID')
-              .order('PODetailID', { ascending: false })
-              .limit(1);
-            let nextPodId = (maxPod && maxPod.length > 0 && maxPod[0].PODetailID != null) ? (Number(maxPod[0].PODetailID) || 0) + 1 : 1;
-
+          if (!poInsErr && insertedPo) {
+            const newPoId = insertedPo.POID;
             const podItems = (winningQuotes || []).map(q => {
               const d = (detailById && detailById[String(q.RFQDetailID)]) || {};
               const qty = Number(q.Qty) || 0;
               const unitPrice = Number(q.UnitPrice) || 0;
               return {
-                PODetailID: nextPodId++,
-                POID: nextPoId,
+                POID: newPoId,
                 RFQDetailID: q.RFQDetailID,
                 ItemDescription: d.ItemDescription || '-',
                 Unit: d.Unit || '',
