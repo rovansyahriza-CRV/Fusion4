@@ -1152,8 +1152,10 @@ async function loadViewReportPage(category, btnEl) {
       const { data, error } = await supabaseClient.from('purchaseOrder').select('*').order('POID', { ascending: false });
       if (error) throw error;
       rows = (data || []).map(r => ({
+        poid: r.POID,
         noTransaksi: r.DocNumber, tanggal: pickReportDate(r),
-        keterangan: r.DocType || '-', reportUrl: r.ReportURL,
+        keterangan: `${r.DocType || 'PO'} · Status: ${r.Status || '-'}`,
+        reportUrl: r.ReportURL,
       }));
 
     } else if (category === 'siteReceiving' || category === 'endUserReceiving') {
@@ -1202,6 +1204,13 @@ function renderViewReportTable() {
           <button type="button" class="btn-icon" onclick="regenerateRequestReport('${r.noTransaksi}', this)" title="Refresh / Generate Ulang PDF Report" style="padding:4px 8px; font-size:12px; border-radius:6px; background:#f4efe9; border:1px solid #dcd8cc; cursor:pointer;">🔄</button>
         </div>
       `;
+    } else if (category === 'poso') {
+      reportCell = `
+        <div style="display:inline-flex; gap:6px; align-items:center;">
+          ${r.reportUrl ? `<a href="${r.reportUrl}" target="_blank" rel="noopener" class="btn-logout-card" style="display:inline-flex;">📄 Lihat Report</a>` : `<button type="button" class="btn-logout-card" style="display:inline-flex; background:#e8562c; color:#fff;" onclick="regeneratePoReport(${r.poid}, this)">📄 Generate & Lihat PDF</button>`}
+          <button type="button" class="btn-icon" onclick="regeneratePoReport(${r.poid}, this)" title="Generate / Refresh PDF PO ke Google Drive & Buka" style="padding:4px 8px; font-size:12px; border-radius:6px; background:#f4efe9; border:1px solid #dcd8cc; cursor:pointer;">🔄</button>
+        </div>
+      `;
     } else {
       reportCell = r.reportUrl
         ? `<a href="${r.reportUrl}" target="_blank" rel="noopener" class="btn-logout-card" style="display:inline-flex;">📄 Lihat Report</a>`
@@ -1230,6 +1239,85 @@ async function regenerateRequestReport(refno, btnEl) {
     }
   } catch (e) {
     showToast(`Error: ${e.message}`, 'error');
+  } finally {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '🔄'; }
+  }
+}
+
+async function regeneratePoReport(poId, btnEl) {
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳'; }
+  try {
+    showToast(`Meng-generate PDF report PO/SO...`, 'info');
+    const poid = Number(poId);
+    const { data: poRow, error: poErr } = await supabaseClient
+      .from('purchaseOrder')
+      .select('*')
+      .eq('POID', poid)
+      .single();
+    if (poErr || !poRow) throw new Error('PO/SO tidak ditemukan.');
+
+    const [{ data: rfqRow }, { data: vendorRow }, { data: termRows }, { data: items }] = await Promise.all([
+      supabaseClient.from('rfq').select('NoRFQ').eq('RFQID', poRow.RFQID).maybeSingle(),
+      supabaseClient.from('vendor').select('VendorName, Email, Address, ContactNo').eq('VendorID', poRow.VendorID).maybeSingle(),
+      supabaseClient.from('rfqVendorTerm').select('*').eq('RFQVendorID', poRow.RFQVendorID).order('RFQVendorTermID', { ascending: false }).limit(1),
+      supabaseClient.from('purchaseOrderDetail').select('*').eq('POID', poid)
+    ]);
+    const termRow = (termRows && termRows[0]) || null;
+
+    const approverName = poRow.ManagementApprovalBy || (typeof currentUser !== 'undefined' && currentUser && (currentUser.nama || currentUser.Username)) || 'Direktur';
+    const poHeader = {
+      doctype: poRow.DocType || 'PO',
+      docnumber: poRow.DocNumber,
+      norfq: rfqRow ? rfqRow.NoRFQ : '-',
+      totalamount: poRow.TotalAmount,
+      approvedby: approverName,
+      approveddate: poRow.ManagementApprovalDate || poRow.CreatedDate,
+      deliverypoint: poRow.DeliveryPoint
+    };
+
+    const pdfBase64 = await generatePoPdfBase64(poHeader, vendorRow, termRow, items);
+
+    // Upload ke Drive
+    let directUrl = null;
+    try {
+      const uploaded = await uploadBase64ToDrive(
+        'reports',
+        `${poHeader.doctype}-${poHeader.docnumber}.pdf`,
+        'application/pdf',
+        pdfBase64
+      );
+      if (uploaded && uploaded.directUrl) {
+        directUrl = uploaded.directUrl;
+        await supabaseClient
+          .from('purchaseOrder')
+          .update({ ReportURL: directUrl, ReportFileID: uploaded.fileId })
+          .eq('POID', poid);
+      }
+    } catch (eDrive) {
+      console.warn('Upload Drive error:', eDrive);
+    }
+
+    showToast(`PDF ${poHeader.docnumber} berhasil di-generate!`, 'success');
+    if (typeof loadViewReportPage === 'function') {
+      loadViewReportPage('poso');
+    }
+
+    // Buka preview PDF langsung di browser
+    if (directUrl) {
+      window.open(directUrl, '_blank');
+    } else {
+      const byteCharacters = atob(pdfBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    }
+  } catch (err) {
+    showToast(`Gagal generate PDF PO: ${err.message}`, 'error');
   } finally {
     if (btnEl) { btnEl.disabled = false; btnEl.textContent = '🔄'; }
   }

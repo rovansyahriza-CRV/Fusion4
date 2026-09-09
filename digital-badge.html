@@ -274,12 +274,33 @@
 <script>
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
 const RFQ_EMAIL_URL = "https://script.google.com/macros/s/AKfycbww8VikG_wpAvQro1-9vLC_llnvKFigFotzKXS-T_kaIHKA4q2QGbYXqZObEF5j_1Hr/exec";
+const DRIVE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbwfq5bqNWx0fO9LuEyQasUzkLP91gA8G-rqRKpPOIJ9r7WNN0G_klH8jXxXhY96ArlC/exec";
+const DRIVE_BRIDGE_TOKEN = "bima-2026-x8f2k9";
 const HO_EMAIL = "rovan.syahriza@gmail.com";
 // BIMA_LOGO_BASE64 is provided globally by reportPdf.js (loaded above); do not redeclare it here to avoid a duplicate const SyntaxError that blocks this script.
   
 const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+async function uploadBase64ToDrive(subfolder, filename, mimeType, base64Data) {
+  const payload = {
+    token: DRIVE_BRIDGE_TOKEN,
+    action: "upload",
+    category: subfolder,
+    fileName: filename,
+    mimeType: mimeType,
+    base64Data: base64Data
+  };
+  const res = await fetch(DRIVE_BRIDGE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
 
 function formatDriveDirectUrl(url) {
   if (!url) return '';
@@ -1971,6 +1992,23 @@ async function sendPoApprovalEmail(extra) {
   };
 
   const pdfBase64 = await generatePoPdfBase64(poHeader, vendorRow, termRow, items);
+
+  // Simpan PDF ke Google Drive dan update ReportURL di tabel purchaseOrder
+  try {
+    const uploadedPoPdf = await uploadBase64ToDrive(
+      'reports',
+      `${poHeader.doctype}-${poHeader.docnumber}.pdf`,
+      'application/pdf',
+      pdfBase64
+    );
+    await supabaseClient
+      .from('purchaseOrder')
+      .update({ ReportURL: uploadedPoPdf.directUrl, ReportFileID: uploadedPoPdf.fileId })
+      .eq('POID', poid);
+  } catch (reportErr) {
+    console.warn('Gagal upload/simpan report PDF PO/SO ke Drive:', reportErr);
+  }
+
   const docLabel = poHeader.doctype === 'SO' ? 'Service Order' : 'Purchase Order';
 
   const recipients = [HO_EMAIL];
