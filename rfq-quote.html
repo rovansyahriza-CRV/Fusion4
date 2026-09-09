@@ -403,6 +403,24 @@
     }
   }
 
+  function formatCurrencyInput(el) {
+    if (!el) return;
+    let raw = String(el.value || '').replace(/\D/g, '');
+    if (!raw) {
+      el.value = '';
+      recalcTotals();
+      return;
+    }
+    el.value = Number(raw).toLocaleString('id-ID');
+    recalcTotals();
+  }
+
+  function parseCurrency(val) {
+    if (typeof val === 'number') return val;
+    const clean = String(val || '').replace(/\./g, '').replace(/,/g, '').replace(/\D/g, '');
+    return Number(clean) || 0;
+  }
+
   function renderForm() {
     const isAlreadySubmitted = rfqVendorRow.ConfirmationStatus === 'Submitted';
     const statusBadge = isAlreadySubmitted 
@@ -411,9 +429,11 @@
 
     const rowsHtml = rfqItems.map((item, idx) => {
       const q = existingQuotes[item.RFQDetailID] || {};
-      const unitPriceVal = q.UnitPrice !== undefined ? q.UnitPrice : '';
+      const unitPriceVal = (q.UnitPrice !== undefined && q.UnitPrice !== null && q.UnitPrice !== '') 
+        ? Number(q.UnitPrice).toLocaleString('id-ID') 
+        : '';
       const deliveryDateVal = q.VendorDeliveryDate ? String(q.VendorDeliveryDate).split('T')[0] : '';
-      const subtotalVal = (Number(unitPriceVal) || 0) * (Number(item.Qty) || 0);
+      const subtotalVal = (parseCurrency(unitPriceVal)) * (Number(item.Qty) || 0);
 
       return `
         <tr data-detailid="${item.RFQDetailID}" data-qty="${item.Qty}">
@@ -425,7 +445,7 @@
             ${item.Qty || 1} ${item.Unit || 'ea'}
           </td>
           <td style="width: 170px;">
-            <input type="number" class="input-price item-price" min="0" step="100" placeholder="0" value="${unitPriceVal}" oninput="recalcTotals()">
+            <input type="text" class="input-price item-price" inputmode="numeric" placeholder="0" value="${unitPriceVal}" oninput="formatCurrencyInput(this)">
           </td>
           <td style="width: 150px;">
             <input type="date" class="item-deliv-date" value="${deliveryDateVal}">
@@ -436,9 +456,10 @@
         </tr>`;
     }).join('');
 
-    const mobilisasiVal = existingTerm ? (existingTerm.MobilisasiCost || 0) : 0;
-    const otherCostVal = existingTerm ? (existingTerm.OtherServiceCost || 0) : 0;
-    const ppnAmountVal = existingTerm ? (existingTerm.PPNAmount || 0) : 0;
+    const mobilisasiVal = (existingTerm && existingTerm.MobilisasiCost) ? Number(existingTerm.MobilisasiCost).toLocaleString('id-ID') : '';
+    const otherCostVal = (existingTerm && existingTerm.OtherServiceCost) ? Number(existingTerm.OtherServiceCost).toLocaleString('id-ID') : '';
+    const otherDescVal = existingTerm ? (existingTerm.OtherServiceDescription || '') : '';
+    const ppnAmountVal = (existingTerm && existingTerm.PPNAmount) ? Number(existingTerm.PPNAmount).toLocaleString('id-ID') : '';
     const paymentTermVal = existingTerm ? (existingTerm.PaymentTermType || 'Net 30') : 'Net 30';
     const dpPercentVal = existingTerm ? (existingTerm.DPPercentage || '') : '';
     const notesVal = rfqVendorRow.Notes || '';
@@ -492,11 +513,15 @@
         <div class="terms-grid">
           <div class="form-group">
             <label>Biaya Mobilisasi / Ekspedisi (Rp):</label>
-            <input type="number" id="inputMobilisasi" class="input-price" min="0" step="1000" placeholder="0" value="${mobilisasiVal}" oninput="recalcTotals()">
+            <input type="text" id="inputMobilisasi" class="input-price" inputmode="numeric" placeholder="0" value="${mobilisasiVal}" oninput="formatCurrencyInput(this)">
           </div>
           <div class="form-group">
             <label>Biaya Jasa / Lain-lain (Rp):</label>
-            <input type="number" id="inputOtherCost" class="input-price" min="0" step="1000" placeholder="0" value="${otherCostVal}" oninput="recalcTotals()">
+            <input type="text" id="inputOtherCost" class="input-price" inputmode="numeric" placeholder="0" value="${otherCostVal}" oninput="formatCurrencyInput(this)">
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label>Deskripsi Jasa / Biaya Lain-lain (Opsional):</label>
+            <input type="text" id="inputOtherServiceDesc" placeholder="Contoh: Biaya Sertifikasi / Biaya Kalibrasi / Instalasi" value="${otherDescVal}">
           </div>
           <div class="form-group">
             <label>PPN (Pajak Pertambahan Nilai):</label>
@@ -508,7 +533,7 @@
           </div>
           <div class="form-group" id="groupPpnCustom" style="display:none;">
             <label>Nominal PPN (Rp):</label>
-            <input type="number" id="inputPpnAmount" class="input-price" min="0" value="${ppnAmountVal}" oninput="recalcTotals()">
+            <input type="text" id="inputPpnAmount" class="input-price" inputmode="numeric" placeholder="0" value="${ppnAmountVal}" oninput="formatCurrencyInput(this)">
           </div>
           <div class="form-group">
             <label>Termin Pembayaran:</label>
@@ -578,14 +603,14 @@
     trs.forEach(tr => {
       const qty = Number(tr.dataset.qty) || 0;
       const priceInput = tr.querySelector('.item-price');
-      const price = Number(priceInput.value) || 0;
+      const price = parseCurrency(priceInput?.value);
       const sub = qty * price;
       itemSubtotal += sub;
       tr.querySelector('.item-subtotal').textContent = `Rp ${sub.toLocaleString('id-ID')}`;
     });
 
-    const mobilisasi = Number(document.getElementById('inputMobilisasi')?.value) || 0;
-    const otherCost = Number(document.getElementById('inputOtherCost')?.value) || 0;
+    const mobilisasi = parseCurrency(document.getElementById('inputMobilisasi')?.value);
+    const otherCost = parseCurrency(document.getElementById('inputOtherCost')?.value);
     const extraTotal = mobilisasi + otherCost;
 
     const ppnType = document.getElementById('selectPpnType')?.value || '11';
@@ -593,7 +618,7 @@
     if (ppnType === '11') {
       ppnAmount = Math.round((itemSubtotal + extraTotal) * 0.11);
     } else if (ppnType === 'custom') {
-      ppnAmount = Number(document.getElementById('inputPpnAmount')?.value) || 0;
+      ppnAmount = parseCurrency(document.getElementById('inputPpnAmount')?.value);
     }
 
     const grandTotal = itemSubtotal + extraTotal + ppnAmount;
@@ -633,8 +658,8 @@
     for (const tr of trs) {
       const detailId = Number(tr.dataset.detailid);
       const qty = Number(tr.dataset.qty) || 0;
-      const price = Number(tr.querySelector('.item-price').value) || 0;
-      const delivDate = tr.querySelector('.item-deliv-date').value || null;
+      const price = parseCurrency(tr.querySelector('.item-price')?.value);
+      const delivDate = tr.querySelector('.item-deliv-date')?.value || null;
 
       if (price > 0) hasFilledPrice = true;
 
@@ -659,16 +684,17 @@
       return;
     }
 
-    const mobilisasi = Number(document.getElementById('inputMobilisasi').value) || 0;
-    const otherCost = Number(document.getElementById('inputOtherCost').value) || 0;
-    const ppnType = document.getElementById('selectPpnType').value;
+    const mobilisasi = parseCurrency(document.getElementById('inputMobilisasi')?.value);
+    const otherCost = parseCurrency(document.getElementById('inputOtherCost')?.value);
+    const otherServiceDesc = document.getElementById('inputOtherServiceDesc')?.value.trim() || null;
+    const ppnType = document.getElementById('selectPpnType')?.value;
     let ppnAmount = 0;
     let itemSub = 0;
     quotePayloads.forEach(q => { itemSub += (q.UnitPrice * q.Qty); });
     if (ppnType === '11') {
       ppnAmount = Math.round((itemSub + mobilisasi + otherCost) * 0.11);
     } else if (ppnType === 'custom') {
-      ppnAmount = Number(document.getElementById('inputPpnAmount').value) || 0;
+      ppnAmount = parseCurrency(document.getElementById('inputPpnAmount')?.value);
     }
 
     const paymentTerm = document.getElementById('selectPaymentTerm').value;
@@ -687,11 +713,12 @@
         }
       }
 
-      // 2. Simpan Commercial Term (Mobilisasi, Biaya Lain, PPN, Termin)
+      // 2. Simpan Commercial Term (Mobilisasi, Biaya Lain, Deskripsi, PPN, Termin)
       const termPayload = {
         RFQVendorID: rfqVendorRow.RFQVendorID,
         MobilisasiCost: mobilisasi,
         OtherServiceCost: otherCost,
+        OtherServiceDescription: otherServiceDesc,
         PPNAmount: ppnAmount,
         PaymentTermType: paymentTerm,
         DPPercentage: dpPercent,
