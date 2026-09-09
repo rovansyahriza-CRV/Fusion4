@@ -18,11 +18,11 @@ async function initAuthSession() {
   const savedUser = localStorage.getItem('fusion4_smartgate_user');
   if (savedUser) {
     currentUser = JSON.parse(savedUser);
-    updateUIAuth();
     // Refresh PIC & Author dari database tiap buka app
     currentUser.pic = await fetchKaryawanPic(currentUser.id);
     currentUser.author = await fetchKaryawanAuthor(currentUser.id);
     localStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
+    updateUIAuth();
     applySidebarAccess();
   } else {
     currentUser = null;
@@ -52,6 +52,7 @@ async function loginUser(idKaryawan, password) {
       currentUser.author = await fetchKaryawanAuthor(currentUser.id);
       localStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
       updateUIAuth();
+      applySidebarAccess();
       showToast(`Selamat datang, ${currentUser.nama}!`, 'success');
       return true;
     } else {
@@ -66,7 +67,7 @@ async function loginUser(idKaryawan, password) {
 }
 
 // ==========================================
-// AKSES SIDEBAR BERDASARKAN PIC (paswordTbl.pic) -- default gak diisi/kosong = akses
+// AKSES SIDEBAR BERDASARKAN PIC (paswordTbl.pic / PIC) -- default gak diisi/kosong = akses
 // semua menu (biar user lama yang belum di-set PIC gak keblokir tiba-tiba). Begitu PIC
 // diisi initial menu tertentu, cuma menu itu yang kebuka; sisanya tetap kelihatan di
 // sidebar tapi kekunci (klik = toast, gak pindah section).
@@ -85,9 +86,17 @@ const SIDEBAR_ACCESS_MAP = [
 
 async function fetchKaryawanPic(id) {
   try {
-    const { data, error } = await supabaseClient.rpc('get_karyawan_pic', { p_id: parseInt(id, 10) });
-    if (error) throw error;
-    return data || '';
+    const { data, error } = await supabaseClient
+      .from('paswordTbl')
+      .select('PIC, pic')
+      .eq('Id', parseInt(id, 10))
+      .maybeSingle();
+    if (!error && data) {
+      const val = (data.PIC !== null && data.PIC !== undefined && data.PIC !== '') ? data.PIC : (data.pic || '');
+      return String(val).trim();
+    }
+    const { data: rpcData } = await supabaseClient.rpc('get_karyawan_pic', { p_id: parseInt(id, 10) });
+    return String(rpcData || '').trim();
   } catch (err) {
     console.error('Error fetchKaryawanPic:', err);
     return '';
@@ -96,10 +105,18 @@ async function fetchKaryawanPic(id) {
 
 async function fetchKaryawanAuthor(id) {
   try {
-    const { data, error } = await supabaseClient.from('paswordTbl').select('Author').eq('Id', parseInt(id, 10)).maybeSingle();
-    if (!error && data) return data.Author || '';
+    const { data, error } = await supabaseClient
+      .from('paswordTbl')
+      .select('Author, author')
+      .eq('Id', parseInt(id, 10))
+      .maybeSingle();
+    if (!error && data) {
+      const val = (data.Author !== null && data.Author !== undefined && data.Author !== '') ? data.Author : (data.author || '');
+      return String(val).trim();
+    }
     return '';
   } catch (err) {
+    console.error('Error fetchKaryawanAuthor:', err);
     return '';
   }
 }
@@ -112,20 +129,28 @@ function hasSectionAccess(key) {
   if (!picRaw && !authorRaw) return true; // Default akses semua jika belum diset
   if (picRaw.includes('ALL') || picRaw.includes('*') || authorRaw.includes('ALL') || authorRaw.includes('ADMIN')) return true;
 
+  const picTokens = picRaw.split(',').map(t => t.trim()).filter(Boolean);
+  const authTokens = authorRaw.split(',').map(t => t.trim()).filter(Boolean);
+
   if (key === 'ER') {
     return (
-      picRaw.includes('ER') ||
-      picRaw.includes('PER') ||
-      authorRaw.includes('AER') ||
-      authorRaw.includes('APER') ||
-      authorRaw.includes('HR') ||
-      authorRaw.includes('BOD') ||
-      authorRaw.includes('LEAD')
+      picTokens.some(t => t.startsWith('ER') || t === 'PER' || t === 'HR') ||
+      authTokens.some(t => t.startsWith('AER') || t === 'APER' || t === 'HR' || t === 'BOD' || t === 'LEAD')
     );
   }
 
-  const tokens = picRaw.split(',').map(t => t.trim()).filter(Boolean);
-  return tokens.includes(key.toUpperCase());
+  if (key === 'OIL') {
+    return (
+      picTokens.some(t => t === 'OIL') ||
+      authTokens.some(t => t.startsWith('AR') || t.startsWith('ASV') || t.startsWith('APO') || t.includes('APPROV') || t.includes('REVIEW'))
+    );
+  }
+
+  if (key === 'DK') {
+    return picTokens.includes('DK') || picTokens.includes('HR') || authTokens.includes('HR');
+  }
+
+  return picTokens.includes(key.toUpperCase());
 }
 
 function applySidebarAccess() {
@@ -2071,23 +2096,31 @@ let empReqState = {
   selectedRequest: null
 };
 
-function canUserSubmitEmpReq() {
+function canUserSubmitEmpReq(projectCode = '') {
   if (!currentUser) return false;
   const pic = String(currentUser.pic || '').toUpperCase();
   const auth = String(currentUser.author || '').toUpperCase();
-  return pic.includes('ER') || pic.includes('ALL') || auth.includes('ALL') || auth.includes('ADMIN');
+  if (pic.includes('ALL') || auth.includes('ALL') || auth.includes('ADMIN')) return true;
+  const picTokens = pic.split(',').map(t => t.trim()).filter(Boolean);
+  if (picTokens.includes('ER') || picTokens.includes('PER') || picTokens.includes('ER-ALL')) return true;
+  if (projectCode) {
+    const projClean = String(projectCode).toUpperCase().replace(/\s+/g, '');
+    return picTokens.includes(`ER-${projClean}`);
+  }
+  return picTokens.some(t => t.startsWith('ER'));
 }
 
 function canUserApproveAer(projectCode = '') {
   if (!currentUser) return false;
   const auth = String(currentUser.author || '').toUpperCase();
-  if (auth.includes('ALL') || auth.includes('ADMIN')) return true;
-  if (auth.includes('AER-ALL') || auth.includes('AER')) return true;
+  if (auth.includes('ALL') || auth.includes('ADMIN') || auth === 'AER' || auth.includes('AER-ALL')) return true;
+  const tokens = auth.split(',').map(t => t.trim()).filter(Boolean);
+  if (tokens.includes('AER') || tokens.includes('AER-ALL')) return true;
   if (projectCode) {
     const projClean = String(projectCode).toUpperCase().replace(/\s+/g, '');
-    if (auth.includes(`AER-${projClean}`)) return true;
+    return tokens.includes(`AER-${projClean}`);
   }
-  return false;
+  return tokens.some(t => t.startsWith('AER'));
 }
 
 function canUserProcessHrd() {
