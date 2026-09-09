@@ -632,12 +632,19 @@ async function refreshRequestReportPdf(refno, forcedStatus = null) {
     try {
       const { data: empList } = await supabaseClient
         .from('karyawanTbl')
-        .select('Id, Nama, Kualifikasi, QrCodeId');
+        .select('*');
       if (empList) {
         empList.forEach(e => {
-          if (e.Id != null) employeeMap[String(e.Id)] = e;
-          if (e.QrCodeId) employeeMap[String(e.QrCodeId).toLowerCase()] = e;
-          if (e.Nama) employeeMap[String(e.Nama).toLowerCase()] = e;
+          const empObj = {
+            Id: e.Id,
+            Nama: e.NamaPersonnel || e.Nama || String(e.Id),
+            Kualifikasi: e.Kualifikasi || '',
+            QrCodeId: e.QrCodeId || ''
+          };
+          if (e.Id != null) employeeMap[String(e.Id)] = empObj;
+          if (e.QrCodeId) employeeMap[String(e.QrCodeId).toLowerCase()] = empObj;
+          if (e.NamaPersonnel) employeeMap[String(e.NamaPersonnel).toLowerCase()] = empObj;
+          if (e.Nama) employeeMap[String(e.Nama).toLowerCase()] = empObj;
         });
       }
     } catch (empErr) {

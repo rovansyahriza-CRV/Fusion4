@@ -58,17 +58,8 @@ function compressImage(file, maxDimension = 1280, quality = 0.7) {
 // browser mengirimnya sebagai "text/plain" request -- ini bikin fetch() TIDAK memicu
 // CORS preflight (OPTIONS), yang mana Apps Script Web App tidak bisa menjawabnya.
 // Apps Script tetap bisa JSON.parse(e.postData.contents) dengan normal.
-async function uploadToDrive(category, fileName, mimeType, blobOrFile, subFolder) {
+async function uploadToDrive(category, fileName, mimeType, blobOrFile) {
   const base64Data = await fileToBase64(blobOrFile);
-  return uploadBase64ToDrive(category, fileName, mimeType, base64Data, subFolder);
-}
-
-// Sama kayak uploadToDrive(), tapi buat caller yang SUDAH punya base64 duluan
-// (misal app.js manggil fileToBase64(file) sendiri sebelum upload -- lihat
-// submitBadge() & submitKontrak() di app.js). Dipisah biar gak double-encode.
-// subFolder: opsional -- dipakai Apps Script buat nentuin subfolder di dalam kategori
-// (misal category "badge-foto" + subFolder "HO" -> folder Drive "Foto Karyawan/HO").
-async function uploadBase64ToDrive(category, fileName, mimeType, base64Data, subFolder) {
   const payload = {
     token: DRIVE_BRIDGE_TOKEN,
     action: "upload",
@@ -76,7 +67,6 @@ async function uploadBase64ToDrive(category, fileName, mimeType, base64Data, sub
     fileName,
     mimeType,
     base64Data,
-    subFolder,
   };
 
   const res = await fetch(DRIVE_BRIDGE_URL, {
