@@ -107,12 +107,19 @@ async function fetchKaryawanAuthor(id) {
   try {
     const { data, error } = await supabaseClient
       .from('paswordTbl')
-      .select('Author, author')
+      .select('Author')
       .eq('Id', parseInt(id, 10))
       .maybeSingle();
-    if (!error && data) {
-      const val = (data.Author !== null && data.Author !== undefined && data.Author !== '') ? data.Author : (data.author || '');
-      return String(val).trim();
+    if (!error && data && data.Author) {
+      return String(data.Author).trim();
+    }
+    const { data: dAll } = await supabaseClient
+      .from('paswordTbl')
+      .select('*')
+      .eq('Id', parseInt(id, 10))
+      .maybeSingle();
+    if (dAll && (dAll.Author || dAll.author)) {
+      return String(dAll.Author || dAll.author).trim();
     }
     return '';
   } catch (err) {
@@ -2615,8 +2622,8 @@ function openEmployeeRequestDetail(id) {
 
   // RENDER DYNAMIC ACTION BOX BERDASARKAN ROLE LOGIN & STATUS SAAT INI
   if (boxApproval) {
-    let actionHtml = '';
-    const canAer = canUserApproveAer(req.projectcode);
+    const projCode = req.projectcode || req.projectCode || req.ProjectCode || '';
+    const canAer = canUserApproveAer(projCode);
     const canHrd = canUserProcessHrd();
     const canAper = canUserApproveAper();
 
