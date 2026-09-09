@@ -176,7 +176,7 @@ async function generatePoPdfBase64(poHeader, vendorInfo, termData, items) {
   y = Math.max(y + 12, metaY + 4);
 
   // Item table header
-  const COL_NO = 17, COL_DESC = 25, COL_QTY = 88, COL_TGL = 104, COL_HARGA = 127, COL_SUB = 196;
+  const COL_NO = 15, COL_DESC = 24, COL_QTY = 86, COL_TGL = 116, COL_HARGA = 142, COL_SUB = 196;
   doc.setFontSize(8.5);
   doc.setFillColor(61, 61, 61);
   doc.rect(14, y, 182, 7, 'F');
@@ -200,18 +200,21 @@ async function generatePoPdfBase64(poHeader, vendorInfo, termData, items) {
   (items || []).forEach((it, i) => {
     subtotal += Number(it.Subtotal || 0);
     const desc = it.ItemDescription || '-';
-    const wrappedLines = doc.splitTextToSize(desc, 58);
+    const descLines = doc.splitTextToSize(desc, 58);
+    const qtyStr = `${it.Qty || ''} ${it.Unit || ''}`.trim();
+    const qtyLines = doc.splitTextToSize(qtyStr, 26);
 
     doc.setFontSize(8.5);
     doc.text(String(i + 1), COL_NO, y);
-    doc.text(wrappedLines, COL_DESC, y);
-    doc.text(`${it.Qty} ${it.Unit || ''}`, COL_QTY, y);
+    doc.text(descLines, COL_DESC, y);
+    doc.text(qtyLines, COL_QTY, y);
     doc.text(formatDeliveryDate(it.VendorDeliveryDate), COL_TGL, y);
     doc.text("Rp " + Number(it.UnitPrice || 0).toLocaleString("id-ID"), COL_HARGA, y);
     doc.text("Rp " + Number(it.Subtotal || 0).toLocaleString("id-ID"), COL_SUB, y, { align: 'right' });
 
+    const maxLines = Math.max(descLines.length, qtyLines.length);
     const lineHeight = 5;
-    y += Math.max(wrappedLines.length * lineHeight, 7);
+    y += Math.max(maxLines * lineHeight, 7);
     doc.setDrawColor(230, 230, 230);
     doc.line(14, y - 3, 196, y - 3);
     doc.setDrawColor(0, 0, 0);
@@ -343,12 +346,13 @@ async function sendPoApprovalEmailDesktop(poId) {
     .single();
   if (poErr || !poRow) throw new Error('PO/SO tidak ditemukan untuk kirim email.');
 
-  const [{ data: rfqRow }, { data: vendorRow }, { data: termRow }, { data: items }] = await Promise.all([
+  const [{ data: rfqRow }, { data: vendorRow }, { data: termRows }, { data: items }] = await Promise.all([
     supabaseClient.from('rfq').select('NoRFQ').eq('RFQID', poRow.RFQID).maybeSingle(),
     supabaseClient.from('vendor').select('VendorName, Email, Address, ContactNo').eq('VendorID', poRow.VendorID).maybeSingle(),
-    supabaseClient.from('rfqVendorTerm').select('*').eq('RFQVendorID', poRow.RFQVendorID).maybeSingle(),
+    supabaseClient.from('rfqVendorTerm').select('*').eq('RFQVendorID', poRow.RFQVendorID).order('RFQVendorTermID', { ascending: false }).limit(1),
     supabaseClient.from('purchaseOrderDetail').select('*').eq('POID', poid)
   ]);
+  const termRow = (termRows && termRows[0]) || null;
 
   const vendorName = vendorRow ? vendorRow.VendorName : '-';
   const vendorEmail = vendorRow ? vendorRow.Email : null;
