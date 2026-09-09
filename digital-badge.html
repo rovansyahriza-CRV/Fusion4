@@ -1,3 +1,5 @@
+<!DOCTYPE html>
+<html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -179,14 +181,14 @@
     <h3>Verifikasi PIN</h3>
     <p>Masukkan PIN Anda untuk menampilkan badge.</p>
     <div class="pin-boxes" id="pinBoxes">
-      <input type="password" class="pin-box" inputmode="numeric" maxlength="1" data-idx="0">
-      <input type="password" class="pin-box" inputmode="numeric" maxlength="1" data-idx="1">
-      <input type="password" class="pin-box" inputmode="numeric" maxlength="1" data-idx="2">
-      <input type="password" class="pin-box" inputmode="numeric" maxlength="1" data-idx="3">
-      <input type="password" class="pin-box" inputmode="numeric" maxlength="1" data-idx="4">
-      <input type="password" class="pin-box" inputmode="numeric" maxlength="1" data-idx="5">
+      <input type="password" class="pin-box" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-idx="0" autocomplete="off">
+      <input type="password" class="pin-box" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-idx="1" autocomplete="off">
+      <input type="password" class="pin-box" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-idx="2" autocomplete="off">
+      <input type="password" class="pin-box" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-idx="3" autocomplete="off">
+      <input type="password" class="pin-box" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-idx="4" autocomplete="off">
+      <input type="password" class="pin-box" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-idx="5" autocomplete="off">
     </div>
-    <button id="btnSubmitPin">Tampilkan Badge</button>
+    <button type="button" id="btnSubmitPin">Tampilkan Badge</button>
     <div id="pinMsg"></div>
   </div>
 </div>
@@ -312,7 +314,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-pinBoxes[0].focus();
+setTimeout(() => {
+  if (pinBoxes[0]) pinBoxes[0].focus();
+}, 150);
 
 function getPinValue() {
   return pinBoxes.map(b => b.value).join('');
@@ -320,55 +324,133 @@ function getPinValue() {
 
 function clearPinBoxes() {
   pinBoxes.forEach(b => { b.value = ""; b.classList.remove('filled'); });
-  pinBoxes[0].focus();
+  if (pinBoxes[0]) pinBoxes[0].focus();
 }
 
 pinBoxes.forEach((box, idx) => {
-  box.addEventListener('input', () => {
-    box.value = box.value.replace(/[^0-9]/g, '').slice(0, 1);
-    if (box.value) {
+  // Focus & Click: select content so typing immediately overwrites
+  box.addEventListener('focus', () => {
+    box.select();
+  });
+  box.addEventListener('click', () => {
+    box.select();
+  });
+
+  // Keydown: desktop typing, digits, Backspace, arrows, Enter
+  box.addEventListener('keydown', (e) => {
+    if (e.key >= '0' && e.key <= '9') {
+      box.value = e.key;
       box.classList.add('filled');
-      if (idx < pinBoxes.length - 1) pinBoxes[idx + 1].focus();
-      else if (getPinValue().length === pinBoxes.length) submitPin();
+      e.preventDefault();
+      if (idx < pinBoxes.length - 1) {
+        pinBoxes[idx + 1].focus();
+        pinBoxes[idx + 1].select();
+      }
+      if (getPinValue().length === 6) {
+        submitPin();
+      }
+      return;
+    }
+
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      if (box.value) {
+        box.value = '';
+        box.classList.remove('filled');
+      } else if (idx > 0) {
+        pinBoxes[idx - 1].focus();
+        pinBoxes[idx - 1].value = '';
+        pinBoxes[idx - 1].classList.remove('filled');
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowLeft' && idx > 0) {
+      e.preventDefault();
+      pinBoxes[idx - 1].focus();
+      pinBoxes[idx - 1].select();
+      return;
+    }
+
+    if (e.key === 'ArrowRight' && idx < pinBoxes.length - 1) {
+      e.preventDefault();
+      pinBoxes[idx + 1].focus();
+      pinBoxes[idx + 1].select();
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitPin();
+      return;
+    }
+  });
+
+  // Input event: mobile keyboards, IME, on-screen numpads, autofill
+  box.addEventListener('input', () => {
+    const raw = box.value.replace(/[^0-9]/g, '');
+    if (raw.length > 1) {
+      const digits = raw.split('');
+      for (let i = 0; i < digits.length && (idx + i) < pinBoxes.length; i++) {
+        pinBoxes[idx + i].value = digits[i];
+        pinBoxes[idx + i].classList.add('filled');
+      }
+      const nextIdx = Math.min(idx + digits.length, pinBoxes.length - 1);
+      pinBoxes[nextIdx].focus();
+      if (getPinValue().length === 6) submitPin();
+      return;
+    }
+
+    if (raw.length === 1) {
+      box.value = raw;
+      box.classList.add('filled');
+      if (idx < pinBoxes.length - 1) {
+        pinBoxes[idx + 1].focus();
+        pinBoxes[idx + 1].select();
+      }
+      if (getPinValue().length === 6) submitPin();
     } else {
+      box.value = '';
       box.classList.remove('filled');
     }
   });
 
-  box.addEventListener('keydown', (e) => {
-    if (e.key === "Backspace" && !box.value && idx > 0) {
-      pinBoxes[idx - 1].focus();
-      pinBoxes[idx - 1].value = "";
-      pinBoxes[idx - 1].classList.remove('filled');
-    }
-    if (e.key === "Enter") submitPin();
-  });
-
+  // Paste handler
   box.addEventListener('paste', (e) => {
     e.preventDefault();
     const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
-    pasted.slice(0, pinBoxes.length).split('').forEach((ch, i) => {
-      pinBoxes[i].value = ch;
-      pinBoxes[i].classList.add('filled');
+    if (!pasted) return;
+    const digits = pasted.slice(0, 6).split('');
+    digits.forEach((d, i) => {
+      if (pinBoxes[i]) {
+        pinBoxes[i].value = d;
+        pinBoxes[i].classList.add('filled');
+      }
     });
-    const nextEmpty = pinBoxes.findIndex(b => !b.value);
-    (nextEmpty === -1 ? pinBoxes[pinBoxes.length - 1] : pinBoxes[nextEmpty]).focus();
-    if (getPinValue().length === pinBoxes.length) submitPin();
+    const nextIdx = Math.min(digits.length, pinBoxes.length - 1);
+    pinBoxes[nextIdx].focus();
+    if (getPinValue().length === 6) {
+      submitPin();
+    }
   });
 });
 
 async function submitPin() {
     const pin = getPinValue().trim();
-    pinMsg.style.display = "none";
+    if (pinMsg) pinMsg.style.display = "none";
 
-    if (!pin) {
-      pinMsg.innerText = "⚠️ PIN wajib diisi.";
-      pinMsg.style.display = "block";
+    if (!pin || pin.length < 6) {
+      if (pinMsg) {
+        pinMsg.innerText = "⚠️ Masukkan 6 digit PIN Anda.";
+        pinMsg.style.display = "block";
+      }
       return;
     }
 
-    btnSubmitPin.disabled = true;
-    btnSubmitPin.innerText = "Memeriksa...";
+    if (btnSubmitPin) {
+      btnSubmitPin.disabled = true;
+      btnSubmitPin.innerText = "Memeriksa...";
+    }
 
     try {
       let hasil = null;
@@ -407,10 +489,14 @@ async function submitPin() {
       }
 
       if (!hasil || !hasil.valid) {
-        pinMsg.innerText = "⚠️ PIN tidak ditemukan. Pastikan 6 digit PIN Anda benar.";
-        pinMsg.style.display = "block";
-        btnSubmitPin.disabled = false;
-        btnSubmitPin.innerText = "Tampilkan Badge";
+        if (pinMsg) {
+          pinMsg.innerText = "⚠️ PIN tidak ditemukan. Pastikan 6 digit PIN Anda benar.";
+          pinMsg.style.display = "block";
+        }
+        if (btnSubmitPin) {
+          btnSubmitPin.disabled = false;
+          btnSubmitPin.innerText = "Tampilkan Badge";
+        }
         clearPinBoxes();
         return;
       }
@@ -420,10 +506,14 @@ async function submitPin() {
       window.currentBadgeData = hasil;
 
       // LANGSUNG TAMPILKAN BADGE (Hapus overlay PIN)
-      if (pageContent) pageContent.style.display = "flex";
-      if (pinOverlay) pinOverlay.style.display = "none";
-      btnSubmitPin.disabled = false;
-      btnSubmitPin.innerText = "Tampilkan Badge";
+      const pageEl = document.getElementById('pageContent') || document.querySelector('.page');
+      const overlayEl = document.getElementById('pinOverlay');
+      if (pageEl) pageEl.style.display = "flex";
+      if (overlayEl) overlayEl.style.display = "none";
+      if (btnSubmitPin) {
+        btnSubmitPin.disabled = false;
+        btnSubmitPin.innerText = "Tampilkan Badge";
+      }
 
       // Render data teks kartu
       try {
@@ -509,14 +599,24 @@ async function submitPin() {
 
     } catch (e) {
       console.error("Error submitPin:", e);
-      pinMsg.innerText = "⚠️ Gagal koneksi: " + e.message;
-      pinMsg.style.display = "block";
-      btnSubmitPin.disabled = false;
-      btnSubmitPin.innerText = "Tampilkan Badge";
+      if (pinMsg) {
+        pinMsg.innerText = "⚠️ Gagal koneksi: " + e.message;
+        pinMsg.style.display = "block";
+      }
+      if (btnSubmitPin) {
+        btnSubmitPin.disabled = false;
+        btnSubmitPin.innerText = "Tampilkan Badge";
+      }
     }
   }
 
-  btnSubmitPin.onclick = submitPin;
+  if (btnSubmitPin) {
+    btnSubmitPin.onclick = submitPin;
+    btnSubmitPin.addEventListener('click', (e) => {
+      e.preventDefault();
+      submitPin();
+    });
+  }
 
   const btnAbsen = document.getElementById('btnAbsenSekarang');
   if (btnAbsen) {
