@@ -102,6 +102,9 @@ const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const RFQ_EMAIL_URL = "https://script.google.com/macros/s/AKfycbww8VikG_wpAvQro1-9vLC_llnvKFigFotzKXS-T_kaIHKA4q2QGbYXqZObEF5j_1Hr/exec";
+const HO_EMAIL = "rovan.syahriza@gmail.com";
+
 const params = new URLSearchParams(window.location.search);
 const rfqIdParam = Number(params.get("rfq"));
 const vendorIdParam = Number(params.get("vendor"));
@@ -295,14 +298,14 @@ function renderDetail(rfqHeader, vendorInfo, rv, winningQuotes, detailById, term
     </div>
   `;
 
-  document.getElementById("btnConfirm").addEventListener("click", () => submitDecision(rv, 'Confirmed'));
-  document.getElementById("btnReject").addEventListener("click", () => submitDecision(rv, 'Rejected'));
+  document.getElementById("btnConfirm").addEventListener("click", () => submitDecision(rv, 'Confirmed', rfqHeader, vendorInfo, grandTotal));
+  document.getElementById("btnReject").addEventListener("click", () => submitDecision(rv, 'Rejected', rfqHeader, vendorInfo, grandTotal));
 }
 
-async function submitDecision(rv, decision) {
+async function submitDecision(rv, decision, rfqHeader, vendorInfo, grandTotal) {
   const btnConfirm = document.getElementById("btnConfirm");
   const btnReject = document.getElementById("btnReject");
-  const notes = document.getElementById("vendorNotes").value || null;
+  const notes = document.getElementById("vendorNotes") ? document.getElementById("vendorNotes").value.trim() : null;
 
   if (decision === 'Rejected' && !confirm("Yakin tidak dapat memenuhi RFQ ini?")) return;
 
@@ -313,9 +316,29 @@ async function submitDecision(rv, decision) {
     const { error } = await supabaseClient.from('rfqVendor').update({
       ConfirmationStatus: decision,
       ConfirmationDate: new Date().toISOString(),
-      Notes: notes
+      Notes: notes || null
     }).eq('RFQVendorID', rv.RFQVendorID);
     if (error) throw error;
+
+    // Kirim notifikasi email ke Admin Perusahaan (HO)
+    if (HO_EMAIL) {
+      const noRFQ = rfqHeader ? rfqHeader.NoRFQ : `RFQID ${rv.RFQID}`;
+      const vendorName = vendorInfo ? vendorInfo.VendorName : `Vendor #${rv.VendorID}`;
+      const statusLabel = decision === 'Confirmed' ? 'BERSEDIA MEMENUHI PESANAN' : 'MENOLAK / TIDAK BISA MEMENUHI';
+      const emailSubject = `[RESPON VENDOR] RFQ ${noRFQ} - ${vendorName} (${decision === 'Confirmed' ? 'BERSEDIA' : 'MENOLAK'})`;
+      const emailBody = `Pemberitahuan SMMS BIMA:\n\nVendor ${vendorName} telah memberikan respon konfirmasi untuk RFQ ${noRFQ}.\n\nKeputusan: ${statusLabel}\nTanggal Respon: ${new Date().toLocaleString('id-ID')}\nCatatan Vendor: ${notes || '-'}\nTotal Penawaran: Rp ${(Number(grandTotal) || 0).toLocaleString('id-ID')}\n\n${decision === 'Confirmed' ? 'Vendor siap memenuhi pesanan. Silakan buka aplikasi SMMS BIMA untuk menerbitkan PO/SO (Draft PO).' : 'Vendor menyatakan tidak dapat memenuhi pesanan ini. Silakan tinjau kembali seleksi vendor atau tunjuk vendor alternatif.'}`;
+      
+      fetch(RFQ_EMAIL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "SEND_SIMPLE_EMAIL",
+          to: HO_EMAIL,
+          subject: emailSubject,
+          body: emailBody
+        })
+      }).catch(e => console.warn('Gagal kirim notifikasi email respon vendor ke HO:', e.message));
+    }
 
     document.getElementById("app").innerHTML = "";
     const successEl = document.getElementById("success");

@@ -1136,17 +1136,44 @@ async function submitPin() {
 
   async function sendRfqApprovalEmail(extra) {
     const link = 'https://rovansyahriza-crv.github.io/SMMS-BIMA/rfq-confirm.html?rfq=' + extra.rfqid + '&vendor=' + extra.vendorid;
-    const emailBody = 'Selamat, ' + extra.vendorname + ' ditunjuk sebagai vendor terpilih untuk RFQ ' + extra.norfq + '.\n\nBuka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:\n' + link + '\n\nMasukkan PIN Anda: ' + extra.pin;
-    await fetch(RFQ_EMAIL_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'SEND_SIMPLE_EMAIL',
-        to: extra.vendoremail,
-        subject: 'Hasil Seleksi Vendor RFQ ' + extra.norfq,
-        body: emailBody
-      })
-    });
+    const approver = (window.currentBadgeData && window.currentBadgeData.nama) || 'Direktur';
+
+    // 1. Kirim ke Vendor Terpilih
+    if (extra.vendoremail) {
+      try {
+        const emailBody = 'Selamat, ' + extra.vendorname + ' ditunjuk sebagai vendor terpilih untuk RFQ ' + extra.norfq + '.\n\nBuka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:\n' + link + '\n\nMasukkan PIN Anda: ' + extra.pin;
+        await fetch(RFQ_EMAIL_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'SEND_SIMPLE_EMAIL',
+            to: extra.vendoremail,
+            subject: 'Hasil Seleksi Vendor RFQ ' + extra.norfq,
+            body: emailBody
+          })
+        });
+      } catch (e) {
+        console.warn('Gagal kirim email ke vendor:', e.message);
+      }
+    }
+
+    // 2. Kirim Notifikasi Tembusan ke Admin Perusahaan (HO)
+    if (HO_EMAIL) {
+      try {
+        await fetch(RFQ_EMAIL_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'SEND_SIMPLE_EMAIL',
+            to: HO_EMAIL,
+            subject: '[NOTIFIKASI APPROVAL] Hasil Seleksi Vendor RFQ ' + extra.norfq + ' - ' + extra.vendorname,
+            body: 'Pemberitahuan SMMS BIMA:\n\nHasil seleksi vendor untuk RFQ ' + extra.norfq + ' telah DISETUJUI (APPROVED) via Digital Badge oleh ' + approver + '.\n\nVendor Terpilih: ' + extra.vendorname + ' (' + (extra.vendoremail || '-') + ')\nLink Konfirmasi Vendor: ' + link + '\nPIN: ' + extra.pin + '\n\nSistem telah mengirimkan email notifikasi ke vendor. Menunggu respon kesediaan dari vendor sebelum penerbitan PO/SO.'
+          })
+        });
+      } catch (e) {
+        console.warn('Gagal kirim notifikasi approval ke HO:', e.message);
+      }
+    }
   }
 
   async function handlePoApprovalDecision(poId, decision, qrId, extra) {

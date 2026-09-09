@@ -179,8 +179,9 @@ function logoutUser() {
   window.location.reload();
 }
 
-// Endpoint Gmail API (Apps Script) khusus untuk pengiriman Email Notifikasi RFQ ke Vendor
+// Endpoint Gmail API (Apps Script) khusus untuk pengiriman Email Notifikasi RFQ ke Vendor & HO Admin
 const RFQ_EMAIL_URL = "https://script.google.com/macros/s/AKfycbww8VikG_wpAvQro1-9vLC_llnvKFigFotzKXS-T_kaIHKA4q2QGbYXqZObEF5j_1Hr/exec";
+const HO_EMAIL = "rovan.syahriza@gmail.com";
 
 // 1. Load User Dropdown via Supabase RPC get_active_karyawan
 async function loadUserDropdown() {
@@ -2340,21 +2341,47 @@ async function sendRfqApprovalEmailToVendor(rfqVendorId) {
   ]);
   const rfqHeader = (rfqRows || [])[0];
   const vendorInfo = (vendorRows || [])[0];
-  if (!vendorInfo || !vendorInfo.Email) return;
+  if (!vendorInfo) return;
 
   const noRFQ = rfqHeader ? rfqHeader.NoRFQ : '';
   const link = `https://rovansyahriza-crv.github.io/SMMS-BIMA/rfq-confirm.html?rfq=${rv.RFQID}&vendor=${rv.VendorID}`;
+  const approverName = currentUser?.nama || currentUser?.Name || currentUser?.Username || 'Management';
 
-  await fetch(RFQ_EMAIL_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({
-      action: "SEND_SIMPLE_EMAIL",
-      to: vendorInfo.Email,
-      subject: `Hasil Seleksi Vendor RFQ ${noRFQ}`,
-      body: `Selamat, ${vendorInfo.VendorName} ditunjuk sebagai vendor terpilih untuk RFQ ${noRFQ}.\n\nBuka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:\n${link}\n\nMasukkan PIN Anda: ${rv.PIN}`
-    })
-  });
+  // 1. Email ke Vendor Terpilih
+  if (vendorInfo.Email) {
+    try {
+      await fetch(RFQ_EMAIL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "SEND_SIMPLE_EMAIL",
+          to: vendorInfo.Email,
+          subject: `Hasil Seleksi Vendor RFQ ${noRFQ}`,
+          body: `Selamat, ${vendorInfo.VendorName} ditunjuk sebagai vendor terpilih untuk RFQ ${noRFQ}.\n\nBuka link berikut untuk melihat detail item dan mengonfirmasi kesediaan Anda:\n${link}\n\nMasukkan PIN Anda: ${rv.PIN}`
+        })
+      });
+    } catch (e) {
+      console.warn('Gagal kirim email ke vendor:', e.message);
+    }
+  }
+
+  // 2. Email Notifikasi / Tembusan ke Admin Perusahaan (HO)
+  if (HO_EMAIL) {
+    try {
+      await fetch(RFQ_EMAIL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "SEND_SIMPLE_EMAIL",
+          to: HO_EMAIL,
+          subject: `[NOTIFIKASI APPROVAL] Hasil Seleksi Vendor RFQ ${noRFQ} - ${vendorInfo.VendorName}`,
+          body: `Pemberitahuan SMMS BIMA:\n\nHasil seleksi vendor untuk RFQ ${noRFQ} telah DISETUJUI (APPROVED) oleh Management (${approverName}).\n\nVendor Terpilih: ${vendorInfo.VendorName} (${vendorInfo.Email || '-'})\nLink Konfirmasi Vendor: ${link}\nPIN: ${rv.PIN}\n\nSistem telah mengirimkan email undangan konfirmasi ke vendor. Menunggu respon kesediaan dari vendor sebelum penerbitan PO/SO.`
+        })
+      });
+    } catch (e) {
+      console.warn('Gagal kirim email notifikasi approval ke HO:', e.message);
+    }
+  }
 }
 
 async function rejectVendorSelection(rfqVendorId) {
