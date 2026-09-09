@@ -2113,13 +2113,23 @@ function canUserSubmitEmpReq(projectCode = '') {
 function canUserApproveAer(projectCode = '') {
   if (!currentUser) return false;
   const auth = String(currentUser.author || '').toUpperCase();
-  if (auth.includes('ALL') || auth.includes('ADMIN') || auth === 'AER' || auth.includes('AER-ALL')) return true;
+  if (!auth) return false;
+
+  if (auth.includes('ALL') || auth.includes('ADMIN')) return true;
+
   const tokens = auth.split(',').map(t => t.trim()).filter(Boolean);
-  if (tokens.includes('AER') || tokens.includes('AER-ALL')) return true;
+
+  // Jika author memiliki 'AER' atau 'AER-ALL' (akses approval semua proyek)
+  if (tokens.includes('AER') || tokens.includes('AER-ALL') || tokens.some(t => t === 'AER' || t.startsWith('AER-ALL'))) {
+    return true;
+  }
+
+  // Jika projectCode diberikan (misal '015', '101')
   if (projectCode) {
     const projClean = String(projectCode).toUpperCase().replace(/\s+/g, '');
-    return tokens.includes(`AER-${projClean}`);
+    return tokens.includes(`AER-${projClean}`) || tokens.some(t => t === `AER-${projClean}` || t.endsWith(`-${projClean}`));
   }
+
   return tokens.some(t => t.startsWith('AER'));
 }
 
