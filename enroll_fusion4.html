@@ -11,8 +11,9 @@
   <meta name="theme-color" content="#E04D23">
   <meta name="apple-mobile-web-app-capable" content="yes">
   
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="driveBridge.js"></script>
@@ -20,13 +21,19 @@
   <style>
     :root {
       --primary: #E04D23;
+      --primary-dark: #C23912;
       --navy: #1B365D;
+      --navy-dark: #12243E;
       --bg: #F7F5F0;
       --surface: #FFFFFF;
+      --surface-2: #FAF8F5;
       --border: #E6DED9;
       --text: #2A2826;
       --muted: #7A7571;
       --success: #27AE60;
+      --success-bg: #E8F8F0;
+      --error: #E53935;
+      --error-bg: #FDE8E8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -39,9 +46,10 @@
       padding: 16px;
       min-height: 100vh;
     }
-    .container { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 14px; }
+    .container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
+    
     .header {
-      background: linear-gradient(135deg, var(--navy) 0%, #12243E 100%);
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
       color: #FFF;
       padding: 20px;
       border-radius: 16px;
@@ -57,6 +65,54 @@
       border-radius: 16px;
       padding: 18px;
     }
+    
+    .status-msg {
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 10px 14px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .status-msg.info { background: #E8F4FD; color: #1E88E5; border: 1px solid #BBDEFB; }
+    .status-msg.success { background: var(--success-bg); color: var(--success); border: 1px solid #A3E9C4; }
+    .status-msg.error { background: var(--error-bg); color: var(--error); border: 1px solid #F5C6CB; }
+
+    .scanner-box {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4/3;
+      background: #000;
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    
+    .face-oval {
+      position: absolute;
+      width: 44%;
+      height: 80%;
+      border: 2.5px dashed rgba(255,255,255,0.8);
+      border-radius: 50%;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+      pointer-events: none;
+      transition: border-color 0.3s;
+    }
+    .face-oval.scanning {
+      border-color: var(--primary);
+      animation: pulse-border 1.5s infinite;
+    }
+    @keyframes pulse-border {
+      0% { border-color: var(--primary); box-shadow: 0 0 0 9999px rgba(0,0,0,0.45), 0 0 15px var(--primary); }
+      50% { border-color: #FFA500; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45), 0 0 25px #FFA500; }
+      100% { border-color: var(--primary); box-shadow: 0 0 0 9999px rgba(0,0,0,0.45), 0 0 15px var(--primary); }
+    }
+
     .form-group { margin-bottom: 12px; }
     .form-group label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
     select, input {
@@ -66,31 +122,10 @@
       border-radius: 10px;
       font-family: inherit;
       font-size: 13.5px;
+      background: #FFF;
+      color: var(--text);
     }
     select:focus, input:focus { outline: none; border-color: var(--primary); }
-
-    .scanner-box {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 4/3;
-      background: #000;
-      border-radius: 12px;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 12px;
-    }
-    video { width: 100%; height: 100%; object-fit: cover; }
-    .face-oval {
-      position: absolute;
-      width: 55%;
-      height: 72%;
-      border: 2px dashed rgba(255,255,255,0.7);
-      border-radius: 50%;
-      box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
-      pointer-events: none;
-    }
 
     .samples-grid {
       display: grid;
@@ -102,16 +137,48 @@
       aspect-ratio: 1/1;
       background: #EAE6E1;
       border: 1.5px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--muted);
+      position: relative;
     }
     .sample-box img { width: 100%; height: 100%; object-fit: cover; }
+    .sample-tag {
+      position: absolute;
+      bottom: 2px;
+      font-size: 9px;
+      font-weight: 700;
+      background: rgba(0,0,0,0.6);
+      color: #FFF;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    .btn-identify {
+      width: 100%;
+      background: linear-gradient(135deg, var(--navy) 0%, #2A4D7F 100%);
+      color: #FFF;
+      border: none;
+      padding: 13px;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 12px rgba(27, 54, 93, 0.15);
+      transition: all 0.2s;
+    }
+    .btn-identify:active { transform: scale(0.98); }
+    .btn-identify:disabled { background: #CCC; cursor: not-allowed; }
 
     .btn-primary {
       width: 100%;
@@ -127,13 +194,14 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+      transition: all 0.2s;
     }
     .btn-primary:active { transform: scale(0.98); }
     .btn-primary:disabled { background: #CCC; cursor: not-allowed; }
 
     .btn-secondary {
       width: 100%;
-      background: #FAF8F5;
+      background: var(--surface-2);
       color: var(--text);
       border: 1.5px solid var(--border);
       padding: 10px;
@@ -141,20 +209,18 @@
       font-weight: 600;
       border-radius: 10px;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       margin-top: 8px;
     }
-
-    .status-msg {
-      font-size: 12.5px;
-      font-weight: 600;
-      padding: 10px 12px;
-      border-radius: 8px;
-      margin-bottom: 10px;
-      text-align: center;
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
     }
-    .status-msg.info { background: #E8F4FD; color: #1E88E5; }
-    .status-msg.success { background: #E8F8F0; color: var(--success); }
-    .status-msg.error { background: #FDE8E8; color: #E53935; }
+    .btn-row .btn-secondary { margin-top: 0; }
   </style>
 </head>
 <body>
@@ -162,12 +228,25 @@
 <div class="container">
   <div class="header">
     <h1>Face Enrollment (Pendaftaran Wajah)</h1>
-    <p>Sistem Presensi AI & SmartGate — PT BIMA</p>
+    <p>Sistem Presensi AI & SmartGate Biometrik — PT BIMA</p>
   </div>
 
   <div class="card">
+    <div id="statusMsg" class="status-msg info">Memuat model kecerdasan buatan (AI)...</div>
+
+    <div class="scanner-box">
+      <video id="videoElement" playsinline muted autoplay></video>
+      <div id="faceOval" class="face-oval"></div>
+      <canvas id="hiddenCanvas" style="display:none;"></canvas>
+    </div>
+
+    <!-- SCAN IDENTIFY BUTTON -->
+    <button type="button" id="btnIdentifyFace" class="btn-identify" onclick="scanFaceToIdentify()" disabled>
+      <span>⚡ Scan Wajah (Ambil QrCodeId Otomatis)</span>
+    </button>
+
     <div class="form-group">
-      <label for="selectKaryawan">Pilih Nama Karyawan:</label>
+      <label for="selectKaryawan">Nama Karyawan:</label>
       <select id="selectKaryawan" onchange="handleKaryawanChange()">
         <option value="">-- Memuat daftar karyawan... --</option>
       </select>
@@ -175,23 +254,19 @@
 
     <div class="form-group">
       <label>QrCodeId Karyawan:</label>
-      <input type="text" id="inputQrId" readonly style="background:#F2EFEB; color:#666; font-family:monospace;">
+      <input type="text" id="inputQrId" placeholder="Pindai wajah atau pilih karyawan" readonly style="background:#F2EFEB; color:#333; font-family:'IBM Plex Mono', monospace; font-weight:700;">
     </div>
 
-    <div id="statusMsg" class="status-msg info">Memuat model kecerdasan buatan (AI)...</div>
-
-    <div class="scanner-box">
-      <video id="videoElement" playsinline muted autoplay></video>
-      <div class="face-oval"></div>
-      <canvas id="hiddenCanvas" style="display:none;"></canvas>
+    <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px; display:flex; justify-content:space-between; align-items:center;">
+      <span>Sampel Foto Biometrik (4 Titik Sudut):</span>
+      <span id="sampleHint" style="font-size:11px; font-weight:600; color:var(--muted);">Depan, Kiri, Kanan, Senyum</span>
     </div>
-
-    <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px;">Sampel Foto Biometrik (4 Titik):</div>
+    
     <div class="samples-grid">
-      <div id="sample1" class="sample-box">1</div>
-      <div id="sample2" class="sample-box">2</div>
-      <div id="sample3" class="sample-box">3</div>
-      <div id="sample4" class="sample-box">4</div>
+      <div id="sample1" class="sample-box">1<span class="sample-tag">Depan</span></div>
+      <div id="sample2" class="sample-box">2<span class="sample-tag">Kiri</span></div>
+      <div id="sample3" class="sample-box">3<span class="sample-tag">Kanan</span></div>
+      <div id="sample4" class="sample-box">4<span class="sample-tag">Ekspresi</span></div>
     </div>
 
     <button type="button" id="btnCapture" class="btn-primary" onclick="captureSample()" disabled>
@@ -199,12 +274,20 @@
     </button>
 
     <button type="button" id="btnSave" class="btn-primary" style="background:#27AE60; display:none; margin-top:8px;" onclick="saveEnrollment()">
-      <span>💾 Simpan ke Supabase Cloud</span>
+      <span>💾 Simpan Biometrik ke Supabase Cloud</span>
     </button>
 
-    <button type="button" class="btn-secondary" onclick="switchCamera()">
-      <span>🔄 Ganti Kamera (Depan/Belakang)</span>
-    </button>
+    <div class="btn-row">
+      <button type="button" class="btn-secondary" onclick="switchCamera()">
+        <span>🔄 Ganti Kamera</span>
+      </button>
+      <button type="button" class="btn-secondary" onclick="scanQrCode()">
+        <span>📷 Scan QR Badge</span>
+      </button>
+      <button type="button" class="btn-secondary" onclick="resetSamples()">
+        <span>↺ Reset</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -216,6 +299,7 @@
   let currentFacingMode = 'user';
   let videoStream = null;
   let karyawanList = [];
+  let allFaceData = [];
   let capturedDescriptors = [];
   let capturedImages = [];
   let isModelsLoaded = false;
@@ -223,10 +307,12 @@
   const video = document.getElementById('videoElement');
   const canvas = document.getElementById('hiddenCanvas');
   const statusMsg = document.getElementById('statusMsg');
+  const faceOval = document.getElementById('faceOval');
 
   document.addEventListener('DOMContentLoaded', async () => {
     await initModels();
     await loadKaryawanList();
+    await loadAllFaceData();
     await startCamera();
   });
 
@@ -251,7 +337,8 @@
       await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
       isModelsLoaded = true;
-      setStatus("Model AI siap. Pilih karyawan dan posisikan wajah di oval.", "info");
+      setStatus("Model AI siap. Pindai wajah atau pilih karyawan dari daftar.", "info");
+      document.getElementById('btnIdentifyFace').disabled = false;
       document.getElementById('btnCapture').disabled = false;
     } catch (err) {
       setStatus("Gagal memuat model AI: " + err.message, "error");
@@ -268,10 +355,29 @@
 
       if (error) throw error;
       karyawanList = data || [];
-      sel.innerHTML = '<option value="">-- Pilih Karyawan --</option>' +
+      sel.innerHTML = '<option value="">-- Pilih Karyawan (atau Scan Wajah) --</option>' +
         karyawanList.map(k => `<option value="${k.Id}">${k.NamaPersonnel} (${k.Kualifikasi || 'Karyawan'})</option>`).join('');
     } catch (err) {
       sel.innerHTML = '<option value="">Gagal memuat karyawan</option>';
+    }
+  }
+
+  async function loadAllFaceData() {
+    try {
+      const { data, error } = await supabaseClient.rpc('get_all_face_data');
+      if (error) {
+        console.warn("get_all_face_data error:", error.message);
+        return;
+      }
+      allFaceData = (data || []).map(p => ({
+        id: p.id || p.Id,
+        qrCodeId: p.qrCodeId || p.qrcodeid,
+        nama: p.nama || p.namapersonnel,
+        descriptor: Array.isArray(p.descriptor) ? new Float32Array(p.descriptor) : (p.descriptor || p.facecode)
+      }));
+      console.log(`Loaded ${allFaceData.length} registered biometric face records.`);
+    } catch (err) {
+      console.warn("loadAllFaceData error:", err);
     }
   }
 
@@ -300,21 +406,144 @@
     await startCamera();
   }
 
+  /**
+   * Pindai wajah di depan kamera untuk mencari dan mengambil QrCodeId serta nama karyawan
+   */
+  async function scanFaceToIdentify() {
+    if (!isModelsLoaded) {
+      setStatus("Model AI sedang dimuat, harap tunggu sebentar...", "info");
+      return;
+    }
+
+    const btn = document.getElementById('btnIdentifyFace');
+    btn.disabled = true;
+    if (faceOval) faceOval.classList.add('scanning');
+    setStatus("🔍 Menganalisis wajah untuk mengambil QrCodeId...", "info");
+
+    try {
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      let detection = null;
+      const doInference = async () => {
+        return await faceapi
+          .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+      };
+
+      try {
+        detection = await doInference();
+      } catch (e) {
+        if (faceapi.tf && faceapi.tf.getBackend() !== 'cpu') {
+          await faceapi.tf.setBackend('cpu');
+          detection = await doInference();
+        }
+      }
+
+      if (!detection) {
+        setStatus("⚠️ Wajah tidak terdeteksi. Posisikan wajah tepat di dalam oval.", "error");
+        return;
+      }
+
+      if (!allFaceData || allFaceData.length === 0) {
+        // Coba refresh data biometrik
+        await loadAllFaceData();
+      }
+
+      const scanDesc = detection.descriptor;
+      let bestMatch = null;
+      let bestDistance = 0.52; // Matching threshold
+
+      for (const p of allFaceData) {
+        if (!p.descriptor) continue;
+        const dist = faceapi.euclideanDistance(scanDesc, p.descriptor);
+        if (dist < bestDistance) {
+          bestDistance = dist;
+          bestMatch = p;
+        }
+      }
+
+      if (bestMatch && bestMatch.qrCodeId) {
+        const matchQr = String(bestMatch.qrCodeId).trim().toUpperCase();
+        const kar = karyawanList.find(k => 
+          String(k.QrCodeId || '').trim().toUpperCase() === matchQr || 
+          String(k.NamaPersonnel || '').trim().toLowerCase() === String(bestMatch.nama || '').trim().toLowerCase()
+        );
+
+        const sel = document.getElementById('selectKaryawan');
+        if (kar) {
+          sel.value = kar.Id;
+          document.getElementById('inputQrId').value = kar.QrCodeId || bestMatch.qrCodeId;
+          setStatus(`✅ Teridentifikasi: ${kar.NamaPersonnel} (${kar.QrCodeId})! Silakan ambil sampel baru.`, "success");
+        } else {
+          document.getElementById('inputQrId').value = bestMatch.qrCodeId;
+          setStatus(`✅ Teridentifikasi: ${bestMatch.nama} (${bestMatch.qrCodeId})!`, "success");
+        }
+        resetSamples();
+      } else {
+        setStatus("⚠️ Wajah belum terdaftar di database biometrik. Silakan pilih Nama Karyawan dari daftar dropdown di bawah.", "error");
+      }
+    } catch (err) {
+      console.error("Identifikasi wajah error:", err);
+      setStatus("Gagal identifikasi: " + err.message, "error");
+    } finally {
+      btn.disabled = false;
+      if (faceOval) faceOval.classList.remove('scanning');
+    }
+  }
+
+  /**
+   * Pindai QR Code dari kartu fisik/layar
+   */
+  async function scanQrCode() {
+    setStatus("🔍 Memindai QR Code dari kamera...", "info");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    if (typeof jsQR !== 'undefined') {
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code && code.data) {
+        const rawQr = code.data.trim();
+        const matchKar = karyawanList.find(k => String(k.QrCodeId || '').trim().toUpperCase() === rawQr.toUpperCase());
+        const sel = document.getElementById('selectKaryawan');
+        if (matchKar) {
+          sel.value = matchKar.Id;
+          document.getElementById('inputQrId').value = matchKar.QrCodeId;
+          setStatus(`✅ QR Code terdeteksi: ${matchKar.NamaPersonnel} (${matchKar.QrCodeId})`, "success");
+        } else {
+          document.getElementById('inputQrId').value = rawQr;
+          setStatus(`✅ QR Code terdeteksi: ${rawQr}`, "success");
+        }
+        resetSamples();
+        return;
+      }
+    }
+    setStatus("⚠️ QR Code tidak terdeteksi. Posisikan QR Code di depan kamera.", "error");
+  }
+
+  /**
+   * Mengambil satu sampel biometrik dari kamera
+   */
   async function captureSample() {
     const qrId = document.getElementById('inputQrId').value;
     if (!qrId || qrId === '-') {
-      alert("Pilih nama karyawan terlebih dahulu.");
+      alert("Pindai wajah untuk auto-deteksi atau pilih nama karyawan terlebih dahulu.");
       return;
     }
 
     setStatus("Mendeteksi wajah...", "info");
 
-    // Capture snapshot image for detection & thumbnail (Universal Samsung Exynos fix)
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
     let detection = null;
     const doInference = async () => {
@@ -344,15 +573,19 @@
     const count = capturedDescriptors.length;
     document.getElementById('sampleCount').textContent = count;
 
+    const sampleTags = ['Depan', 'Kiri', 'Kanan', 'Ekspresi'];
     const sampleEl = document.getElementById('sample' + count);
-    if (sampleEl) sampleEl.innerHTML = `<img src="${dataUrl}">`;
+    if (sampleEl) {
+      sampleEl.innerHTML = `<img src="${dataUrl}"><span class="sample-tag">${sampleTags[count - 1] || count}</span>`;
+    }
 
     if (count >= 4) {
       document.getElementById('btnCapture').style.display = 'none';
       document.getElementById('btnSave').style.display = 'flex';
-      setStatus("4 Sampel foto siap. Klik 'Simpan ke Supabase Cloud'.", "success");
+      setStatus("4 Sampel foto siap. Klik 'Simpan Biometrik ke Supabase Cloud'.", "success");
     } else {
-      setStatus(`Sampel ${count}/4 tersimpan. Ambil sampel berikutnya.`, "info");
+      const nextHints = ['Lihat lurus ke depan', 'Palingkan wajah sedikit ke kiri', 'Palingkan wajah sedikit ke kanan', 'Beri senyuman atau ekspresi santai'];
+      setStatus(`Sampel ${count}/4 tersimpan. Langkah berikutnya: ${nextHints[count] || 'Ambil sampel berikutnya.'}`, "info");
     }
   }
 
@@ -360,9 +593,10 @@
     capturedDescriptors = [];
     capturedImages = [];
     document.getElementById('sampleCount').textContent = '0';
+    const sampleTags = ['Depan', 'Kiri', 'Kanan', 'Ekspresi'];
     for (let i = 1; i <= 4; i++) {
       const el = document.getElementById('sample' + i);
-      if (el) el.innerHTML = i;
+      if (el) el.innerHTML = `${i}<span class="sample-tag">${sampleTags[i - 1]}</span>`;
     }
     document.getElementById('btnCapture').style.display = 'flex';
     document.getElementById('btnSave').style.display = 'none';
@@ -370,13 +604,21 @@
 
   async function saveEnrollment() {
     const sel = document.getElementById('selectKaryawan');
-    const kar = karyawanList.find(k => k.Id == sel.value);
-    if (!kar) return;
+    const qrId = document.getElementById('inputQrId').value;
+    const kar = karyawanList.find(k => k.Id == sel.value) || {
+      QrCodeId: qrId,
+      NamaPersonnel: (sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : qrId)
+    };
+
+    if (!kar || !kar.QrCodeId) {
+      alert("Data karyawan / QrCodeId tidak valid.");
+      return;
+    }
 
     const btn = document.getElementById('btnSave');
     btn.disabled = true;
     btn.textContent = "Menyimpan ke Database...";
-    setStatus("Sedang menyimpan biometrik ke Supabase...", "info");
+    setStatus("Sedang menyimpan biometrik ke Supabase Cloud...", "info");
 
     // Hitung rata-rata 128-D vector descriptor
     const avgDescriptor = new Array(128).fill(0);
@@ -397,7 +639,6 @@
 
       if (error) {
         console.warn('RPC direct error, fallback to table insert:', error.message);
-        // Fallback insert/upsert
         await supabaseClient.from('faceDescriptorTbl').upsert({
           QrCodeId: kar.QrCodeId.toUpperCase().trim(),
           NamaPersonnel: kar.NamaPersonnel,
@@ -406,20 +647,23 @@
         }, { onConflict: 'QrCodeId' });
       }
 
-      setStatus(`✅ Sukses! Wajah ${kar.NamaPersonnel} berhasil terdaftar di Supabase!`, "success");
+      // Refresh data lokal
+      await loadAllFaceData();
+
+      setStatus(`✅ Sukses! Wajah ${kar.NamaPersonnel} berhasil didaftarkan di Supabase!`, "success");
       btn.textContent = "✅ Berhasil Disimpan";
       setTimeout(() => {
         resetSamples();
         sel.value = "";
         document.getElementById('inputQrId').value = "";
-        btn.textContent = "💾 Simpan ke Supabase Cloud";
+        btn.textContent = "💾 Simpan Biometrik ke Supabase Cloud";
         btn.disabled = false;
       }, 3000);
 
     } catch (err) {
       setStatus("Gagal menyimpan ke Supabase: " + err.message, "error");
       btn.disabled = false;
-      btn.textContent = "💾 Simpan ke Supabase Cloud";
+      btn.textContent = "💾 Simpan Biometrik ke Supabase Cloud";
     }
   }
 
