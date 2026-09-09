@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMMS-BIMA — Monitoring</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg:#ECEEF1; --surface:#FFFFFF; --surface-2:#F5F6F8;
+    --text:#12161C; --text-muted:#5B6472; --border:#DEE2E7;
+    --accent:#D9312E; --accent-dark:#B32220;
+    --steel:#243463; --steel-light:#3C5089;
+    --success:#178A4C; --success-bg:#E5F6EC;
+    --danger:#D9312E; --danger-bg:#FCEAE8;
+    --warn:#B8860B; --warn-bg:#FBF3DC;
+    --radius-lg:18px; --radius-md:12px;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:24px 16px 56px; -webkit-tap-highlight-color:transparent; }
+  .page { max-width:720px; margin:0 auto; }
+  .brand-row { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
+  .eyebrow { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--steel-light); font-weight:700; }
+  h1.title { font-size:26px; font-weight:700; margin:4px 0 0; color:var(--steel); }
+  #lastRefreshed { font-size:11px; color:var(--text-muted); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; margin-bottom:14px; }
+  .card-label { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); margin:0 0 10px; font-weight:700; }
+  button { font-family:inherit; font-weight:600; font-size:15px; border:none; border-radius:var(--radius-md); cursor:pointer; }
+  button:active { transform:scale(0.98); }
+  .btn-secondary { background:var(--surface-2); color:var(--steel); border:1.5px solid var(--border); padding:10px 16px; }
+  .filter-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  select,input[type=text] { font-size:15px; padding:11px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; }
+  select#projectFilter { min-width:180px; }
+  input#monitoringSearch { flex:1; min-width:180px; }
+  .chip { display:inline-block; padding:6px 12px; border-radius:999px; font-size:12px; font-weight:600; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text-muted); cursor:pointer; margin:0 6px 6px 0; }
+  .chip.active { background:var(--steel); border-color:var(--steel); color:#fff; }
+  #resultBanner { font-size:13px; padding:12px 14px; border-radius:var(--radius-md); margin-bottom:14px; line-height:1.5; display:none; }
+  .banner-fail { background:var(--danger-bg); color:var(--danger); border-left:3px solid var(--danger); }
+  .summary-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .summary-tile { flex:1; min-width:110px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; }
+  .summary-tile .num { font-size:22px; font-weight:700; color:var(--steel); }
+  .summary-tile .lbl { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+  .req-card { border:1.5px solid var(--border); border-radius:var(--radius-md); padding:14px; margin-bottom:12px; background:var(--surface); }
+  .req-card:hover { border-color:var(--steel-light); }
+  .req-card.selected { border-color:var(--steel-light); }
+  .req-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; cursor:pointer; }
+  .req-head h4 { margin:0 0 4px; font-size:14px; color:var(--steel); }
+  .req-head p { margin:0; font-size:12px; color:var(--text-muted); }
+  .report-link { font-size:12px; font-weight:600; color:var(--steel-light); text-decoration:none; }
+  .report-link:hover { color:var(--steel); text-decoration:underline; }
+  .stage-badge { flex-shrink:0; font-size:10px; font-weight:700; padding:5px 10px; border-radius:999px; white-space:nowrap; }
+  .stage-badge.ok { background:var(--success-bg); color:var(--success); }
+  .stage-badge.info { background:#E7ECFB; color:var(--steel); }
+  .stage-badge.warn { background:var(--warn-bg); color:var(--warn); }
+  .stage-detail { display:none; margin-top:12px; border-top:1px dashed var(--border); padding-top:10px; }
+  .stage-row { display:flex; align-items:flex-start; gap:8px; padding:6px 0; font-size:12.5px; }
+  .stage-row .dot { flex-shrink:0; width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; margin-top:1px; }
+  .stage-row .dot.done { background:var(--success-bg); color:var(--success); }
+  .stage-row .dot.pending { background:var(--surface-2); color:var(--text-muted); border:1px solid var(--border); }
+  .stage-row .stage-body b { color:var(--text); }
+  .stage-row .stage-body .sub { color:var(--text-muted); font-size:11.5px; }
+  footer.hint { text-align:center; font-size:12px; color:var(--text-muted); margin-top:20px; line-height:1.5; }
+  .tab-chip { font-size:13px; padding:8px 16px; }
+  .stock-group-header { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--steel-light); margin:16px 0 8px; }
+  .stock-item-card { border:1.5px solid var(--border); border-radius:var(--radius-md); padding:14px; margin-bottom:12px; background:var(--surface); }
+  .stock-item-card h4 { margin:0 0 8px; font-size:14px; color:var(--steel); }
+  .stock-metrics { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .stock-metric { flex:1; min-width:100px; border-radius:10px; padding:8px 10px; text-align:center; }
+  .stock-metric .n { font-size:17px; font-weight:700; }
+  .stock-metric .l { font-size:10px; text-transform:uppercase; letter-spacing:.03em; }
+  .stock-metric.process { background:var(--warn-bg); } .stock-metric.process .n,.stock-metric.process .l { color:var(--warn); }
+  .stock-metric.onhand { background:#E7ECFB; } .stock-metric.onhand .n,.stock-metric.onhand .l { color:var(--steel); }
+  .stock-metric.handed { background:var(--success-bg); } .stock-metric.handed .n,.stock-metric.handed .l { color:var(--success); }
+  .stock-site-list { font-size:12px; color:var(--text-muted); }
+  .stock-site-list span { display:inline-block; margin-right:12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="brand-row">
+    <div>
+      <div class="eyebrow">SMMS-BIMA</div>
+      <h1 class="title">Monitoring Barang</h1>
+    </div>
+    <div style="text-align:right;">
+      <button id="btnRefresh" class="btn-secondary">🔄 Refresh</button>
+      <div id="lastRefreshed"></div>
+    </div>
+  </div>
+
+  <div id="resultBanner"></div>
+
+  <div class="card" style="padding-bottom:10px;">
+    <select id="projectFilter" style="margin-bottom:10px;"><option value="__all__">Semua Project</option></select>
+    <div>
+      <span class="chip tab-chip active" data-tab="proses">📋 Status Proses</span>
+      <span class="chip tab-chip" data-tab="stok">📦 Laporan Stok</span>
+    </div>
+  </div>
+
+  <div id="tabProses">
+    <div class="card">
+      <div class="filter-row">
+        <input type="text" id="monitoringSearch" placeholder="Cari No. WO atau nama item...">
+      </div>
+      <div>
+        <span class="chip active" data-filter="all">Semua</span>
+        <span class="chip" data-filter="progress">Sedang Berjalan</span>
+        <span class="chip" data-filter="done">Selesai</span>
+      </div>
+    </div>
+
+    <div id="summaryRow" class="summary-row"></div>
+
+    <div id="monitoringListWrap"></div>
+  </div>
+
+  <div id="tabStok" style="display:none;">
+    <div class="card">
+      <input type="text" id="stockSearch" placeholder="Cari kode atau nama item...">
+    </div>
+    <div id="stockSummaryRow" class="summary-row"></div>
+    <div id="stockReportListWrap"></div>
+  </div>
+
+  <footer class="hint">Klik salah satu baris untuk lihat rincian. Halaman ini bisa diakses siapa saja, tanpa login.</footer>
+</div>
+
+<script>
+const SUPABASE_URL = "https://nhmpwjriextmbotmvvbu.supabase.co";
+const SUPABASE_KEY = "sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let scopeFilter = null;   // null = semua project, number = 1 project (dari dropdown)
+let pipelineData = [];    // hasil akhir per baris request, siap dirender
+let stockReportData = []; // hasil akumulasi per item (Laporan Stok), diisi bareng pipelineData
+let activeFilter = "all";
+let searchQuery = "";
+let stockSearchQuery = "";
+let activeTab = "proses"; // "proses" | "stok"
+
+const resultBanner = document.getElementById('resultBanner');
+function showBanner(el, text, kind) { el.style.display = "block"; el.className = "banner-" + kind; el.innerHTML = text; }
+
+// singkatan per ItemGroup buat kode item (sama seperti end-user-receiving.html)
+function groupPrefix(group) {
+  if (!group) return 'ITEM';
+  const known = {
+    consumables: 'CONS', consumable: 'CONS',
+    material: 'MAT', materials: 'MAT',
+    tools: 'TOOL', tool: 'TOOL',
+    heavyequipment: 'HE',
+    serviceorder: 'SO'
+  };
+  const key = String(group).toLowerCase().replace(/\s+/g, '');
+  if (known[key]) return known[key];
+  const letters = String(group).replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase();
+  return letters || 'ITEM';
+}
+function itemCode(itemGroup, itemId) {
+  return itemId != null ? `${groupPrefix(itemGroup)}-${itemId}` : null;
+}
+
+// ============ 0. Isi dropdown project dari daftar PROJECTID yang ada di tabel request ============
+async function loadProjectOptions() {
+  try {
+    const { data, error } = await supabaseClient.from('request').select('PROJECTID');
+    if (error) throw error;
+    const codes = [...new Set((data || []).map(r => r.PROJECTID).filter(v => v !== null && v !== undefined))].sort((a, b) => a - b);
+    const sel = document.getElementById('projectFilter');
+    codes.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = 'Project ' + c;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    // gagal isi dropdown project bukan fatal -- "Semua Project" tetap jalan
+  }
+}
+
+document.getElementById('projectFilter').addEventListener('change', (e) => {
+  scopeFilter = e.target.value === '__all__' ? null : Number(e.target.value);
+  loadMonitoring();
+});
+document.getElementById('btnRefresh').addEventListener('click', () => loadMonitoring());
+
+// ============ 1. Ambil & rakit seluruh pipeline: Request -> RFQ -> PO -> Terima Vendor -> Kirim Site -> Terima Site -> End User ============
+async function loadMonitoring() {
+  const listWrap = document.getElementById('monitoringListWrap');
+  listWrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Memuat data monitoring...</p>';
+  resultBanner.style.display = "none";
+  try {
+    let reqQuery = supabaseClient.from('request')
+      .select('ID, WO_NO, RefNo, DATE_REQUEST, ItemDescription, ItemGroup, ItemID, QTY, UNIT, Status, PROJECTID, ReportURL')
+      .order('DATE_REQUEST', { ascending: false });
+    if (scopeFilter !== null && scopeFilter !== undefined) reqQuery = reqQuery.eq('PROJECTID', scopeFilter);
+    const { data: reqRows, error: reqErr } = await reqQuery;
+    if (reqErr) throw reqErr;
+
+    if (!reqRows || reqRows.length === 0) {
+      pipelineData = [];
+      listWrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Belum ada data Request untuk cakupan ini.</p>';
+      renderSummary();
+      updateRefreshedLabel();
+      return;
+    }
+    const requestIds = reqRows.map(r => r.ID);
+
+    // -- RFQ --
+    const { data: rfqDetailRows, error: rfqErr } = await supabaseClient
+      .from('rfqDetail').select('RFQDetailID, RequestID, RFQID').in('RequestID', requestIds);
+    if (rfqErr) throw rfqErr;
+    const rfqByRequest = {};
+    (rfqDetailRows || []).forEach(r => { if (!rfqByRequest[r.RequestID]) rfqByRequest[r.RequestID] = []; rfqByRequest[r.RequestID].push(r); });
+    const rfqDetailIds = (rfqDetailRows || []).map(r => r.RFQDetailID);
+    const allRfqIds = [...new Set((rfqDetailRows || []).map(r => r.RFQID).filter(Boolean))];
+
+    // -- Vendor yang diundang per RFQ (rfqVendor), dan yang sudah kasih penawaran per item (rfqQuote) --
+    // dipakai buat kasih tau kenapa sisa qty yang belum di-PO itu masih ngendon: belum ada vendor
+    // yang nawar sama sekali, atau udah ada penawaran tapi belum diputuskan pemenangnya/di-PO-kan.
+    let vendorsByRFQID = {};
+    if (allRfqIds.length > 0) {
+      const { data, error } = await supabaseClient.from('rfqVendor').select('RFQID, VendorID').in('RFQID', allRfqIds);
+      if (error) throw error;
+      (data || []).forEach(r => { if (!vendorsByRFQID[r.RFQID]) vendorsByRFQID[r.RFQID] = new Set(); vendorsByRFQID[r.RFQID].add(r.VendorID); });
+    }
+    let quotedVendorsByRFQDetailID = {};
+    if (rfqDetailIds.length > 0) {
+      const { data, error } = await supabaseClient.from('rfqQuote').select('RFQDetailID, VendorID').in('RFQDetailID', rfqDetailIds);
+      if (error) throw error;
+      (data || []).forEach(r => { if (!quotedVendorsByRFQDetailID[r.RFQDetailID]) quotedVendorsByRFQDetailID[r.RFQDetailID] = new Set(); quotedVendorsByRFQDetailID[r.RFQDetailID].add(r.VendorID); });
+    }
+
+    // -- Purchase Order Detail --
+    let podRows = [];
+    if (rfqDetailIds.length > 0) {
+      const { data, error } = await supabaseClient
+        .from('purchaseOrderDetail').select('PODetailID, POID, RFQDetailID, Qty, Unit').in('RFQDetailID', rfqDetailIds);
+      if (error) throw error;
+      podRows = data || [];
+    }
+    const podByRfqDetail = {};
+    podRows.forEach(p => { if (!podByRfqDetail[p.RFQDetailID]) podByRfqDetail[p.RFQDetailID] = []; podByRfqDetail[p.RFQDetailID].push(p); });
+    const poDetailIds = podRows.map(p => p.PODetailID);
+    const poIds = [...new Set(podRows.map(p => p.POID).filter(Boolean))];
+
+    // -- Purchase Order header (DocNumber, VendorID, Status) --
+    let poRows = [];
+    if (poIds.length > 0) {
+      const { data, error } = await supabaseClient.from('purchaseOrder').select('POID, DocNumber, VendorID, Status').in('POID', poIds);
+      if (error) throw error;
+      poRows = data || [];
+    }
+    const poMap = {};
+    poRows.forEach(p => poMap[p.POID] = p);
+    const vendorIds = [...new Set(poRows.map(p => p.VendorID).filter(Boolean))];
+    let vendorMap = {};
+    if (vendorIds.length > 0) {
+      const { data: vendors } = await supabaseClient.from('vendor').select('VendorID, VendorName').in('VendorID', vendorIds);
+      (vendors || []).forEach(v => vendorMap[v.VendorID] = v.VendorName);
+    }
+
+    // -- Vendor Receiving (per PODetailID) --
+    let vrMap = {};
+    if (poDetailIds.length > 0) {
+      const { data, error } = await supabaseClient.from('vendorReceiving').select('PODetailID, QtyReceived').in('PODetailID', poDetailIds);
+      if (error) throw error;
+      (data || []).forEach(r => vrMap[r.PODetailID] = (vrMap[r.PODetailID] || 0) + Number(r.QtyReceived || 0));
+    }
+
+    // -- Delivery (per PODetailID) --
+    let deliveryByPodetail = {};
+    let allDeliveryRows = [];
+    if (poDetailIds.length > 0) {
+      const { data, error } = await supabaseClient
+        .from('delivery').select('DeliveryID, PODetailID, QtyDelivered, DestinationSite, SuratJalanNo, DeliveryDate').in('PODetailID', poDetailIds);
+      if (error) throw error;
+      allDeliveryRows = data || [];
+      allDeliveryRows.forEach(d => { if (!deliveryByPodetail[d.PODetailID]) deliveryByPodetail[d.PODetailID] = []; deliveryByPodetail[d.PODetailID].push(d); });
+    }
+    const deliveryIds = allDeliveryRows.map(d => d.DeliveryID);
+
+    // -- Site Receiving (per DeliveryID) --
+    let srByDelivery = {};
+    let allSiteRecvRows = [];
+    if (deliveryIds.length > 0) {
+      const { data, error } = await supabaseClient.from('siteReceiving').select('ReceivingID, DeliveryID, QtyReceived').in('DeliveryID', deliveryIds);
+      if (error) throw error;
+      allSiteRecvRows = data || [];
+      allSiteRecvRows.forEach(r => { if (!srByDelivery[r.DeliveryID]) srByDelivery[r.DeliveryID] = 0; srByDelivery[r.DeliveryID] += Number(r.QtyReceived || 0); });
+    }
+    const receivingIds = allSiteRecvRows.map(r => r.ReceivingID);
+
+    // -- End User Receiving (per ReceivingID -> naik ke DeliveryID -> naik ke PODetailID) --
+    let euByReceiving = {};
+    if (receivingIds.length > 0) {
+      const { data, error } = await supabaseClient.from('endUserReceiving').select('ReceivingID, QtyConfirmed').in('ReceivingID', receivingIds);
+      if (error) throw error;
+      (data || []).forEach(r => { euByReceiving[r.ReceivingID] = (euByReceiving[r.ReceivingID] || 0) + Number(r.QtyConfirmed || 0); });
+    }
+    const euByDelivery = {};
+    allSiteRecvRows.forEach(r => { euByDelivery[r.DeliveryID] = (euByDelivery[r.DeliveryID] || 0) + (euByReceiving[r.ReceivingID] || 0); });
+
+    // ============ Rakit hasil akhir per baris Request (+ akumulasi Laporan Stok bareng jalan) ============
+    const stockMap = {}; // key -> {ItemGroup, ItemID, ItemDescription, Unit, totalRequested, totalOnHand, totalHandedOver, siteOnHand:{site:qty}}
+    pipelineData = reqRows.map(req => {
+      const rfqRows = rfqByRequest[req.ID] || [];
+      const rfqExists = rfqRows.length > 0;
+      const rfqIds = [...new Set(rfqRows.map(r => r.RFQID).filter(Boolean))];
+
+      let pods = [];
+      rfqRows.forEach(r => { pods = pods.concat(podByRfqDetail[r.RFQDetailID] || []); });
+      const poExists = pods.length > 0;
+      const qtyPO = pods.reduce((s, p) => s + Number(p.Qty || 0), 0);
+      const podetailIdsForReq = pods.map(p => p.PODetailID);
+      const poDocs = [...new Set(pods.map(p => p.POID))].map(poid => poMap[poid]).filter(Boolean);
+      const poDocLabel = poDocs.map(po => `${po.DocNumber || ('PO#' + po.POID)}${po.VendorID && vendorMap[po.VendorID] ? ' - ' + vendorMap[po.VendorID] : ''} (${po.Status || '-'})`).join('; ');
+
+      // sisa qty yang diminta tapi belum ketutup PO -- dicek RFQID mana yang MASIH beneran menggantung.
+      // RFQID yang salah satu detailnya sudah jadi PO dianggap "selesai" seluruhnya (walau ada baris
+      // lain di RFQID yang sama yang kalah/Tidak Terpilih) -- biar gak numpuk vendor dari batch RFQ
+      // yang udah kelar ke penjelasan sisa yang masih pending.
+      const qtyRequestedNum = Number(req.QTY || 0);
+      const qtyGap = Math.max(0, qtyRequestedNum - qtyPO);
+      const resolvedRfqIds = new Set(rfqRows.filter(r => (podByRfqDetail[r.RFQDetailID] || []).length > 0).map(r => r.RFQID));
+      const openRfqRows = rfqRows.filter(r => !resolvedRfqIds.has(r.RFQID));
+
+      let vendorGapLabel = '';
+      if (qtyGap > 0 && rfqExists) {
+        if (openRfqRows.length === 0) {
+          vendorGapLabel = `${qtyGap} ${req.UNIT || ''} -- RFQ yang ada sudah selesai diproses, mungkin perlu RFQ baru`;
+        } else {
+          const openRfqIds = [...new Set(openRfqRows.map(r => r.RFQID))];
+          const lines = openRfqIds.map(rfqid => {
+            const linesForThisRfq = openRfqRows.filter(r => r.RFQID === rfqid);
+            const invited = vendorsByRFQID[rfqid] || new Set();
+            const quoted = new Set();
+            linesForThisRfq.forEach(r => (quotedVendorsByRFQDetailID[r.RFQDetailID] || new Set()).forEach(v => quoted.add(v)));
+            const waiting = invited.size - quoted.size;
+            if (invited.size === 0) return `RFQID ${rfqid}: belum dikirim ke vendor mana pun`;
+            if (waiting > 0) return `RFQID ${rfqid}: menunggu balasan ${waiting} dari ${invited.size} vendor yang diundang`;
+            return `RFQID ${rfqid}: semua vendor (${invited.size}) sudah menawar, menunggu keputusan pemenang`;
+          });
+          vendorGapLabel = `${qtyGap} ${req.UNIT || ''} masih diproses:<br>` + lines.join('<br>');
+        }
+      }
+
+      const qtyVendorReceived = podetailIdsForReq.reduce((s, id) => s + (vrMap[id] || 0), 0);
+
+      let deliveries = [];
+      podetailIdsForReq.forEach(id => { deliveries = deliveries.concat(deliveryByPodetail[id] || []); });
+      const qtyDelivered = deliveries.reduce((s, d) => s + Number(d.QtyDelivered || 0), 0);
+
+      const qtySiteReceived = deliveries.reduce((s, d) => s + (srByDelivery[d.DeliveryID] || 0), 0);
+      const qtyEndUser = deliveries.reduce((s, d) => s + (euByDelivery[d.DeliveryID] || 0), 0);
+
+      // -- akumulasi ke Laporan Stok: sedang proses order / OnHand di site (per site) / sudah handover --
+      const stockKey = req.ItemID != null ? `${req.ItemGroup || ''}::${req.ItemID}` : `desc::${(req.ItemDescription || '').trim().toLowerCase()}`;
+      if (!stockMap[stockKey]) {
+        stockMap[stockKey] = { ItemGroup: req.ItemGroup, ItemID: req.ItemID, ItemDescription: req.ItemDescription, Unit: req.UNIT, totalRequested: 0, totalVendorReceived: 0, totalOnHand: 0, totalHandedOver: 0, siteOnHand: {} };
+      }
+      const sm = stockMap[stockKey];
+      sm.totalRequested += qtyRequestedNum;
+      sm.totalVendorReceived += qtyVendorReceived;
+      sm.totalHandedOver += qtyEndUser;
+      deliveries.forEach(d => {
+        const onHandHere = (srByDelivery[d.DeliveryID] || 0) - (euByDelivery[d.DeliveryID] || 0);
+        if (onHandHere > 0) {
+          sm.totalOnHand += onHandHere;
+          const site = d.DestinationSite || '-';
+          sm.siteOnHand[site] = (sm.siteOnHand[site] || 0) + onHandHere;
+        }
+      });
+
+      const item = {
+        RequestID: req.ID,
+        RefNo: req.RefNo,
+        WO_NO: req.WO_NO,
+        DateRequest: req.DATE_REQUEST,
+        ItemDescription: req.ItemDescription,
+        ItemGroup: req.ItemGroup,
+        ItemID: req.ItemID,
+        ProjectID: req.PROJECTID,
+        QtyRequested: Number(req.QTY || 0),
+        Unit: req.UNIT,
+        ReportURL: req.ReportURL || '',
+        rfq: { exists: rfqExists, ids: rfqIds },
+        po: { exists: poExists, qty: qtyPO, label: poDocLabel, gapQty: qtyGap, gapLabel: vendorGapLabel },
+        vendorReceiving: { qty: qtyVendorReceived },
+        delivery: { qty: qtyDelivered, list: deliveries },
+        siteReceiving: { qty: qtySiteReceived },
+        endUserReceiving: { qty: qtyEndUser }
+      };
+      item.stage = computeStage(item);
+      return item;
+    });
+
+    stockReportData = Object.values(stockMap).map(sm => ({
+      ...sm,
+      code: itemCode(sm.ItemGroup, sm.ItemID),
+      totalInProcess: Math.max(0, sm.totalRequested - sm.totalVendorReceived)
+    }));
+
+    renderMonitoring();
+    renderSummary();
+    renderStockReport();
+    updateRefreshedLabel();
+  } catch (e) {
+    listWrap.innerHTML = '';
+    showBanner(resultBanner, "🔴 Gagal memuat data monitoring: " + e.message, "fail");
+  }
+}
+
+function computeStage(item) {
+  if (!item.rfq.exists) return { label: 'Belum RFQ', cls: 'warn' };
+  if (!item.po.exists) return { label: 'RFQ Dibuat, Menunggu PO', cls: 'warn' };
+  if (item.vendorReceiving.qty <= 0) return { label: 'PO Terbit, Menunggu Kirim dari Vendor', cls: 'info' };
+  if (item.delivery.qty <= 0) return { label: 'Diterima dari Vendor, Menunggu Dikirim ke Site', cls: 'info' };
+  if (item.siteReceiving.qty <= 0) return { label: 'Dalam Perjalanan ke Site', cls: 'info' };
+  if (item.endUserReceiving.qty <= 0) return { label: 'Diterima di Site, Menunggu ke End User', cls: 'warn' };
+  if (item.endUserReceiving.qty < item.siteReceiving.qty) return { label: 'Sebagian Sudah ke End User', cls: 'info' };
+  return { label: 'Selesai (Sudah ke End User)', cls: 'ok' };
+}
+
+function updateRefreshedLabel() {
+  document.getElementById('lastRefreshed').textContent = 'Update: ' + new Date().toLocaleTimeString('id-ID');
+}
+
+function renderSummary() {
+  const el = document.getElementById('summaryRow');
+  const total = pipelineData.length;
+  const done = pipelineData.filter(it => it.stage.cls === 'ok').length;
+  const warn = pipelineData.filter(it => it.stage.cls === 'warn').length;
+  const progress = total - done - warn;
+  el.innerHTML = `
+    <div class="summary-tile"><div class="num">${total}</div><div class="lbl">Total Item</div></div>
+    <div class="summary-tile"><div class="num">${progress}</div><div class="lbl">Sedang Berjalan</div></div>
+    <div class="summary-tile"><div class="num">${warn}</div><div class="lbl">Perlu Tindakan</div></div>
+    <div class="summary-tile"><div class="num">${done}</div><div class="lbl">Selesai</div></div>
+  `;
+}
+
+// ============ 2. Render list + filter/search ============
+document.getElementById('monitoringSearch').addEventListener('input', (e) => { searchQuery = e.target.value; renderMonitoring(); });
+document.querySelectorAll('.chip:not(.tab-chip)').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip:not(.tab-chip)').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    activeFilter = chip.dataset.filter;
+    renderMonitoring();
+  });
+});
+
+// ============ Tab switch: Status Proses <-> Laporan Stok ============
+document.querySelectorAll('.tab-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.tab-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    activeTab = chip.dataset.tab;
+    document.getElementById('tabProses').style.display = activeTab === 'proses' ? 'block' : 'none';
+    document.getElementById('tabStok').style.display = activeTab === 'stok' ? 'block' : 'none';
+  });
+});
+
+function renderMonitoring() {
+  const listWrap = document.getElementById('monitoringListWrap');
+  if (pipelineData.length === 0) {
+    listWrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Belum ada data Request untuk cakupan ini.</p>';
+    return;
+  }
+
+  const q = (searchQuery || '').trim().toLowerCase();
+  let filtered = pipelineData.filter(it => {
+    if (q) {
+      const hay = `${it.WO_NO || ''} ${it.ItemDescription || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (activeFilter === 'done' && it.stage.cls !== 'ok') return false;
+    if (activeFilter === 'progress' && it.stage.cls === 'ok') return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    listWrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Tidak ada item yang cocok.</p>';
+    return;
+  }
+
+  listWrap.innerHTML = '';
+  filtered.forEach(it => {
+    const code = itemCode(it.ItemGroup, it.ItemID);
+    const card = document.createElement('div');
+    card.className = 'req-card';
+    card.innerHTML = `
+      <div class="req-head">
+        <div>
+          <h4>${code ? '[' + code + '] ' : ''}${it.ItemDescription || '-'}</h4>
+          <p>No. Request: ${it.RefNo || '-'} · WO: ${it.WO_NO || '-'} · Project ${it.ProjectID != null ? it.ProjectID : '-'}</p>
+          <p>Diminta: ${it.QtyRequested} ${it.Unit || ''} · ${it.DateRequest ? new Date(it.DateRequest).toLocaleDateString('id-ID') : '-'}</p>
+          ${it.ReportURL ? `<p><a href="${it.ReportURL}" target="_blank" rel="noopener" class="report-link" onclick="event.stopPropagation()">📄 Lihat Report Request</a></p>` : ''}
+        </div>
+        <span class="stage-badge ${it.stage.cls}">${it.stage.label}</span>
+      </div>
+      <div class="stage-detail">
+        ${stageRowHtml('1. Request', true, `${it.QtyRequested} ${it.Unit || ''} diminta`, '')}
+        ${stageRowHtml('2. RFQ', it.rfq.exists, it.rfq.exists ? 'Sudah dibuat' : 'Belum dibuat', it.rfq.exists ? ('RFQID: ' + it.rfq.ids.join(', ')) : '')}
+        ${stageRowHtml('3. Purchase Order', it.po.exists, it.po.exists ? `${it.po.qty} ${it.Unit || ''} dipesan` : 'Belum terbit', [it.po.label, it.po.gapLabel].filter(Boolean).join('<br>'))}
+        ${stageRowHtml('4. Diterima dari Vendor', it.vendorReceiving.qty > 0, `${it.vendorReceiving.qty} ${it.Unit || ''}`, it.po.qty ? `dari ${it.po.qty} dipesan` : '')}
+        ${stageRowHtml('5. Dikirim ke Site', it.delivery.qty > 0, `${it.delivery.qty} ${it.Unit || ''}`, deliverySubLabel(it.delivery.list))}
+        ${stageRowHtml('6. Diterima di Site', it.siteReceiving.qty > 0, `${it.siteReceiving.qty} ${it.Unit || ''}`, it.delivery.qty ? `dari ${it.delivery.qty} dikirim` : '')}
+        ${stageRowHtml('7. Diserahkan ke End User', it.endUserReceiving.qty > 0, `${it.endUserReceiving.qty} ${it.Unit || ''}`, it.siteReceiving.qty ? `dari ${it.siteReceiving.qty} di site` : '')}
+      </div>
+    `;
+    const detailEl = card.querySelector('.stage-detail');
+    card.querySelector('.req-head').onclick = () => {
+      const isOpen = detailEl.style.display === "block";
+      document.querySelectorAll('.stage-detail').forEach(el => el.style.display = "none");
+      document.querySelectorAll('.req-card').forEach(c => c.classList.remove('selected'));
+      if (!isOpen) { detailEl.style.display = "block"; card.classList.add('selected'); }
+    };
+    listWrap.appendChild(card);
+  });
+}
+
+function stageRowHtml(title, done, mainText, subText) {
+  const dotCls = done ? 'done' : 'pending';
+  const dotIcon = done ? '✓' : '·';
+  return `
+    <div class="stage-row">
+      <div class="dot ${dotCls}">${dotIcon}</div>
+      <div class="stage-body"><b>${title}:</b> ${mainText}${subText ? `<div class="sub">${subText}</div>` : ''}</div>
+    </div>`;
+}
+
+function deliverySubLabel(list) {
+  if (!list || list.length === 0) return '';
+  return list.map(d => `${d.DestinationSite || '-'} · No. SJ ${d.SuratJalanNo || '-'}`).join('<br>');
+}
+
+// ============ 3. Laporan Stok -- akumulasi per item: Sedang Proses Order / OnHand di Site / Sudah Handover ============
+function renderStockSummary() {
+  const el = document.getElementById('stockSummaryRow');
+  const totalProcess = stockReportData.reduce((s, sm) => s + sm.totalInProcess, 0);
+  const totalOnHand = stockReportData.reduce((s, sm) => s + sm.totalOnHand, 0);
+  const totalHanded = stockReportData.reduce((s, sm) => s + sm.totalHandedOver, 0);
+  el.innerHTML = `
+    <div class="summary-tile"><div class="num">${stockReportData.length}</div><div class="lbl">Jenis Item</div></div>
+    <div class="summary-tile"><div class="num">${totalProcess}</div><div class="lbl">Sedang Proses Order</div></div>
+    <div class="summary-tile"><div class="num">${totalOnHand}</div><div class="lbl">OnHand di Site</div></div>
+    <div class="summary-tile"><div class="num">${totalHanded}</div><div class="lbl">Sudah Handover</div></div>
+  `;
+}
+
+document.getElementById('stockSearch').addEventListener('input', (e) => { stockSearchQuery = e.target.value; renderStockReport(); });
+
+function renderStockReport() {
+  renderStockSummary();
+  const wrap = document.getElementById('stockReportListWrap');
+  if (stockReportData.length === 0) {
+    wrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Belum ada data stok untuk cakupan ini.</p>';
+    return;
+  }
+
+  const q = (stockSearchQuery || '').trim().toLowerCase();
+  const filtered = q
+    ? stockReportData.filter(sm => (sm.ItemDescription || '').toLowerCase().includes(q) || (sm.code && sm.code.toLowerCase().includes(q)))
+    : stockReportData;
+
+  if (filtered.length === 0) {
+    wrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Tidak ada item yang cocok.</p>';
+    return;
+  }
+
+  const byGroup = {};
+  filtered.forEach(sm => {
+    const g = sm.ItemGroup || 'Lainnya';
+    if (!byGroup[g]) byGroup[g] = [];
+    byGroup[g].push(sm);
+  });
+
+  wrap.innerHTML = '';
+  Object.keys(byGroup).sort().forEach(groupName => {
+    const header = document.createElement('div');
+    header.className = 'stock-group-header';
+    header.textContent = groupName;
+    wrap.appendChild(header);
+
+    byGroup[groupName].sort((a, b) => (a.ItemDescription || '').localeCompare(b.ItemDescription || '')).forEach(sm => {
+      const siteEntries = Object.entries(sm.siteOnHand).filter(([, qty]) => qty > 0);
+      const siteHtml = siteEntries.length > 0
+        ? siteEntries.map(([site, qty]) => `<span>📍 ${site}: <b>${qty}</b> ${sm.Unit || ''}</span>`).join('')
+        : '<span>Tidak ada stok di site mana pun saat ini</span>';
+
+      const card = document.createElement('div');
+      card.className = 'stock-item-card';
+      card.innerHTML = `
+        <h4>${sm.code ? '[' + sm.code + '] ' : ''}${sm.ItemDescription || '-'}</h4>
+        <div class="stock-metrics">
+          <div class="stock-metric process"><div class="n">${sm.totalInProcess}</div><div class="l">Proses Order</div></div>
+          <div class="stock-metric onhand"><div class="n">${sm.totalOnHand}</div><div class="l">OnHand</div></div>
+          <div class="stock-metric handed"><div class="n">${sm.totalHandedOver}</div><div class="l">Handover</div></div>
+        </div>
+        <div class="stock-site-list">${siteHtml}</div>
+      `;
+      wrap.appendChild(card);
+    });
+  });
+}
+
+// ============ Load langsung begitu halaman dibuka -- tanpa login/scan, publik ============
+loadProjectOptions();
+loadMonitoring();
+</script>
+</body>
+</html>
