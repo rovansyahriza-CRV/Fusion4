@@ -353,6 +353,7 @@ pinBoxes.forEach((box, idx) => {
     });
     const nextEmpty = pinBoxes.findIndex(b => !b.value);
     (nextEmpty === -1 ? pinBoxes[pinBoxes.length - 1] : pinBoxes[nextEmpty]).focus();
+    if (getPinValue().length === pinBoxes.length) submitPin();
   });
 });
 
@@ -418,77 +419,93 @@ async function submitPin() {
       hasil.qrCodeId = qrId;
       window.currentBadgeData = hasil;
 
-      document.getElementById('badgeNama').innerText = hasil.nama || "-";
-      document.getElementById('badgeJabatan').innerText = hasil.kualifikasi || "-";
-      document.getElementById('badgeId').innerText = qrId;
-
-      // Generate QR Code di kartu
-      const qrbox = document.getElementById('qrbox');
-      if (qrbox && typeof QRCode !== 'undefined') {
-        qrbox.innerHTML = '';
-        new QRCode(qrbox, {
-          text: qrId,
-          width: 115,
-          height: 115,
-          colorDark: "#000000",
-          colorLight: "#ffffff",
-          correctLevel: QRCode.CorrectLevel.M
-        });
-      }
-      document.getElementById('linkGantiPassword').href = "change-password.html?QrCodeId=" + encodeURIComponent(qrId);
-
-      // Ambil foto profil terbaru dari database karyawanTbl (case-insensitive)
-      let rawFotoUrl = null;
-      let fileId = null;
-      try {
-        const { data: karRow } = await supabaseClient
-          .from('karyawanTbl')
-          .select('FotoURL, FotoFileID')
-          .ilike('QrCodeId', qrId.trim())
-          .maybeSingle();
-        if (karRow) {
-          rawFotoUrl = karRow.FotoURL || hasil.fotoUrl || null;
-          fileId = karRow.FotoFileID || null;
-        }
-      } catch (e) {
-        console.warn('Direct fetch photo error:', e.message);
-        rawFotoUrl = hasil.fotoUrl;
-      }
-
-      const fotoEl = document.getElementById('badgeFoto');
-      const fallbackEl = document.getElementById('badgeFotoFallback');
-      const directFoto = formatDriveDirectUrl(rawFotoUrl);
-
-      if (directFoto) {
-        fotoEl.src = directFoto;
-        fotoEl.style.display = "block";
-        fallbackEl.style.display = "none";
-        fotoEl.onerror = () => {
-          // Jika CDN gagal, coba format thumbnail standar
-          if (fileId && !fotoEl.dataset.retried) {
-            fotoEl.dataset.retried = "1";
-            fotoEl.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
-            return;
-          }
-          fotoEl.style.display = "none";
-          fallbackEl.style.display = "flex";
-          fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
-        };
-      } else {
-        fotoEl.style.display = "none";
-        fallbackEl.style.display = "flex";
-        fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
-      }
-
-      // Tampilkan Badge
-      pageContent.style.display = "block";
-      pinOverlay.style.display = "none";
+      // LANGSUNG TAMPILKAN BADGE (Hapus overlay PIN)
+      if (pageContent) pageContent.style.display = "flex";
+      if (pinOverlay) pinOverlay.style.display = "none";
       btnSubmitPin.disabled = false;
       btnSubmitPin.innerText = "Tampilkan Badge";
 
+      // Render data teks kartu
+      try {
+        const elNama = document.getElementById('badgeNama');
+        if (elNama) elNama.innerText = hasil.nama || "-";
+        const elJabatan = document.getElementById('badgeJabatan');
+        if (elJabatan) elJabatan.innerText = hasil.kualifikasi || "-";
+        const elId = document.getElementById('badgeId');
+        if (elId) elId.innerText = qrId;
+        const elLink = document.getElementById('linkGantiPassword');
+        if (elLink) elLink.href = "change-password.html?QrCodeId=" + encodeURIComponent(qrId);
+      } catch (eDom) {
+        console.warn("DOM text update warning:", eDom);
+      }
+
+      // Generate QR Code di kartu
+      try {
+        const qrbox = document.getElementById('qrbox');
+        if (qrbox && typeof QRCode !== 'undefined') {
+          qrbox.innerHTML = '';
+          new QRCode(qrbox, {
+            text: qrId,
+            width: 115,
+            height: 115,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      } catch (eQr) {
+        console.warn("QR Code render error:", eQr);
+      }
+
+      // Ambil foto profil terbaru dari database karyawanTbl (asinkron tanpa memblokir badge)
+      (async () => {
+        try {
+          let rawFotoUrl = null;
+          let fileId = null;
+          const { data: karRow } = await supabaseClient
+            .from('karyawanTbl')
+            .select('FotoURL, FotoFileID')
+            .ilike('QrCodeId', qrId.trim())
+            .maybeSingle();
+          if (karRow) {
+            rawFotoUrl = karRow.FotoURL || hasil.fotoUrl || null;
+            fileId = karRow.FotoFileID || null;
+          } else {
+            rawFotoUrl = hasil.fotoUrl;
+          }
+
+          const fotoEl = document.getElementById('badgeFoto');
+          const fallbackEl = document.getElementById('badgeFotoFallback');
+          if (!fotoEl || !fallbackEl) return;
+
+          const directFoto = formatDriveDirectUrl(rawFotoUrl);
+          if (directFoto) {
+            fotoEl.src = directFoto;
+            fotoEl.style.display = "block";
+            fallbackEl.style.display = "none";
+            fotoEl.onerror = () => {
+              if (fileId && !fotoEl.dataset.retried) {
+                fotoEl.dataset.retried = "1";
+                fotoEl.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
+                return;
+              }
+              fotoEl.style.display = "none";
+              fallbackEl.style.display = "flex";
+              fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
+            };
+          } else {
+            fotoEl.style.display = "none";
+            fallbackEl.style.display = "flex";
+            fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
+          }
+        } catch (ePhoto) {
+          console.warn('Direct fetch photo error:', ePhoto);
+        }
+      })();
+
       // Load data approval & voucher
-      loadApprovalIssues(qrId);
-      loadMyVouchers(qrId);
+      try { loadApprovalIssues(qrId); } catch (e) { console.warn("loadApprovalIssues error:", e); }
+      try { loadMyVouchers(qrId); } catch (e) { console.warn("loadMyVouchers error:", e); }
 
     } catch (e) {
       console.error("Error submitPin:", e);
@@ -501,20 +518,26 @@ async function submitPin() {
 
   btnSubmitPin.onclick = submitPin;
 
-  document.getElementById('btnAbsenSekarang').onclick = () => {
-    const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
-    if (!qrId) {
-      alert("Data belum siap, coba refresh halaman.");
-      return;
-    }
-    window.location.href = "attendance-fusion4.html?QrCodeId=" + encodeURIComponent(qrId) + "&fromBadge=1";
-  };
+  const btnAbsen = document.getElementById('btnAbsenSekarang');
+  if (btnAbsen) {
+    btnAbsen.onclick = () => {
+      const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+      if (!qrId) {
+        alert("Data belum siap, coba refresh halaman.");
+        return;
+      }
+      window.location.href = "attendance-fusion4.html?QrCodeId=" + encodeURIComponent(qrId) + "&fromBadge=1";
+    };
+  }
 
-  document.getElementById('btnGantiPin').onclick = () => {
-    pageContent.style.display = "none";
-    pinOverlay.style.display = "flex";
-    clearPinBoxes();
-  };
+  const btnGanti = document.getElementById('btnGantiPin');
+  if (btnGanti) {
+    btnGanti.onclick = () => {
+      if (pageContent) pageContent.style.display = "none";
+      if (pinOverlay) pinOverlay.style.display = "flex";
+      clearPinBoxes();
+    };
+  }
 
   let currentRequestType = "";
 
