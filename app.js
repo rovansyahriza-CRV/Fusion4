@@ -1647,7 +1647,7 @@ let selectedVendorIds = new Set();
 async function loadRfqCreatePage() {
   const reqBody = document.getElementById('rfqRequestTableBody');
   const venBody = document.getElementById('rfqVendorTableBody');
-  reqBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr>';
+  reqBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Memuat data...</td></tr>';
   venBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Memuat data...</td></tr>';
   selectedRequestIds = new Set();
   selectedVendorIds = new Set();
@@ -1661,7 +1661,7 @@ async function loadRfqCreatePage() {
     { data: allVendorData, error: allVenErr },
     { data: rfqQuoteData, error: rfqQuoteErr }
   ] = await Promise.all([
-    supabaseClient.from('request').select('*').eq('Status', 'Approved'),
+    supabaseClient.from('request').select('*').in('Status', ['Disetujui', 'Approved', 'Dalam Proses RFQ']),
     supabaseClient.from('vendor').select('*').eq('Status', 'Approved'),
     supabaseClient.from('rfqDetail').select('RFQDetailID, RequestID, RFQID'),
     supabaseClient.from('rfqVendor').select('RFQID, VendorID, ConfirmationStatus, Status'),
@@ -1761,7 +1761,7 @@ async function loadRfqCreatePage() {
     document.getElementById('searchRfqVendor').value = '';
   } catch (err) {
     console.error('Gagal memuat data RFQ:', err);
-    reqBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:red;">Gagal memuat: ${err.message}</td></tr>`;
+    reqBody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:red;">Gagal memuat: ${err.message}</td></tr>`;
   }
 }
 
