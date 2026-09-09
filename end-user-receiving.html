@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMMS-BIMA — End User Receiving</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="driveBridge.js"></script>
+<script src="reportPdf.js"></script>
+<style>
+  :root {
+    --bg:#ECEEF1; --surface:#FFFFFF; --surface-2:#F5F6F8;
+    --text:#12161C; --text-muted:#5B6472; --border:#DEE2E7;
+    --accent:#D9312E; --accent-dark:#B32220;
+    --steel:#243463; --steel-light:#3C5089;
+    --success:#178A4C; --success-bg:#E5F6EC;
+    --danger:#D9312E; --danger-bg:#FCEAE8;
+    --warn:#B8860B; --warn-bg:#FBF3DC;
+    --radius-lg:18px; --radius-md:12px;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:24px 16px 56px; -webkit-tap-highlight-color:transparent; }
+  .page { max-width:440px; margin:0 auto; }
+  .brand-row { margin-bottom:20px; }
+  .eyebrow { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--steel-light); font-weight:700; }
+  h1.title { font-size:26px; font-weight:700; margin:4px 0 0; color:var(--steel); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; margin-bottom:14px; }
+  .card-label { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); margin:0 0 10px; font-weight:700; }
+  button { font-family:inherit; font-weight:600; font-size:15px; border:none; border-radius:var(--radius-md); cursor:pointer; }
+  button:active { transform:scale(0.98); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-block { display:block; width:100%; padding:15px; margin-top:10px; }
+  .btn-primary { background:var(--steel); color:#fff; }
+  .btn-accent { background:var(--accent); color:#fff; }
+  .btn-secondary { background:var(--surface-2); color:var(--steel); border:1.5px solid var(--border); }
+  #locBanner,#resultBanner,#matchInfo { font-size:13px; padding:12px 14px; border-radius:var(--radius-md); margin-bottom:14px; line-height:1.5; display:none; }
+  .banner-info { background:var(--surface-2); color:var(--steel); border-left:3px solid var(--steel-light); }
+  .banner-ok { background:var(--success-bg); color:var(--success); border-left:3px solid var(--success); }
+  .banner-fail { background:var(--danger-bg); color:var(--danger); border-left:3px solid var(--danger); }
+  .banner-warn { background:var(--warn-bg); color:var(--warn); border-left:3px solid var(--warn); }
+  #wrap { position:relative; width:100%; aspect-ratio:1/1; margin:0 auto 14px; overflow:hidden; border-radius:var(--radius-lg); background:#0B0D10; display:none; }
+  video,canvas { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+  #faceGuideOval { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:58%; height:74%; border:4px solid var(--steel-light); border-radius:50%; display:none; pointer-events:none; transition:border-color .15s ease; }
+  #faceGuideOval.ok { border-color:var(--success); }
+  #faceGuideHint { position:absolute; bottom:14px; left:50%; transform:translateX(-50%); background:rgba(11,13,16,.72); color:#fff; font-size:11px; padding:5px 12px; border-radius:999px; display:none; white-space:nowrap; }
+  #qrGuide { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:68%; aspect-ratio:1/1; border:3px dashed var(--accent); border-radius:12px; display:none; pointer-events:none; box-shadow:0 0 0 999px rgba(0,0,0,.35); }
+  #status { font-size:13px; color:var(--text); background:var(--surface-2); border-left:3px solid var(--steel-light); border-radius:0 8px 8px 0; padding:10px 12px; margin:0 0 14px; line-height:1.5; display:none; }
+  #status.ok { border-left-color:var(--success); } #status.fail { border-left-color:var(--danger); }
+  table.item-table { width:100%; border-collapse:collapse; font-size:13px; }
+  table.item-table th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); padding:8px 6px; border-bottom:1px solid var(--border); }
+  table.item-table td { padding:8px 6px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  table.item-table input[type=number] { width:70px; padding:6px 8px; border:1.5px solid var(--border); border-radius:6px; font-size:14px; font-family:inherit; }
+  select,textarea,input[type=text] { width:100%; font-size:15px; padding:11px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; }
+  input[readonly] { background:#f1efe7; color:var(--text-muted); }
+  label.field-label { display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin:0 0 6px; }
+  footer.hint { text-align:center; font-size:12px; color:var(--text-muted); margin-top:20px; line-height:1.5; }
+  .pending-card { border:1.5px solid var(--border); border-radius:var(--radius-md); padding:14px; margin-bottom:12px; }
+  .pending-card:hover { border-color:var(--steel-light); }
+  .pending-card.selected { border-color:var(--accent); background:var(--danger-bg); }
+  .pending-card h4 { margin:0 0 6px; font-size:14px; color:var(--steel); }
+  .pending-card p { margin:2px 0; font-size:12px; color:var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="brand-row">
+    <div class="eyebrow">SMMS-BIMA</div>
+    <h1 class="title">End User Receiving</h1>
+  </div>
+
+  <div id="entryCard" class="card">
+    <p class="card-label" id="entryCardLabel">Verifikasi Identitas (Storeman)</p>
+    <button id="btnStartFaceFirst" class="btn-block btn-accent">📸 Scan Wajah</button>
+    <button id="btnShowQrOption" class="btn-block btn-secondary">📷 Atau Scan QR Code</button>
+  </div>
+
+  <div id="qrCard" class="card" style="display:none;">
+    <p class="card-label">Scan QR Badge</p>
+    <button id="btnStartQrScan" class="btn-block btn-primary">📷 Buka Kamera & Scan QR</button>
+  </div>
+
+  <div id="matchInfo" class="banner-ok"></div>
+
+  <div id="accessCard" class="card" style="display:none;">
+    <p class="card-label">Anda Storeman Untuk Project (pilih salah satu)</p>
+    <div id="accessListWrap"></div>
+  </div>
+
+  <div id="locBanner" class="banner-info">Mengunci lokasi GPS...</div>
+
+  <div id="resultBanner"></div>
+
+  <div id="wrap">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <div id="faceGuideOval"></div>
+    <div id="faceGuideHint"></div>
+    <div id="qrGuide"></div>
+  </div>
+
+  <p id="status">Menyiapkan...</p>
+  <button id="btnScanFace" class="btn-block btn-accent" style="display:none;">📸 Scan Wajah</button>
+  <button id="btnSwitchFaceCam" class="btn-block btn-secondary" style="display:none;">🔄 Ganti Kamera</button>
+
+  <!-- ===== FORM STOREMAN: cari material, kumpulin ke daftar serah terima ===== -->
+  <div id="materialCard" class="card" style="display:none;">
+    <p class="card-label">Serah Terima Barang — Site <span id="materialSiteLabel"></span></p>
+
+    <label class="field-label">Cari Material</label>
+    <input type="text" id="materialSearch" placeholder="Ketik nama item...">
+    <div id="materialResults" style="margin-top:6px;"></div>
+
+    <div id="cartWrap" style="margin-top:14px;"></div>
+
+    <label class="field-label" style="margin-top:14px;">Foto serah terima (opsional)</label>
+    <input type="file" id="handoverPhoto" accept="image/*" capture="environment">
+
+    <label class="field-label" style="margin-top:14px;">Catatan (opsional)</label>
+    <textarea id="handoverNotes" rows="2"></textarea>
+
+    <button id="btnSerahTerima" class="btn-block btn-accent">Serah Terima (Scan Penerima)</button>
+  </div>
+
+  <button id="btnRetry" class="btn-block btn-secondary" style="display:none;">🔁 Ulangi</button>
+
+  <footer class="hint">Storeman scan dulu buat login, cari &amp; pilih material, lalu arahkan kamera belakang ke penerima buat konfirmasi serah terima.</footer>
+</div>
+
+<script>
+const SUPABASE_URL = "https://nhmpwjriextmbotmvvbu.supabase.co";
+const SUPABASE_KEY = "sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Drive File Bridge -- lihat drive-bridge-appsscript.gs & driveBridge.js. Isi setelah deploy.
+const DRIVE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbwfq5bqNWx0fO9LuEyQasUzkLP91gA8G-rqRKpPOIJ9r7WNN0G_klH8jXxXhY96ArlC/exec";
+const DRIVE_BRIDGE_TOKEN = "bima-2026-x8f2k9";
+const FACE_MATCH_THRESHOLD = 0.45;
+const AMBIGUITY_MARGIN = 0.12;
+
+let scanPurpose = "self"; // "self" (storeman login) | "recipient" (scan end user pas serah terima)
+let projectCode = null;   // kode project (angka) hasil parsing Author, dipakai buat filter stok & site
+let accessList = [];      // hasil parsing kolom Author: [{role:'penerima', project:101}, ...]
+let qrCodeId = "";
+let refDescriptor = null;
+let allFaceData = null;
+let matchMode = "1:1";
+let matchedLocation = null;
+let matchedLat = null, matchedLng = null; // koordinat GPS mentah, disimpan buat report
+let currentFacingModeFace = "user"; // depan buat storeman login, diganti "environment" pas scan penerima
+
+let pendingKarId = null, pendingKarNama = "", pendingKarKualifikasi = "";
+let verifiedId = null, verifiedNama = "";       // storeman
+let verifiedQrCodeId = "";                      // snapshot QrCodeId storeman (qrCodeId global ke-overwrite pas scan penerima)
+let verifiedKualifikasi = "";                   // snapshot Kualifikasi storeman (dari karyawanTbl, sama alasannya kayak verifiedQrCodeId)
+let recipientId = null, recipientNama = "";     // end user yang nerima barang
+let recipientKualifikasi = "";                  // Kualifikasi end user (dari karyawanTbl)
+
+let materialList = [];
+let cart = [];
+let notesHandover = null;
+
+const locBanner = document.getElementById('locBanner');
+const resultBanner = document.getElementById('resultBanner');
+const matchInfoEl = document.getElementById('matchInfo');
+const statusEl = document.getElementById('status');
+const wrap = document.getElementById('wrap');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const qrGuide = document.getElementById('qrGuide');
+const btnScanFace = document.getElementById('btnScanFace');
+const btnSwitchFaceCam = document.getElementById('btnSwitchFaceCam');
+const faceGuideOval = document.getElementById('faceGuideOval');
+const faceGuideHint = document.getElementById('faceGuideHint');
+const btnRetry = document.getElementById('btnRetry');
+let qrScanning = false;
+
+// ============ FACE CACHE HELPERS (Sama persis seperti SmartGate Fusion4) ============
+const CACHE_KEY_FACES = "bima_cached_faces";
+
+async function getCachedFaces() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_FACES);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed.map(p => ({
+      qrCodeId: p.qrCodeId || p.qrcodeid,
+      nama: p.nama,
+      descriptor: new Float32Array(p.descriptor || p.facecode || [])
+    }));
+  } catch (e) {
+    console.warn("Gagal baca cache wajah:", e);
+    return null;
+  }
+}
+
+async function syncFaceCache() {
+  try {
+    const { data, error } = await supabaseClient.rpc('get_all_face_data');
+    if (error) throw error;
+    if (Array.isArray(data) && data.length > 0) {
+      localStorage.setItem(CACHE_KEY_FACES, JSON.stringify(data));
+      console.log(`✅ Cache wajah tersinkronisasi: ${data.length} personil`);
+    }
+  } catch (e) {
+    console.warn("Gagal sync cache wajah:", e.message);
+  }
+}
+
+
+function evaluateFaceBox(box) {
+  if (!video.videoWidth || !video.videoHeight) return { ok: true, reason: "Posisi bagus" };
+  const widthRatio = box.width / video.videoWidth;
+  const centerX = box.x + box.width / 2;
+  const centerY = box.y + box.height / 2;
+  const offsetX = Math.abs(centerX - video.videoWidth / 2) / video.videoWidth;
+  const offsetY = Math.abs(centerY - video.videoHeight / 2) / video.videoHeight;
+
+  if (widthRatio < 0.15) return { ok: false, reason: "Terlalu jauh, dekatkan wajah ke kamera" };
+  if (widthRatio > 0.95) return { ok: false, reason: "Terlalu dekat, jauhkan sedikit dari kamera" };
+  if (offsetX > 0.38 || offsetY > 0.38) return { ok: false, reason: "Posisikan wajah lebih ke tengah" };
+  return { ok: true, reason: "Posisi bagus" };
+}
+
+function withTimeout(promise, ms, timeoutMessage) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms))
+  ]);
+}
+
+
+function showBanner(el, text, kind) { el.style.display = "block"; el.className = "banner-" + kind; el.innerHTML = text; }
+function setStatus(text, kind) { statusEl.style.display = "block"; statusEl.className = kind || ""; statusEl.innerText = text; }
+function showRetry() { btnRetry.style.display = "block"; }
+btnRetry.onclick = () => location.reload();
+
+// ============ 1. Entry: verifikasi identitas (dipakai 2x -- storeman login, lalu scan penerima) ============
+document.getElementById('btnStartFaceFirst').onclick = async () => {
+  document.getElementById('entryCard').style.display = "none";
+  matchMode = "1:N";
+  await startFaceOnlyCapture();
+};
+
+document.getElementById('btnShowQrOption').onclick = () => {
+  document.getElementById('entryCard').style.display = "none";
+  document.getElementById('qrCard').style.display = "block";
+};
+
+let faceModelsLoaded = false;
+async function loadFaceModels() {
+  if (faceModelsLoaded) return;
+  try {
+    if (faceapi.tf && faceapi.tf.ENV) {
+      faceapi.tf.ENV.set('WEBGL_PACK', false);
+      faceapi.tf.ENV.set('WEBGL_CHECK_NUMERICAL_PROBLEMS', false);
+      faceapi.tf.ENV.set('WEBGL_FORCE_F16_TEXTURES', false);
+      faceapi.tf.enableProdMode();
+    }
+  } catch (e) {}
+  const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  faceModelsLoaded = true;
+  console.log('TF.js backend aktif:', faceapi.tf ? faceapi.tf.getBackend() : 'default');
+}
+
+async function startFaceOnlyCapture() {
+  setStatus("Memuat model wajah...", "info");
+  statusEl.style.display = "block";
+  try { 
+    await withTimeout(loadFaceModels(), 15000, "Timeout memuat model (15 detik). Coba refresh."); 
+  } catch (e) {
+    setStatus("❌ Gagal memuat model wajah: " + e.message, "fail"); showRetry(); return;
+  }
+
+  setStatus("Mengambil data wajah karyawan...", "info");
+  try {
+    allFaceData = await getCachedFaces();
+    if (!allFaceData || allFaceData.length === 0) {
+      const { data, error } = await supabaseClient.rpc('get_all_face_data');
+      if (error) throw error;
+      allFaceData = (data || []).map(p => ({
+        qrCodeId: p.qrCodeId || p.qrcodeid,
+        nama: p.nama,
+        descriptor: Array.isArray(p.descriptor) ? new Float32Array(p.descriptor) : (p.descriptor || p.facecode)
+      }));
+      localStorage.setItem(CACHE_KEY_FACES, JSON.stringify(data));
+    }
+  } catch (e) {
+    setStatus("❌ Gagal ambil data wajah: " + e.message, "fail"); showRetry(); return;
+  }
+  if (!allFaceData || allFaceData.length === 0) {
+    setStatus("❌ Belum ada data wajah terdaftar. Hubungi admin.", "fail"); showRetry(); return;
+  }
+  await openFaceCameraAndPrompt();
+}
+
+document.getElementById('btnStartQrScan').onclick = async () => {
+  document.getElementById('qrCard').style.display = "none";
+  matchMode = "1:1";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } });
+    video.srcObject = stream;
+    await video.play();
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    wrap.style.display = "block";
+    qrGuide.style.display = "block";
+    statusEl.style.display = "block";
+    setStatus("Arahkan QR badge ke kamera...", "info");
+    qrScanning = true;
+    scanQRLoop();
+  } catch (e) {
+    setStatus("❌ Gagal akses kamera: " + e.message, "fail");
+    showRetry();
+  }
+};
+
+async function scanQRLoop() {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  while (qrScanning) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+      if (code && code.data) {
+        qrScanning = false;
+        qrGuide.style.display = "none";
+        let raw = code.data.trim();
+        let extracted = raw;
+        try {
+          const url = new URL(raw);
+          const p = url.searchParams.get('QrCodeId') || url.searchParams.get('qrCodeId');
+          if (p) extracted = p;
+        } catch (e) { /* bukan URL, pakai apa adanya */ }
+        qrCodeId = extracted.trim().toUpperCase();
+        setStatus("✅ QR terbaca: " + qrCodeId, "ok");
+        await proceedWithQr();
+        return;
+      }
+    }
+    await new Promise(r => setTimeout(r, 120));
+  }
+}
+
+async function proceedWithQr() {
+  setStatus("Memuat model wajah...", "info");
+  try { await loadFaceModels(); } catch (e) {
+    setStatus("❌ Gagal memuat model wajah: " + e.message, "fail"); showRetry(); return;
+  }
+
+  setStatus("Mengambil data referensi wajah...", "info");
+  try {
+    const { data, error } = await supabaseClient.rpc('get_person_face_data', { p_qrcode: qrCodeId });
+    if (error) throw error;
+    if (!data || !data.valid || !data.hasFaceData || !data.descriptor) {
+      setStatus("❌ Wajah belum terdaftar untuk QR ini (" + qrCodeId + "). Hubungi admin.", "fail"); showRetry(); return;
+    }
+    refDescriptor = Array.isArray(data.descriptor) ? new Float32Array(data.descriptor) : data.descriptor;
+  } catch (e) {
+    setStatus("❌ Gagal ambil data wajah: " + e.message, "fail"); showRetry(); return;
+  }
+
+  try {
+    const { data: kar, error: karErr } = await supabaseClient.rpc('get_karyawan_by_qrcode', { p_qrcode: qrCodeId });
+    if (karErr) throw karErr;
+    const karRow = Array.isArray(kar) ? kar[0] : kar;
+    if (!karRow) { setStatus("❌ Karyawan tidak ditemukan untuk QR ini.", "fail"); showRetry(); return; }
+    pendingKarId = karRow.id;
+    pendingKarNama = karRow.nama;
+    pendingKarKualifikasi = karRow.kualifikasi || "";
+  } catch (e) {
+    setStatus("❌ Gagal ambil data karyawan: " + e.message, "fail"); showRetry(); return;
+  }
+
+  await openFaceCameraAndPrompt();
+}
+
+// ============ 3. Kamera wajah bersama (depan buat storeman, belakang buat scan penerima) ============
+async function ensureCameraStream(facingMode) {
+  if (video.srcObject) {
+    wrap.style.display = "block";
+    return;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+  });
+  video.srcObject = stream;
+  await video.play();
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  wrap.style.display = "block";
+}
+
+async function openFaceCameraAndPrompt() {
+  try {
+    await ensureCameraStream(currentFacingModeFace);
+  } catch (e) {
+    setStatus("❌ Gagal akses kamera wajah: " + e.message, "fail");
+    showRetry();
+    return;
+  }
+
+  setStatus("Posisikan wajah di dalam oval, lalu tekan Scan Wajah.", "info");
+  faceGuideOval.style.display = "block";
+  faceGuideHint.style.display = "block";
+  faceGuideHint.innerText = "Posisikan wajah di dalam oval, lalu tekan Scan Wajah";
+  btnScanFace.style.display = "block";
+  btnScanFace.disabled = false;
+  btnSwitchFaceCam.style.display = "block";
+}
+
+btnSwitchFaceCam.onclick = async () => {
+  currentFacingModeFace = currentFacingModeFace === "user" ? "environment" : "user";
+  if (video.srcObject) { 
+    video.srcObject.getTracks().forEach(t => t.stop()); 
+    video.srcObject = null; 
+  }
+  try {
+    await ensureCameraStream(currentFacingModeFace);
+    setStatus(`Kamera diganti ke: ${currentFacingModeFace === "user" ? "Depan" : "Belakang"}`, "info");
+  } catch (e) {
+    setStatus("❌ Gagal ganti kamera: " + e.message, "fail");
+  }
+};
+
+// ============ 4. Tekan Scan Wajah -- cabang 1:1 vs 1:N ============
+btnScanFace.onclick = async () => {
+  btnScanFace.disabled = true;
+  setStatus("Menyiapkan kamera...", "info");
+
+  // Pastikan frame video siap sebelum inferensi WebGL di iOS/Safari
+  let waitCount = 0;
+  while (video.readyState < video.HAVE_ENOUGH_DATA && waitCount < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    waitCount++;
+  }
+  if (video.readyState < video.HAVE_ENOUGH_DATA) {
+    setStatus("❌ Kamera belum siap (video belum ada frame). Coba lagi.", "fail");
+    btnScanFace.disabled = false;
+    return;
+  }
+
+  setStatus("Mendeteksi wajah...", "info");
+
+  let detection;
+  try {
+    const snapCanvas = document.createElement('canvas');
+    snapCanvas.width = video.videoWidth || 640;
+    snapCanvas.height = video.videoHeight || 480;
+    const snapCtx = snapCanvas.getContext('2d');
+    snapCtx.drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
+
+    const doInference = async () => {
+      return await faceapi
+        .detectSingleFace(snapCanvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+    };
+
+    try {
+      detection = await withTimeout(doInference(), 6000, "WebGL stall");
+    } catch (gpuErr) {
+      if (faceapi.tf && faceapi.tf.getBackend() !== 'cpu') {
+        await faceapi.tf.setBackend('cpu');
+        detection = await withTimeout(doInference(), 8000, "Timeout deteksi wajah.");
+      }
+    }
+  } catch (e) {
+    setStatus("❌ " + (e.message || "Gagal deteksi wajah. Coba lagi."), "fail");
+    btnScanFace.disabled = false;
+    return;
+  }
+
+  if (!detection) {
+    setStatus("❌ Wajah tidak terdeteksi. Posisikan wajah di dalam oval lalu coba lagi.", "fail");
+    btnScanFace.disabled = false;
+    return;
+  }
+
+  // Validasi posisi box wajah
+  let posCheck = evaluateFaceBox(detection.detection.box);
+  if (!posCheck.ok) {
+    setStatus(`❌ ${posCheck.reason}. Sesuaikan posisi lalu coba lagi.`, "fail");
+    btnScanFace.disabled = false;
+    return;
+  }
+
+  if (matchMode === "1:N") {
+    let sorted = allFaceData.map(p => {
+      const desc = p.descriptor || p.facecode;
+      const dist = desc ? faceapi.euclideanDistance(detection.descriptor, desc) : 999;
+      return {
+        qrcodeid: p.qrCodeId || p.qrcodeid,
+        nama: p.nama || p.namapersonnel || p.NamaPersonnel,
+        distance: dist
+      };
+    }).filter(p => !isNaN(p.distance) && p.distance < 900).sort((a, b) => a.distance - b.distance);
+
+    const best = sorted[0];
+    const secondBest = sorted[1];
+    const withinThreshold = best && best.distance <= FACE_MATCH_THRESHOLD;
+    const isAmbiguous = secondBest && (secondBest.distance - best.distance) < AMBIGUITY_MARGIN;
+
+    if (!withinThreshold) {
+      setStatus(`❌ Wajah tidak dikenali (jarak terdekat: ${best ? best.distance.toFixed(3) : '-'}). Coba lagi, atau pakai QR Code.`, "fail");
+      btnScanFace.disabled = false;
+      return;
+    }
+    if (isAmbiguous) {
+      setStatus(`⚠️ Wajah mirip lebih dari satu orang terdaftar. Demi keamanan, pakai QR Code untuk kepastian.`, "fail");
+      btnScanFace.disabled = false;
+      return;
+    }
+
+    qrCodeId = best.qrcodeid;
+    try {
+      const { data: kar, error: karErr } = await supabaseClient.rpc('get_karyawan_by_qrcode', { p_qrcode: qrCodeId });
+      if (karErr) throw karErr;
+      const karRow = Array.isArray(kar) ? kar[0] : kar;
+      if (!karRow) { setStatus("❌ Karyawan tidak ditemukan.", "fail"); btnScanFace.disabled = false; return; }
+      pendingKarId = karRow.id;
+      pendingKarNama = karRow.nama || karRow.namapersonnel || karRow.NamaPersonnel || best.nama || qrCodeId;
+      pendingKarKualifikasi = karRow.kualifikasi || "";
+    } catch (e) {
+      setStatus("❌ Gagal ambil data karyawan: " + e.message, "fail");
+      btnScanFace.disabled = false;
+      return;
+    }
+
+    finalizeVerification();
+    return;
+  }
+
+  const distance = faceapi.euclideanDistance(detection.descriptor, refDescriptor);
+  if (distance > FACE_MATCH_THRESHOLD) {
+    setStatus("❌ Wajah tidak cocok (jarak: " + distance.toFixed(3) + "). Coba lagi.", "fail");
+    btnScanFace.disabled = false;
+    return;
+  }
+  finalizeVerification();
+};
+
+function finalizeVerification() {
+  setStatus("✅ Wajah cocok!", "ok");
+  faceGuideOval.style.display = "none";
+  faceGuideHint.style.display = "none";
+  btnScanFace.style.display = "none";
+  btnSwitchFaceCam.style.display = "none";
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
+  wrap.style.display = "none";
+  statusEl.style.display = "none";
+
+  if (scanPurpose === "self") {
+    verifiedId = pendingKarId;
+    verifiedNama = pendingKarNama;
+    verifiedQrCodeId = qrCodeId;
+    verifiedKualifikasi = pendingKarKualifikasi;
+    matchInfoEl.style.display = "block";
+    matchInfoEl.innerHTML = `✅ Terverifikasi: ${verifiedNama}`;
+    resolveAccessAndProceed();
+  } else {
+    recipientId = pendingKarId;
+    recipientNama = pendingKarNama;
+    recipientKualifikasi = pendingKarKualifikasi;
+    submitHandover();
+  }
+}
+
+// ============ 5. Cek Author (dari paswordTbl, lewat RPC) -- cuma tag "Penerima barang <project>" yang dipakai ============
+async function resolveAccessAndProceed() {
+  setStatus("Mengecek hak akses...", "info");
+  statusEl.style.display = "block";
+  try {
+    const { data: authorStr, error } = await supabaseClient.rpc('get_author_by_karyawan_id', { p_id: verifiedId });
+    if (error) throw error;
+
+    accessList = parsePicAccess(authorStr);
+    statusEl.style.display = "none";
+
+    if (accessList.length === 0) {
+      showBanner(resultBanner, `🔴 ${verifiedNama} tidak terdaftar sebagai Penerima/Storeman barang. Hubungi admin untuk mengatur akses (kolom "Author").`, "fail");
+      showRetry();
+      return;
+    }
+
+    if (accessList.length === 1) {
+      proceedWithAccess(accessList[0]);
+      return;
+    }
+
+    // lebih dari 1 project -- biar storeman pilih mau jalan buat project yang mana
+    const accessCard = document.getElementById('accessCard');
+    const listWrap = document.getElementById('accessListWrap');
+    listWrap.innerHTML = '';
+    accessList.forEach(acc => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-block btn-primary';
+      btn.textContent = '📦 Storeman — Project ' + acc.project;
+      btn.onclick = () => { accessCard.style.display = "none"; proceedWithAccess(acc); };
+      listWrap.appendChild(btn);
+    });
+    accessCard.style.display = "block";
+  } catch (e) {
+    statusEl.style.display = "none";
+    showBanner(resultBanner, "🔴 Gagal mengecek hak akses: " + e.message, "fail");
+    showRetry();
+  }
+}
+
+// Parsing kolom "Author" -- cuma pola "Penerima barang <kode>" yang relevan di halaman ini
+// (tag lain kayak "Approval Request 101" atau "Pengirim barang 101" diabaikan).
+function parsePicAccess(authorStr) {
+  if (!authorStr) return [];
+  const parts = String(authorStr).split(',').map(s => s.trim()).filter(Boolean);
+  const result = [];
+  parts.forEach(p => {
+    const m = p.match(/^penerima\s+barang\s+(\d+)$/i);
+    if (m) result.push({ role: 'penerima', project: Number(m[1]) });
+  });
+  return result;
+}
+
+function proceedWithAccess(acc) {
+  projectCode = acc.project;
+  matchInfoEl.innerHTML = `✅ Storeman: ${verifiedNama} (Project ${projectCode})`;
+  initGPS(); // wajib GPS -- storeman harus di site buat serah terima barang
+}
+
+// ============ GPS + cari lokasi terdekat ============
+async function initGPS() {
+  if (!navigator.geolocation) {
+    showBanner(locBanner, "❌ Browser tidak mendukung GPS.", "fail");
+    return;
+  }
+  showBanner(locBanner, "📍 Mengunci lokasi GPS...", "info");
+
+  let pos = null;
+  const getGeo = (opts) => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, opts));
+
+  try {
+    pos = await getGeo({ enableHighAccuracy: true, timeout: 7000, maximumAge: 30000 });
+  } catch (e1) {
+    try {
+      pos = await getGeo({ enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 });
+    } catch (e2) {
+      showBanner(locBanner, "🔴 Gagal ambil GPS. Aktifkan GPS/WiFi di HP.", "fail");
+      showRetry();
+      return;
+    }
+  }
+
+  const lat = pos.coords.latitude, lng = pos.coords.longitude;
+  matchedLat = lat; matchedLng = lng;
+  showBanner(locBanner, "🔄 GPS terkunci. Mencari lokasi terdekat...", "info");
+  try {
+    const { data, error } = await supabaseClient.rpc('find_nearest_location', { p_lat: lat, p_lng: lng });
+    if (error) throw error;
+    const loc = Array.isArray(data) ? data[0] : data;
+    const isInside = loc && (loc.IsInsideRadius !== undefined ? loc.IsInsideRadius : !!loc.isinsideradius);
+    const namaLokasi = loc ? (loc.NamaLokasi || loc.namalokasi || 'Unmapped') : '';
+    const dist = loc ? (loc.Distance !== undefined ? loc.Distance : loc.distance) : 0;
+
+    if (!loc || !isInside) {
+      showBanner(locBanner, "🔴 Di luar area site terdaftar" + (namaLokasi ? " (" + namaLokasi + ")" : "") + ".", "fail");
+      showRetry();
+      return;
+    }
+    matchedLocation = { namalokasi: namaLokasi, ...loc };
+    showBanner(locBanner, `🟢 Lokasi: ${namaLokasi} (jarak ${Math.round(dist)}m)`, "ok");
+    document.getElementById('materialCard').style.display = "block";
+    await loadAvailableMaterial(projectCode);
+  } catch (e) {
+    showBanner(locBanner, "🔴 Gagal cek lokasi: " + e.message, "fail");
+    showRetry();
+  }
+}
+
+// ============ helper: daftar POID yang termasuk project tertentu ============
+// request (PROJECTID) -> rfqDetail (RequestID -> RFQID) -> purchaseOrder (RFQID)
+async function getProjectPOIds(projCode) {
+  const { data: reqRows, error: reqErr } = await supabaseClient.from('request').select('ID').eq('PROJECTID', projCode);
+  if (reqErr) throw reqErr;
+  const requestIds = (reqRows || []).map(r => r.ID);
+  if (requestIds.length === 0) return [];
+
+  const { data: rfqDetailRows, error: rfqDetErr } = await supabaseClient.from('rfqDetail').select('RFQID').in('RequestID', requestIds);
+  if (rfqDetErr) throw rfqDetErr;
+  const rfqIds = [...new Set((rfqDetailRows || []).map(r => r.RFQID).filter(Boolean))];
+  if (rfqIds.length === 0) return [];
+
+  const { data: poRows, error: poErr } = await supabaseClient.from('purchaseOrder').select('POID').in('RFQID', rfqIds);
+  if (poErr) throw poErr;
+  return (poRows || []).map(p => p.POID);
+}
+
+// ============ 6. Stok material tersedia di site ini (siteReceiving dikurangi endUserReceiving) ============
+async function loadAvailableMaterial(projCode) {
+  document.getElementById('materialSiteLabel').textContent = matchedLocation ? matchedLocation.namalokasi : '-';
+  const resultsEl = document.getElementById('materialResults');
+  resultsEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Memuat daftar material...</p>';
+  materialList = [];
+  try {
+    const projectPoIds = await getProjectPOIds(projCode);
+    if (projectPoIds.length === 0) { resultsEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Tidak ada PO/SO untuk project ini.</p>'; return; }
+
+    const { data: deliveries, error: delErr } = await supabaseClient
+      .from('delivery').select('DeliveryID, PODetailID')
+      .eq('DestinationSite', matchedLocation ? matchedLocation.namalokasi : '__none__')
+      .in('POID', projectPoIds);
+    if (delErr) throw delErr;
+    const deliveryIds = (deliveries || []).map(d => d.DeliveryID);
+    const podetailByDelivery = {};
+    (deliveries || []).forEach(d => podetailByDelivery[d.DeliveryID] = d.PODetailID);
+    if (deliveryIds.length === 0) { resultsEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Belum ada barang yang diterima di site ini.</p>'; return; }
+
+    const { data: siteRecv, error: srErr } = await supabaseClient.from('siteReceiving').select('ReceivingID, DeliveryID, QtyReceived').in('DeliveryID', deliveryIds);
+    if (srErr) throw srErr;
+    const receivingIds = (siteRecv || []).map(r => r.ReceivingID);
+    if (receivingIds.length === 0) { resultsEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Belum ada barang yang diterima di site ini.</p>'; return; }
+
+    const { data: euRows, error: euErr } = await supabaseClient.from('endUserReceiving').select('ReceivingID, QtyConfirmed').in('ReceivingID', receivingIds);
+    if (euErr) throw euErr;
+    const confirmedMap = {};
+    (euRows || []).forEach(r => confirmedMap[r.ReceivingID] = (confirmedMap[r.ReceivingID] || 0) + Number(r.QtyConfirmed || 0));
+
+    const withSisa = (siteRecv || []).map(r => ({
+      ReceivingID: r.ReceivingID,
+      PODetailID: podetailByDelivery[r.DeliveryID],
+      sisa: Number(r.QtyReceived || 0) - (confirmedMap[r.ReceivingID] || 0)
+    })).filter(r => r.sisa > 0 && r.PODetailID);
+
+    if (withSisa.length === 0) { resultsEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Stok site kosong (semua sudah diserahkan).</p>'; return; }
+
+    const grouped = {};
+    withSisa.forEach(r => {
+      if (!grouped[r.PODetailID]) grouped[r.PODetailID] = { PODetailID: r.PODetailID, total: 0, breakdown: [] };
+      grouped[r.PODetailID].total += r.sisa;
+      grouped[r.PODetailID].breakdown.push({ ReceivingID: r.ReceivingID, sisa: r.sisa });
+    });
+    Object.values(grouped).forEach(g => g.breakdown.sort((a, b) => a.ReceivingID - b.ReceivingID));
+
+    // ItemGroup + ItemID sekarang udah didenormalisasi langsung di purchaseOrderDetail (lewat trigger
+    // di database), jadi tinggal select 1 kali aja -- gak perlu join manual ke rfqDetail/request lagi.
+    const podetailIds = Object.keys(grouped).map(Number);
+    const { data: details, error: detErr } = await supabaseClient.from('purchaseOrderDetail').select('PODetailID, ItemDescription, Unit, ItemGroup, ItemID').in('PODetailID', podetailIds);
+    if (detErr) throw detErr;
+    (details || []).forEach(d => {
+      if (grouped[d.PODetailID]) {
+        grouped[d.PODetailID].ItemDescription = d.ItemDescription;
+        grouped[d.PODetailID].Unit = d.Unit;
+        grouped[d.PODetailID].ItemGroup = d.ItemGroup || 'Lainnya';
+        grouped[d.PODetailID].ItemID = d.ItemID;
+      }
+    });
+
+    materialList = Object.values(grouped).filter(g => g.ItemDescription);
+    renderMaterialList('');
+  } catch (e) {
+    showBanner(resultBanner, "🔴 Gagal memuat daftar material: " + e.message, "fail");
+  }
+}
+
+document.getElementById('materialSearch').addEventListener('input', (e) => renderMaterialList(e.target.value));
+
+// singkatan per ItemGroup buat kode item yang gak ambigu kalau disebutin/ditulis di lapangan
+// (ID di tabel katalog kayak consumables/material/tools cuma unik DI DALAM tabelnya masing-masing,
+// jadi kodenya digabung: "CONS-42", "MAT-15", dst -- bukan cuma angka polos).
+function groupPrefix(group) {
+  if (!group) return 'ITEM';
+  const known = {
+    consumables: 'CONS', consumable: 'CONS',
+    material: 'MAT', materials: 'MAT',
+    tools: 'TOOL', tool: 'TOOL',
+    heavyequipment: 'HE',
+    serviceorder: 'SO'
+  };
+  const key = String(group).toLowerCase().replace(/\s+/g, '');
+  if (known[key]) return known[key];
+  const letters = String(group).replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase();
+  return letters || 'ITEM';
+}
+function itemCode(m) {
+  return m.ItemID != null ? `${groupPrefix(m.ItemGroup)}-${m.ItemID}` : null;
+}
+
+// tampilan stok dikelompokkan per ItemGroup (Material/Consumables/Tools/dst), tiap item nunjukin
+// kode "GROUP-ID"-nya biar gampang diidentifikasi & disebutin di lapangan pas milih barang.
+function renderMaterialList(filterQuery) {
+  const resultsEl = document.getElementById('materialResults');
+  if (materialList.length === 0) {
+    resultsEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Stok site kosong.</p>';
+    return;
+  }
+
+  const q = (filterQuery || '').trim().toLowerCase();
+  const filtered = q
+    ? materialList.filter(m => (m.ItemDescription || '').toLowerCase().includes(q) || (itemCode(m) && itemCode(m).toLowerCase().includes(q)))
+    : materialList;
+
+  if (filtered.length === 0) {
+    resultsEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Tidak ada item yang cocok.</p>';
+    return;
+  }
+
+  const byGroup = {};
+  filtered.forEach(m => {
+    const g = m.ItemGroup || 'Lainnya';
+    if (!byGroup[g]) byGroup[g] = [];
+    byGroup[g].push(m);
+  });
+
+  resultsEl.innerHTML = '';
+  Object.keys(byGroup).sort().forEach(groupName => {
+    const header = document.createElement('p');
+    header.style.cssText = 'font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--steel-light); margin:14px 0 6px;';
+    header.textContent = groupName;
+    resultsEl.appendChild(header);
+
+    byGroup[groupName].forEach(m => {
+      const row = document.createElement('div');
+      row.className = 'pending-card';
+      row.style.cursor = 'pointer';
+      const code = itemCode(m);
+      row.innerHTML = `<h4>${code ? '[' + code + '] ' : ''}${m.ItemDescription}</h4><p>Tersedia: ${m.total} ${m.Unit || ''}</p>`;
+      row.onclick = () => addToCart(m);
+      resultsEl.appendChild(row);
+    });
+  });
+}
+
+// ============ 7. Cart -- daftar barang yang mau diserahkan (bisa lebih dari 1 item) ============
+function addToCart(material) {
+  if (cart.find(c => c.PODetailID === material.PODetailID)) {
+    showBanner(resultBanner, "🟡 Item ini udah ada di daftar serah terima.", "warn");
+    return;
+  }
+  cart.push({ PODetailID: material.PODetailID, ItemDescription: material.ItemDescription, ItemGroup: material.ItemGroup, ItemID: material.ItemID, Unit: material.Unit, total: material.total, breakdown: material.breakdown, qty: 0 });
+  renderCart();
+}
+
+function renderCart() {
+  const wrapEl = document.getElementById('cartWrap');
+  if (cart.length === 0) { wrapEl.innerHTML = ''; return; }
+  let rowsHtml = '';
+  cart.forEach((c, idx) => {
+    const code = itemCode(c);
+    rowsHtml += `
+      <tr data-idx="${idx}" data-total="${c.total}">
+        <td>${code ? '[' + code + '] ' : ''}${c.ItemDescription}</td>
+        <td style="text-align:center;">${c.total} ${c.Unit || ''}</td>
+        <td>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <input type="number" class="input-qty-cart" min="0" max="${c.total}" step="1" value="${c.qty || ''}" placeholder="0">
+            <input type="checkbox" class="chk-qty-all-cart" title="Serahkan semua (qty = tersedia)" style="width:18px; height:18px; flex-shrink:0;" ${c.qty === c.total && c.total > 0 ? 'checked' : ''}>
+            <button type="button" class="btn-remove-cart" style="background:none;border:none;color:var(--danger);font-size:18px;padding:0 4px;">×</button>
+          </div>
+        </td>
+      </tr>`;
+  });
+  wrapEl.innerHTML = `
+    <table class="item-table">
+      <thead><tr><th>Item</th><th>Tersedia</th><th>Qty Serahkan</th></tr></thead>
+      <tbody id="cartBody">${rowsHtml}</tbody>
+    </table>`;
+
+  wrapEl.querySelectorAll('#cartBody tr').forEach(tr => {
+    const idx = Number(tr.dataset.idx);
+    const total = Number(tr.dataset.total);
+    const qtyInput = tr.querySelector('.input-qty-cart');
+    const chk = tr.querySelector('.chk-qty-all-cart');
+    qtyInput.addEventListener('input', () => { cart[idx].qty = Number(qtyInput.value) || 0; });
+    chk.addEventListener('change', () => {
+      if (chk.checked) { qtyInput.value = total; qtyInput.readOnly = true; cart[idx].qty = total; }
+      else { qtyInput.readOnly = false; qtyInput.value = ''; cart[idx].qty = 0; }
+    });
+    tr.querySelector('.btn-remove-cart').onclick = () => { cart.splice(idx, 1); renderCart(); };
+  });
+}
+
+// ============ 8. Serah Terima -- validasi cart, lalu pindah ke fase scan penerima (kamera belakang) ============
+document.getElementById('btnSerahTerima').onclick = () => {
+  const validRows = cart.filter(c => c.qty > 0);
+  if (validRows.length === 0) { showBanner(resultBanner, "🔴 Isi minimal 1 qty yang mau diserahkan.", "fail"); return; }
+  for (const c of validRows) {
+    if (c.qty > c.total) { showBanner(resultBanner, `🔴 Qty untuk ${c.ItemDescription} tidak boleh lebih dari tersedia (${c.total}).`, "fail"); return; }
+  }
+  notesHandover = document.getElementById('handoverNotes').value || null;
+
+  document.getElementById('materialCard').style.display = "none";
+  scanPurpose = "recipient";
+  currentFacingModeFace = "environment";
+  document.getElementById('entryCardLabel').textContent = "Verifikasi Penerima Barang (arahkan kamera belakang ke penerima)";
+  document.getElementById('entryCard').style.display = "block";
+};
+
+// ============ 9. Setelah penerima terverifikasi -- alokasikan qty ke siteReceiving (FIFO), simpan ke endUserReceiving ============
+async function submitHandover() {
+  setStatus("Menyimpan serah terima...", "info");
+  statusEl.style.display = "block";
+  try {
+    const payload = [];
+    for (const item of cart) {
+      if (!item.qty || item.qty <= 0) continue;
+      let remaining = item.qty;
+      for (const b of item.breakdown) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, b.sisa);
+        if (take > 0) {
+          payload.push({ ReceivingID: b.ReceivingID, QtyConfirmed: take, ConfirmedBy: recipientId, IssuedBy: verifiedId, Notes: notesHandover });
+          remaining -= take;
+        }
+      }
+      if (remaining > 0) throw new Error(`Sisa stok tidak cukup untuk ${item.ItemDescription} (kemungkinan diambil orang lain barusan). Coba muat ulang halaman.`);
+    }
+
+    if (payload.length === 0) throw new Error("Tidak ada item yang valid buat diserahkan.");
+
+    // No Transaksi -- satu nomor buat seluruh baris dalam transaksi (1x serah terima) ini
+    setStatus("Membuat No. Transaksi...", "info");
+    const { data: noTrx, error: noTrxErr } = await supabaseClient.rpc('generate_no_transaksi_eur');
+    if (noTrxErr) throw noTrxErr;
+
+    // Foto opsional -- kalau diisi, dikompres sekali (dipakai buat upload Drive & tempel ke PDF)
+    const photoFile = document.getElementById('handoverPhoto').files[0];
+    let photoURL = null, photoFileID = null, photoDataUrl = null;
+    if (photoFile) {
+      setStatus("Mengompres foto...", "info");
+      const { compressedBlob, dataUrl } = await compressImageForReport(photoFile);
+      photoDataUrl = dataUrl;
+      setStatus("Mengupload foto...", "info");
+      const uploaded = await uploadToDrive("photos", `EUR_${noTrx.replace(/\//g, '-')}.jpg`, "image/jpeg", compressedBlob);
+      photoURL = uploaded.directUrl;
+      photoFileID = uploaded.fileId;
+    }
+
+    payload.forEach(p => {
+      p.NoTransaksi = noTrx;
+      p.PhotoURL = photoURL;
+      p.PhotoFileID = photoFileID;
+      p.LokasiNama = matchedLocation ? matchedLocation.namalokasi : null;
+      p.Latitude = matchedLat;
+      p.Longitude = matchedLng;
+    });
+
+    setStatus("Menyimpan serah terima...", "info");
+    const { error } = await supabaseClient.from('endUserReceiving').insert(payload);
+    if (error) throw error;
+
+    statusEl.style.display = "none";
+    const summary = cart.filter(c => c.qty > 0).map(c => { const code = itemCode(c); return `${code ? '[' + code + '] ' : ''}${c.ItemDescription} — ${c.qty} ${c.Unit || ''}`; }).join('<br>');
+    showBanner(resultBanner, `✅ Barang berhasil diserahkan ke <strong>${recipientNama}</strong> oleh storeman ${verifiedNama}:<br>${summary}`, "ok");
+
+    // Generate & upload report PDF -- dibungkus try/catch sendiri: kalau ini gagal, serah
+    // terimanya TETAP TERSIMPAN (udah di-insert di atas), cuma reportnya aja yang gak kebuat.
+    try {
+      const items = cart.filter(c => c.qty > 0).map(c => ({
+        kode: itemCode(c) || (c.ItemGroup || ''),
+        desk: c.ItemDescription,
+        qty: c.qty,
+        unit: c.Unit || '',
+      }));
+      const pdfDoc = await generateEndUserReceivingReportPdf({
+        noTransaksi: noTrx,
+        tanggalSerahTerima: new Date().toLocaleString('id-ID'),
+        projectId: projectCode,
+        diserahkanOleh: verifiedNama,
+        diserahkanOlehSub: (verifiedKualifikasi || 'Storeman') + ' — ' + (matchedLocation ? matchedLocation.namalokasi : '-'),
+        diserahkanOlehQr: `QrCodeID=${verifiedQrCodeId}|NoTransaksi=${noTrx}`,
+        diterimaOleh: recipientNama,
+        diterimaOlehSub: recipientKualifikasi || 'End User',
+        diterimaOlehQr: `QrCodeID=${qrCodeId}|NoTransaksi=${noTrx}`,
+        lokasiNama: matchedLocation ? matchedLocation.namalokasi : null,
+        items,
+        photoDataUrl,
+      });
+      const pdfBlob = reportPdfToBlob(pdfDoc);
+      const uploadedPdf = await uploadReportPdfToDrive(pdfBlob, `EUR_${noTrx.replace(/\//g, '-')}.pdf`);
+      await supabaseClient.from('endUserReceiving').update({ ReportURL: uploadedPdf.directUrl, ReportFileID: uploadedPdf.fileId }).eq('NoTransaksi', noTrx);
+
+      // Update Status Request terkait menjadi 'Selesai (Diterima End User)'
+      try {
+        const recvIds = [...new Set(payload.map(p => p.ReceivingID).filter(Boolean))];
+        if (recvIds.length > 0) {
+          const { data: srRows } = await supabaseClient.from('siteReceiving').select('DeliveryID').in('ReceivingID', recvIds);
+          const delIds = [...new Set((srRows || []).map(r => r.DeliveryID).filter(Boolean))];
+          if (delIds.length > 0) {
+            const { data: delRows } = await supabaseClient.from('delivery').select('PODetailID').in('DeliveryID', delIds);
+            const podIds = [...new Set((delRows || []).map(r => r.PODetailID).filter(Boolean))];
+            if (podIds.length > 0) {
+              const { data: podRows } = await supabaseClient.from('purchaseOrderDetail').select('RFQDetailID').in('PODetailID', podIds);
+              const rfqDetIds = [...new Set((podRows || []).map(r => r.RFQDetailID).filter(Boolean))];
+              if (rfqDetIds.length > 0) {
+                const { data: rfqDetRows } = await supabaseClient.from('rfqDetail').select('RequestID').in('RFQDetailID', rfqDetIds);
+                const reqIds = [...new Set((rfqDetRows || []).map(r => r.RequestID).filter(Boolean))];
+                if (reqIds.length > 0) {
+                  await supabaseClient.from('request').update({ Status: 'Selesai (Diterima End User)' }).in('ID', reqIds);
+                  const { data: reqRows } = await supabaseClient.from('request').select('RefNo').in('ID', reqIds);
+                  const affectedRefNos = [...new Set((reqRows || []).map(r => r.RefNo).filter(Boolean))];
+                  for (const rNo of affectedRefNos) {
+                    if (typeof refreshRequestReportPdf === 'function') {
+                      refreshRequestReportPdf(rNo, 'Selesai (Diterima End User)').catch(e => console.warn('Refresh request report on EUR failed:', e));
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (eurErr) {
+        console.warn('Gagal update status request di End User Receiving:', eurErr);
+      }
+    } catch (reportErr) {
+      console.warn('Gagal membuat/upload report PDF:', reportErr);
+      showBanner(resultBanner, `✅ Serah terima tersimpan, tapi report PDF gagal dibuat: ${reportErr.message}`, "ok");
+    }
+
+    cart = [];
+    document.getElementById('handoverNotes').value = '';
+    document.getElementById('handoverPhoto').value = '';
+    document.getElementById('materialSearch').value = '';
+    scanPurpose = "self";
+    currentFacingModeFace = "user";
+    document.getElementById('materialCard').style.display = "block";
+    await loadAvailableMaterial(projectCode);
+  } catch (e) {
+    statusEl.style.display = "none";
+    showBanner(resultBanner, "🔴 Gagal menyimpan serah terima: " + e.message, "fail");
+  }
+}
+</script>
+<script>
+if (navigator.onLine) {
+  syncFaceCache().catch(err => console.warn("Sync cache wajah gagal:", err));
+}
+</script>
+</body>
+</html>

@@ -1333,6 +1333,12 @@ async function approveRequest(refno) {
   if (!confirm(`Setujui Request ${refno}?`)) return;
   try {
     let rpcSuccess = false;
+    let isReviewLevel = false;
+
+    const { data: currAppr } = await supabaseClient.from('request_approval').select('*').eq('RefNo', refno).maybeSingle();
+    if (!currAppr) throw new Error('Data request approval tidak ditemukan.');
+    isReviewLevel = String(currAppr.CurrentLevel || '').toLowerCase() === 'review';
+
     try {
       const { error: rpcErr } = await supabaseClient.rpc('process_approval', {
         p_refno: refno, p_karyawan_id: currentUser.id, p_decision: 'Approve', p_reason: null
@@ -1343,18 +1349,14 @@ async function approveRequest(refno) {
     }
 
     if (!rpcSuccess) {
-      const { data: currAppr } = await supabaseClient.from('request_approval').select('*').eq('RefNo', refno).maybeSingle();
-      if (!currAppr) throw new Error('Data request approval tidak ditemukan.');
-
-      const isReview = String(currAppr.CurrentLevel || '').toLowerCase() === 'review';
-      if (isReview) {
+      if (isReviewLevel) {
         await supabaseClient.from('request_approval').update({
           CurrentLevel: 'Approval',
           ReviewedBy: String(currentUser.id),
           ReviewedAt: new Date().toISOString()
         }).eq('RefNo', refno);
         await supabaseClient.from('request').update({
-          Status: 'Menunggu Approval Akhir'
+          Status: 'Menunggu Approval Direktur'
         }).eq('RefNo', refno);
       } else {
         await supabaseClient.from('request_approval').update({
@@ -1363,10 +1365,13 @@ async function approveRequest(refno) {
           ApprovedAt: new Date().toISOString()
         }).eq('RefNo', refno);
         await supabaseClient.from('request').update({
-          Status: 'Approved'
+          Status: 'Disetujui'
         }).eq('RefNo', refno);
       }
     }
+
+    const nextStatus = isReviewLevel ? 'Menunggu Approval Direktur' : 'Disetujui';
+    refreshRequestReportPdf(refno, nextStatus).catch(e => console.warn('Gagal refresh PDF request report:', e));
 
     showToast(`Request ${refno} berhasil disetujui!`, 'success');
     loadApprovalList();
@@ -1401,9 +1406,11 @@ async function rejectRequest(refno) {
         RejectReason: reason
       }).eq('RefNo', refno);
       await supabaseClient.from('request').update({
-        Status: 'Rejected'
+        Status: 'Ditolak'
       }).eq('RefNo', refno);
     }
+
+    refreshRequestReportPdf(refno, 'Ditolak').catch(e => console.warn('Gagal refresh PDF request report:', e));
 
     showToast(`Request ${refno} ditolak.`, 'success');
     loadApprovalList();
@@ -1889,7 +1896,14 @@ async function submitRFQ() {
       });
       const rfqPdfBlob = reportPdfToBlob(rfqPdfDoc);
       const uploadedRfqPdf = await uploadReportPdfToDrive(rfqPdfBlob, `RFQ_${String(noRfqForReport).replace(/\//g, '-')}.pdf`);
-      await supabaseClient.from('rfq').update({ ReportURL: uploadedRfqPdf.directUrl, ReportFileID: uploadedRfqPdf.fileId }).eq('RFQID', rfqIdForReport);
+      await supabaseClient.from('rfq').update({ ReportURL: uploadedRfqPdf.directUrl, ReportFileID: uploadedRfqPdf.fileId, Status: 'Menunggu Penawaran Vendor' }).eq('RFQID', rfqIdForReport);
+
+      // Update status item request terkait menjadi 'Dalam Proses RFQ' dan refresh PDF-nya
+      await supabaseClient.from('request').update({ Status: 'Dalam Proses RFQ' }).in('ID', requestIds);
+      const affectedRefNos = [...new Set((reqRowsForReport || []).map(r => r.RefNo).filter(Boolean))];
+      for (const rNo of affectedRefNos) {
+        refreshRequestReportPdf(rNo, 'Dalam Proses RFQ').catch(e => console.warn('Refresh request report on RFQ creation failed:', e));
+      }
     } catch (reportErr) {
       console.warn('Gagal membuat/upload report PDF RFQ:', reportErr);
     }
@@ -2308,16 +2322,25 @@ async function loadApprovalRfqPage() {
 async function approveVendorSelection(rfqVendorId) {
   if (!confirm('Approve vendor ini sebagai pemenang RFQ?')) return;
   try {
+    const approverName = currentUser?.nama || currentUser?.Name || currentUser?.Username || 'Direktur';
+    const { data: rvRow } = await supabaseClient.from('rfqVendor').select('RFQID').eq('RFQVendorID', rfqVendorId).maybeSingle();
+
     const { error } = await supabaseClient
       .from('rfqVendor')
       .update({
         Status: 'Approved',
         ManagementApproval: 'Approved',
-        ManagementApprovalBy: currentUser?.Name || currentUser?.Username || 'System',
+        ManagementApprovalBy: approverName,
         ManagementApprovalDate: new Date().toISOString()
       })
       .eq('RFQVendorID', rfqVendorId);
     if (error) throw error;
+
+    if (rvRow && rvRow.RFQID) {
+      await supabaseClient.from('rfqVendor').update({ Status: 'Tidak Terpilih' }).eq('RFQID', rvRow.RFQID).neq('RFQVendorID', rfqVendorId);
+      await supabaseClient.from('rfq').update({ Status: 'Seleksi Vendor Disetujui' }).eq('RFQID', rvRow.RFQID);
+    }
+
     showToast('Vendor berhasil di-approve.', 'success');
 
     sendRfqApprovalEmailToVendor(rfqVendorId).catch(e => console.warn('Gagal kirim email hasil seleksi ke vendor:', e.message));
@@ -2551,16 +2574,38 @@ async function loadApprovalPoPage() {
 async function approvePo(poId) {
   if (!confirm('Approve PO/SO ini?')) return;
   try {
+    const approverName = currentUser?.nama || currentUser?.Username || 'Direktur';
     const { error } = await supabaseClient
       .from('purchaseOrder')
       .update({
         Status: 'Approved',
         ManagementApproval: 'Approved',
-        ManagementApprovalBy: currentUser?.nama || currentUser?.Username || 'System',
+        ManagementApprovalBy: approverName,
         ManagementApprovalDate: new Date().toISOString()
       })
       .eq('POID', poId);
     if (error) throw error;
+
+    // Update status RFQ dan Request terkait menjadi 'PO Diterbitkan' serta refresh PDF Request
+    try {
+      const { data: poRow } = await supabaseClient.from('purchaseOrder').select('RFQID').eq('POID', poId).maybeSingle();
+      if (poRow && poRow.RFQID) {
+        await supabaseClient.from('rfq').update({ Status: 'PO Diterbitkan' }).eq('RFQID', poRow.RFQID);
+        const { data: rfqDetails } = await supabaseClient.from('rfqDetail').select('RequestID').eq('RFQID', poRow.RFQID);
+        const reqIds = [...new Set((rfqDetails || []).map(d => d.RequestID).filter(Boolean))];
+        if (reqIds.length > 0) {
+          await supabaseClient.from('request').update({ Status: 'PO Diterbitkan' }).in('ID', reqIds);
+          const { data: reqRows } = await supabaseClient.from('request').select('RefNo').in('ID', reqIds);
+          const affectedRefNos = [...new Set((reqRows || []).map(r => r.RefNo).filter(Boolean))];
+          for (const rNo of affectedRefNos) {
+            refreshRequestReportPdf(rNo, 'PO Diterbitkan').catch(e => console.warn('Refresh request report on PO approval failed:', e));
+          }
+        }
+      }
+    } catch (linkErr) {
+      console.warn('Gagal update status rfq/request terkait PO:', linkErr);
+    }
+
     showToast('PO/SO berhasil di-approve.', 'success');
     loadApprovalPoPage();
 

@@ -13,6 +13,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="driveBridge.js"></script>
+<script src="reportPdf.js"></script>
 <style>
   :root {
     --bg: #F4EFE9; --orange: #E8562C; --orange-dark: #C23F1B; --gold: #F2A93B;
@@ -1246,8 +1248,8 @@ async function submitPin() {
         console.warn('RPC process_rfq_approval_by_qrcode error:', rpcErr);
       }
 
+      const approverName = (window.currentBadgeData && window.currentBadgeData.nama) || 'Direktur';
       if (!rpcSuccess) {
-        const approverName = (window.currentBadgeData && window.currentBadgeData.nama) || 'Direktur';
         const { error: updErr } = await supabaseClient
           .from('rfqVendor')
           .update({
@@ -1261,8 +1263,20 @@ async function submitPin() {
         if (updErr) throw updErr;
       }
 
-      if (decision === 'Approve' && extra && extra.vendoremail) {
-        sendRfqApprovalEmail(extra).catch(e => console.warn('Gagal kirim email hasil seleksi ke vendor:', e.message));
+      if (decision === 'Approve') {
+        try {
+          const { data: rvRow } = await supabaseClient.from('rfqVendor').select('RFQID').eq('RFQVendorID', Number(rfqVendorId)).maybeSingle();
+          if (rvRow && rvRow.RFQID) {
+            await supabaseClient.from('rfqVendor').update({ Status: 'Tidak Terpilih' }).eq('RFQID', rvRow.RFQID).neq('RFQVendorID', Number(rfqVendorId));
+            await supabaseClient.from('rfq').update({ Status: 'Seleksi Vendor Disetujui' }).eq('RFQID', rvRow.RFQID);
+          }
+        } catch (linkErr) {
+          console.warn('Gagal sinkronisasi status RFQ:', linkErr);
+        }
+
+        if (extra && extra.vendoremail) {
+          sendRfqApprovalEmail(extra).catch(e => console.warn('Gagal kirim email hasil seleksi ke vendor:', e.message));
+        }
       }
 
       alert('Seleksi Vendor RFQ berhasil diproses.');
@@ -1337,8 +1351,8 @@ async function submitPin() {
         console.warn('RPC process_po_approval_by_qrcode error:', rpcErr);
       }
 
+      const approverName = (window.currentBadgeData && window.currentBadgeData.nama) || 'Direktur';
       if (!rpcSuccess) {
-        const approverName = (window.currentBadgeData && window.currentBadgeData.nama) || 'Direktur';
         const { error: updErr } = await supabaseClient
           .from('purchaseOrder')
           .update({
@@ -1352,8 +1366,31 @@ async function submitPin() {
         if (updErr) throw updErr;
       }
 
-      if (decision === 'Approve' && extra) {
-        sendPoApprovalEmail(extra).catch(e => console.warn('Gagal kirim PDF PO/SO:', e.message));
+      if (decision === 'Approve') {
+        try {
+          const { data: poRow } = await supabaseClient.from('purchaseOrder').select('RFQID').eq('POID', Number(poId)).maybeSingle();
+          if (poRow && poRow.RFQID) {
+            await supabaseClient.from('rfq').update({ Status: 'PO Diterbitkan' }).eq('RFQID', poRow.RFQID);
+            const { data: rfqDetails } = await supabaseClient.from('rfqDetail').select('RequestID').eq('RFQID', poRow.RFQID);
+            const reqIds = [...new Set((rfqDetails || []).map(d => d.RequestID).filter(Boolean))];
+            if (reqIds.length > 0) {
+              await supabaseClient.from('request').update({ Status: 'PO Diterbitkan' }).in('ID', reqIds);
+              const { data: reqRows } = await supabaseClient.from('request').select('RefNo').in('ID', reqIds);
+              const affectedRefNos = [...new Set((reqRows || []).map(r => r.RefNo).filter(Boolean))];
+              for (const rNo of affectedRefNos) {
+                if (typeof refreshRequestReportPdf === 'function') {
+                  refreshRequestReportPdf(rNo, 'PO Diterbitkan').catch(e => console.warn('Refresh request report error:', e));
+                }
+              }
+            }
+          }
+        } catch (linkErr) {
+          console.warn('Gagal sinkronisasi status PO ke RFQ/Request:', linkErr);
+        }
+
+        if (extra) {
+          sendPoApprovalEmail(extra).catch(e => console.warn('Gagal kirim PDF PO/SO:', e.message));
+        }
       }
 
       alert('PO/SO berhasil diproses.');
@@ -1729,6 +1766,12 @@ async function sendPoApprovalEmail(extra) {
 
   try {
     let rpcSuccess = false;
+    let isReviewLevel = false;
+
+    const { data: currAppr } = await supabaseClient.from('request_approval').select('*').eq('RefNo', refno).maybeSingle();
+    if (!currAppr) throw new Error('Data approval tidak ditemukan.');
+    isReviewLevel = String(currAppr.CurrentLevel || '').toLowerCase() === 'review';
+
     try {
       const { error } = await supabaseClient.rpc('process_approval_by_qrcode', {
         p_qrcode: qrId,
@@ -1745,19 +1788,15 @@ async function sendPoApprovalEmail(extra) {
       const { data: kar } = await supabaseClient.from('karyawanTbl').select('Id').ilike('QrCodeId', qrId.trim()).maybeSingle();
       const userId = kar ? String(kar.Id) : qrId;
 
-      const { data: currAppr } = await supabaseClient.from('request_approval').select('*').eq('RefNo', refno).maybeSingle();
-      if (!currAppr) throw new Error('Data approval tidak ditemukan.');
-
-      const isReview = String(currAppr.CurrentLevel || '').toLowerCase() === 'review';
       if (decision === 'Approve') {
-        if (isReview) {
+        if (isReviewLevel) {
           await supabaseClient.from('request_approval').update({
             CurrentLevel: 'Approval',
             ReviewedBy: userId,
             ReviewedAt: new Date().toISOString()
           }).eq('RefNo', refno);
           await supabaseClient.from('request').update({
-            Status: 'Menunggu Approval Akhir'
+            Status: 'Menunggu Approval Direktur'
           }).eq('RefNo', refno);
         } else {
           await supabaseClient.from('request_approval').update({
@@ -1766,7 +1805,7 @@ async function sendPoApprovalEmail(extra) {
             ApprovedAt: new Date().toISOString()
           }).eq('RefNo', refno);
           await supabaseClient.from('request').update({
-            Status: 'Approved'
+            Status: 'Disetujui'
           }).eq('RefNo', refno);
         }
       } else {
@@ -1777,9 +1816,17 @@ async function sendPoApprovalEmail(extra) {
           RejectReason: reason
         }).eq('RefNo', refno);
         await supabaseClient.from('request').update({
-          Status: 'Rejected'
+          Status: 'Ditolak'
         }).eq('RefNo', refno);
       }
+    }
+
+    let nextStatus = 'Ditolak';
+    if (decision === 'Approve') {
+      nextStatus = isReviewLevel ? 'Menunggu Approval Direktur' : 'Disetujui';
+    }
+    if (typeof refreshRequestReportPdf === 'function') {
+      refreshRequestReportPdf(refno, nextStatus).catch(e => console.warn('Gagal refresh Request PDF:', e));
     }
 
     alert(`Request ${refno} berhasil ${decision === 'Approve' ? 'disetujui' : 'ditolak'}.`);

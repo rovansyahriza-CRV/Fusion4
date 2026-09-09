@@ -1,4 +1,4 @@
-﻿-- ==============================================================================
+-- ==============================================================================
 -- Migrasi: Fix Otorisasi & RPC Approval Seleksi Vendor (RFQ) & PO/SO via Digital Badge
 -- ==============================================================================
 
@@ -122,6 +122,17 @@ BEGIN
         "Notes" = COALESCE(p_reason, "Notes")
     WHERE "RFQVendorID" = p_rfqvendorid;
 
+    IF p_decision = 'Approve' THEN
+        UPDATE "rfqVendor"
+        SET "Status" = 'Tidak Terpilih'
+        WHERE "RFQID" = (SELECT "RFQID" FROM "rfqVendor" WHERE "RFQVendorID" = p_rfqvendorid)
+          AND "RFQVendorID" <> p_rfqvendorid;
+
+        UPDATE "rfq"
+        SET "Status" = 'Seleksi Vendor Disetujui'
+        WHERE "RFQID" = (SELECT "RFQID" FROM "rfqVendor" WHERE "RFQVendorID" = p_rfqvendorid);
+    END IF;
+
     RETURN json_build_object('status', 'success', 'message', 'Hasil seleksi RFQ berhasil diproses.');
 END;
 $$;
@@ -223,6 +234,21 @@ BEGIN
         "ManagementApprovalDate" = NOW(),
         "Notes" = COALESCE(p_reason, "Notes")
     WHERE "POID" = p_poid;
+
+    IF p_decision = 'Approve' THEN
+        UPDATE "rfq"
+        SET "Status" = 'PO Diterbitkan'
+        WHERE "RFQID" = (SELECT "RFQID" FROM "purchaseOrder" WHERE "POID" = p_poid);
+
+        UPDATE "request"
+        SET "Status" = 'PO Diterbitkan'
+        WHERE "ID" IN (
+            SELECT d."RequestID"
+            FROM "rfqDetail" d
+            JOIN "purchaseOrder" po ON d."RFQID" = po."RFQID"
+            WHERE po."POID" = p_poid AND d."RequestID" IS NOT NULL
+        );
+    END IF;
 
     RETURN json_build_object('status', 'success', 'message', 'PO/SO berhasil diproses.');
 END;

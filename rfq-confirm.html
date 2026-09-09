@@ -320,6 +320,12 @@ async function submitDecision(rv, decision, rfqHeader, vendorInfo, grandTotal, w
     }).eq('RFQVendorID', rv.RFQVendorID);
     if (error) throw error;
 
+    if (decision === 'Confirmed') {
+      await supabaseClient.from('rfq').update({ Status: 'Vendor Terkonfirmasi' }).eq('RFQID', rv.RFQID);
+    } else {
+      await supabaseClient.from('rfq').update({ Status: 'Vendor Menolak' }).eq('RFQID', rv.RFQID);
+    }
+
     // Jika vendor mengonfirmasi kesediaan, otomatis generate Draft PO / SO
     if (decision === 'Confirmed') {
       try {
