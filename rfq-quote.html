@@ -393,6 +393,37 @@
       });
       existingTerm = (termRows || [])[0] || null;
 
+      // 1. Jika vendor sudah disetujui (Approved) sebagai pemenang
+      if (rfqVendorRow.Status === 'Approved' || rfqVendorRow.ManagementApproval === 'Approved') {
+        document.getElementById('mainContent').innerHTML = `
+          <div class="card" style="text-align:center; padding: 40px 24px;">
+            <div style="font-size: 48px; margin-bottom: 12px;">🎉</div>
+            <span class="badge-status submitted" style="font-size: 13px; margin-bottom: 14px; display:inline-block;">Pemenang Terpilih</span>
+            <h2 style="font-size: 18px; font-weight: 800; color: #1B365D; margin-bottom: 10px;">Penawaran Anda Telah Disetujui</h2>
+            <p style="font-size: 13.5px; color: var(--muted); max-width: 500px; margin: 0 auto 24px; line-height: 1.5;">
+              Tahap pemasukan penawaran untuk <strong>${rfqHeader.NoRFQ || 'RFQ'}</strong> telah selesai. Perusahaan Anda (<strong>${vendorData.VendorName}</strong>) telah dipilih dan disetujui sebagai pemenang.
+            </p>
+            <a href="rfq-confirm.html?rfq=${rfqIdParam}&vendor=${vendorIdParam}" class="btn-primary" style="display:inline-flex; align-items:center; justify-content:center; text-decoration:none; padding:12px 24px; font-weight:700; width:auto;">
+              Buka Portal Konfirmasi Kesediaan ➜
+            </a>
+          </div>`;
+        return;
+      }
+
+      // 2. Jika vendor tidak terpilih atau RFQ ditutup
+      if (rfqVendorRow.Status === 'Tidak Terpilih' || rfqVendorRow.Status === 'Ditolak Management' || rfqVendorRow.ManagementApproval === 'Rejected') {
+        document.getElementById('mainContent').innerHTML = `
+          <div class="card" style="text-align:center; padding: 40px 24px;">
+            <div style="font-size: 48px; margin-bottom: 12px;">🔒</div>
+            <span class="badge-status" style="background:#fee2e2; color:#991b1b; font-size: 13px; margin-bottom: 14px; display:inline-block;">Tahap Seleksi Ditutup</span>
+            <h2 style="font-size: 18px; font-weight: 800; color: #1B365D; margin-bottom: 10px;">Pemasukan Penawaran Ditutup</h2>
+            <p style="font-size: 13.5px; color: var(--muted); max-width: 500px; margin: 0 auto; line-height: 1.5;">
+              Proses seleksi dan pemasukan penawaran untuk <strong>${rfqHeader.NoRFQ || 'RFQ'}</strong> telah selesai dan ditutup. Terima kasih atas partisipasi dan kerjasama Anda.
+            </p>
+          </div>`;
+        return;
+      }
+
       renderForm();
 
     } catch (err) {
@@ -423,9 +454,16 @@
 
   function renderForm() {
     const isAlreadySubmitted = rfqVendorRow.ConfirmationStatus === 'Submitted';
-    const statusBadge = isAlreadySubmitted 
-      ? '<span class="badge-status submitted">Sudah Terkirim</span>' 
-      : '<span class="badge-status pending">Menunggu Penawaran</span>';
+    const isLocked = rfqVendorRow.Status === 'Diusulkan';
+
+    let statusBadge = '<span class="badge-status pending">Menunggu Penawaran</span>';
+    if (isLocked) {
+      statusBadge = '<span class="badge-status" style="background:#fef3c7; color:#92400e;">Sedang Dievaluasi Manajemen</span>';
+    } else if (isAlreadySubmitted) {
+      statusBadge = '<span class="badge-status submitted">Sudah Terkirim</span>';
+    }
+
+    const disabledAttr = isLocked ? 'disabled' : '';
 
     const rowsHtml = rfqItems.map((item, idx) => {
       const q = existingQuotes[item.RFQDetailID] || {};
@@ -445,10 +483,10 @@
             ${item.Qty || 1} ${item.Unit || 'ea'}
           </td>
           <td style="width: 170px;">
-            <input type="text" class="input-price item-price" inputmode="numeric" placeholder="0" value="${unitPriceVal}" oninput="formatCurrencyInput(this)">
+            <input type="text" class="input-price item-price" inputmode="numeric" placeholder="0" value="${unitPriceVal}" oninput="formatCurrencyInput(this)" ${disabledAttr}>
           </td>
           <td style="width: 150px;">
-            <input type="date" class="item-deliv-date" value="${deliveryDateVal}">
+            <input type="date" class="item-deliv-date" value="${deliveryDateVal}" ${disabledAttr}>
           </td>
           <td class="subtotal-cell item-subtotal">
             Rp ${subtotalVal.toLocaleString('id-ID')}
@@ -464,8 +502,14 @@
     const dpPercentVal = existingTerm ? (existingTerm.DPPercentage || '') : '';
     const notesVal = rfqVendorRow.Notes || '';
 
+    const lockedBanner = isLocked ? `
+      <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#92400e; line-height:1.4;">
+        ⏳ <strong>Pemasukan Penawaran Dikunci:</strong> Penawaran harga Anda telah diajukan dan saat ini sedang dalam proses evaluasi seleksi oleh Manajemen. Data pada form ini dalam mode hanya lihat (read-only).
+      </div>` : '';
+
     document.getElementById('mainContent').innerHTML = `
       <div class="card">
+        ${lockedBanner}
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px;">
           <h2 style="font-size: 17px; font-weight: 800;">Informasi Permintaan Penawaran</h2>
           ${statusBadge}
@@ -513,19 +557,19 @@
         <div class="terms-grid">
           <div class="form-group">
             <label>Biaya Mobilisasi / Ekspedisi (Rp):</label>
-            <input type="text" id="inputMobilisasi" class="input-price" inputmode="numeric" placeholder="0" value="${mobilisasiVal}" oninput="formatCurrencyInput(this)">
+            <input type="text" id="inputMobilisasi" class="input-price" inputmode="numeric" placeholder="0" value="${mobilisasiVal}" oninput="formatCurrencyInput(this)" ${disabledAttr}>
           </div>
           <div class="form-group">
             <label>Biaya Jasa / Lain-lain (Rp):</label>
-            <input type="text" id="inputOtherCost" class="input-price" inputmode="numeric" placeholder="0" value="${otherCostVal}" oninput="formatCurrencyInput(this)">
+            <input type="text" id="inputOtherCost" class="input-price" inputmode="numeric" placeholder="0" value="${otherCostVal}" oninput="formatCurrencyInput(this)" ${disabledAttr}>
           </div>
           <div class="form-group" style="grid-column: 1 / -1;">
             <label>Deskripsi Jasa / Biaya Lain-lain (Opsional):</label>
-            <input type="text" id="inputOtherServiceDesc" placeholder="Contoh: Biaya Sertifikasi / Biaya Kalibrasi / Instalasi" value="${otherDescVal}">
+            <input type="text" id="inputOtherServiceDesc" placeholder="Contoh: Biaya Sertifikasi / Biaya Kalibrasi / Instalasi" value="${otherDescVal}" ${disabledAttr}>
           </div>
           <div class="form-group">
             <label>PPN (Pajak Pertambahan Nilai):</label>
-            <select id="selectPpnType" onchange="handlePpnChange()">
+            <select id="selectPpnType" onchange="handlePpnChange()" ${disabledAttr}>
               <option value="none">Bebas PPN (0%)</option>
               <option value="11" selected>PPN 11% (Otomatis)</option>
               <option value="custom">Nominal PPN Khusus</option>
@@ -533,11 +577,11 @@
           </div>
           <div class="form-group" id="groupPpnCustom" style="display:none;">
             <label>Nominal PPN (Rp):</label>
-            <input type="text" id="inputPpnAmount" class="input-price" inputmode="numeric" placeholder="0" value="${ppnAmountVal}" oninput="formatCurrencyInput(this)">
+            <input type="text" id="inputPpnAmount" class="input-price" inputmode="numeric" placeholder="0" value="${ppnAmountVal}" oninput="formatCurrencyInput(this)" ${disabledAttr}>
           </div>
           <div class="form-group">
             <label>Termin Pembayaran:</label>
-            <select id="selectPaymentTerm" onchange="handlePaymentTermChange()">
+            <select id="selectPaymentTerm" onchange="handlePaymentTermChange()" ${disabledAttr}>
               <option value="Net 30">Net 30 Hari</option>
               <option value="Net 14">Net 14 Hari</option>
               <option value="COD / Cash on Delivery">COD / Cash on Delivery</option>
@@ -547,13 +591,13 @@
           </div>
           <div class="form-group" id="groupDpPercent" style="display:none;">
             <label>Persentase Uang Muka / DP (%):</label>
-            <input type="number" id="inputDpPercent" min="1" max="100" placeholder="Contoh: 30" value="${dpPercentVal}">
+            <input type="number" id="inputDpPercent" min="1" max="100" placeholder="Contoh: 30" value="${dpPercentVal}" ${disabledAttr}>
           </div>
         </div>
 
         <div class="form-group" style="margin-bottom: 20px;">
           <label>Catatan Tambahan dari Vendor (Opsional):</label>
-          <textarea id="inputVendorNotes" rows="2" placeholder="Contoh: Harga sudah termasuk garansi 1 tahun, franco Balikpapan...">${notesVal}</textarea>
+          <textarea id="inputVendorNotes" rows="2" placeholder="Contoh: Harga sudah termasuk garansi 1 tahun, franco Balikpapan..." ${disabledAttr}>${notesVal}</textarea>
         </div>
 
         <!-- SUMMARY TOTAL -->
@@ -576,9 +620,11 @@
           </div>
         </div>
 
+        ${isLocked ? '' : `
         <button type="button" id="btnSubmitQuote" class="btn-primary" onclick="submitQuotation()">
           <span>💾 ${isAlreadySubmitted ? 'Perbarui Penawaran Harga' : 'Kirim Penawaran Harga'}</span>
         </button>
+        `}
       </div>`;
 
     document.getElementById('selectPaymentTerm').value = paymentTermVal;
