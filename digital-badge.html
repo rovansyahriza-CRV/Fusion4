@@ -370,11 +370,43 @@ async function submitPin() {
     btnSubmitPin.innerText = "Memeriksa...";
 
     try {
-      const { data: hasil, error: hasilErr } = await supabaseClient.rpc('get_digital_badge_by_pin', { p_pin: pin });
-      if (hasilErr) throw hasilErr;
+      let hasil = null;
+
+      // 1. Coba lewat RPC get_digital_badge_by_pin
+      try {
+        const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('get_digital_badge_by_pin', { p_pin: pin });
+        if (!rpcErr && rpcData && rpcData.valid) {
+          hasil = rpcData;
+        }
+      } catch (e) {
+        console.warn('RPC get_digital_badge_by_pin error, trying direct query:', e);
+      }
+
+      // 2. Fallback langsung query ke karyawanTbl jika RPC tidak menghasilkan data
+      if (!hasil || !hasil.valid) {
+        const pinNum = parseInt(pin, 10);
+        let query = supabaseClient.from('karyawanTbl').select('*');
+        if (!isNaN(pinNum)) {
+          query = query.or(`DigitalPIN.eq.${pinNum},DigitalPIN.eq.${pin},QrCodeId.eq.${pin}`);
+        } else {
+          query = query.or(`DigitalPIN.eq.${pin},QrCodeId.eq.${pin}`);
+        }
+        const { data: karRows, error: karErr } = await query;
+        if (!karErr && karRows && karRows.length > 0) {
+          const k = karRows[0];
+          hasil = {
+            valid: true,
+            qrCodeId: k.QrCodeId || '',
+            nama: k.NamaPersonnel || k.Nama || '',
+            kualifikasi: k.Kualifikasi || '',
+            fotoUrl: k.FotoURL || null,
+            fotoFileId: k.FotoFileID || null
+          };
+        }
+      }
 
       if (!hasil || !hasil.valid) {
-        pinMsg.innerText = "⚠️ " + ((hasil && hasil.message) || "PIN tidak ditemukan.");
+        pinMsg.innerText = "⚠️ PIN tidak ditemukan. Pastikan 6 digit PIN Anda benar.";
         pinMsg.style.display = "block";
         btnSubmitPin.disabled = false;
         btnSubmitPin.innerText = "Tampilkan Badge";
