@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
@@ -687,22 +687,8 @@
         }
       }
 
-      // 2. Simpan Commercial Term
-      // Cari max RFQVendorTermID jika baru
-      let nextTermId = 1;
-      if (existingTerm && existingTerm.RFQVendorTermID) {
-        nextTermId = existingTerm.RFQVendorTermID;
-      } else {
-        const { data: maxTermRows } = await supabaseClient
-          .from('rfqVendorTerm')
-          .select('RFQVendorTermID')
-          .order('RFQVendorTermID', { ascending: false })
-          .limit(1);
-        if (maxTermRows && maxTermRows.length > 0) nextTermId = (Number(maxTermRows[0].RFQVendorTermID) || 0) + 1;
-      }
-
+      // 2. Simpan Commercial Term (Mobilisasi, Biaya Lain, PPN, Termin)
       const termPayload = {
-        RFQVendorTermID: nextTermId,
         RFQVendorID: rfqVendorRow.RFQVendorID,
         MobilisasiCost: mobilisasi,
         OtherServiceCost: otherCost,
@@ -712,11 +698,29 @@
         SubmitDate: new Date().toISOString()
       };
 
-      const { error: termErr } = await supabaseClient.from('rfqVendorTerm').upsert(termPayload, { onConflict: 'RFQVendorTermID' });
-      if (termErr) {
-        console.warn('Upsert term error:', termErr.message);
-        await supabaseClient.from('rfqVendorTerm').delete().eq('RFQVendorID', rfqVendorRow.RFQVendorID);
-        await supabaseClient.from('rfqVendorTerm').insert(termPayload);
+      if (existingTerm && existingTerm.RFQVendorTermID) {
+        await supabaseClient
+          .from('rfqVendorTerm')
+          .update(termPayload)
+          .eq('RFQVendorTermID', existingTerm.RFQVendorTermID);
+      } else {
+        const { data: checkTerm } = await supabaseClient
+          .from('rfqVendorTerm')
+          .select('RFQVendorTermID')
+          .eq('RFQVendorID', rfqVendorRow.RFQVendorID)
+          .limit(1);
+
+        if (checkTerm && checkTerm.length > 0) {
+          await supabaseClient
+            .from('rfqVendorTerm')
+            .update(termPayload)
+            .eq('RFQVendorID', rfqVendorRow.RFQVendorID);
+        } else {
+          const { error: insErr } = await supabaseClient
+            .from('rfqVendorTerm')
+            .insert(termPayload);
+          if (insErr) console.warn('Insert rfqVendorTerm error:', insErr.message);
+        }
       }
 
       // 3. Update Status di rfqVendor
