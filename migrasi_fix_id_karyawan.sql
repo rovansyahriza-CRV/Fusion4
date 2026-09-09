@@ -49,7 +49,7 @@ CREATE OR REPLACE FUNCTION create_karyawan_full(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-AS 
+AS $$
 DECLARE
     v_new_id BIGINT;
     v_qrcodeid TEXT;
@@ -151,7 +151,7 @@ EXCEPTION WHEN OTHERS THEN
         'message', SQLERRM
     );
 END;
-;
+$$;
 
 -- 5. Perbarui RPC update_karyawan_core
 DROP FUNCTION IF EXISTS update_karyawan_core(BIGINT, TEXT, TEXT, TEXT, TEXT);
@@ -166,7 +166,7 @@ CREATE OR REPLACE FUNCTION update_karyawan_core(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-AS 
+AS $$
 BEGIN
     UPDATE "karyawanTbl"
     SET "Departemen" = p_departemen,
@@ -188,7 +188,7 @@ EXCEPTION WHEN OTHERS THEN
         'message', SQLERRM
     );
 END;
-;
+$$;
 
 -- 6. Perbarui RPC list_karyawan_all
 DROP FUNCTION IF EXISTS list_karyawan_all();
@@ -210,7 +210,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-AS 
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -230,4 +230,4 @@ BEGIN
     LEFT JOIN "paswordTbl" p ON k."Id" = p."Id"
     ORDER BY k."Id" DESC;
 END;
-;
+$$;
