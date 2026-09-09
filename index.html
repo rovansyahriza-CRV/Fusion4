@@ -388,17 +388,18 @@
           </div>
           <div class="input-group">
             <label for="karyawanAuthor">Author (Otorisasi Approval &amp; Web Lapangan)</label>
-            <input type="text" id="karyawanAuthor" placeholder="Contoh: AR-101, ASV-101, APO-101, TBS-101">
+            <input type="text" id="karyawanAuthor" placeholder="Contoh: AER-101, APER, AR-101, ASV-101, APO-101">
             <div style="font-size:11px;color:#8A8580;margin:5px 0 0;line-height:1.5;background:#FAF8F5;padding:8px 12px;border-radius:8px;border:1px solid #E6DED9;">
+              <div style="margin-bottom:3px;"><strong style="color:#0284c7;">👥 Employee Request:</strong> <strong>AER-&lt;Proj&gt;</strong> (Approval Request Proyek), <strong>APER</strong> (Approval Final Proses Direksi / BOD).</div>
               <div style="margin-bottom:3px;"><strong style="color:#e8562c;">📑 SMMS Approval:</strong> <strong>AR-&lt;Proj&gt;</strong> (Approval Request), <strong>ASV-&lt;Proj&gt;</strong> (Approval Seleksi Vendor), <strong>APO-&lt;Proj&gt;</strong> (Approval PO/SO), <strong>AV</strong> (Approval Vendor).</div>
               <div><strong style="color:#1E8449;">🚚 Web Lapangan:</strong> <strong>KBS-&lt;Proj&gt;</strong> (Kirim Barang Site), <strong>TBS-&lt;Proj&gt;</strong> (Terima Barang Site), <strong>EUR-&lt;Proj&gt;</strong> (End User Receiving).</div>
             </div>
           </div>
           <div class="input-group">
             <label for="karyawanPic">PIC (Akses Menu Sidebar)</label>
-            <input type="text" id="karyawanPic" placeholder="Contoh: MAE,KL,MR,REQ -- Kosongin/ALL = akses semua">
+            <input type="text" id="karyawanPic" placeholder="Contoh: ER-101, PER, MAE, KL, DK -- Kosongin/ALL = akses semua">
             <div style="font-size:11px;color:#8A8580;margin:5px 0 0;line-height:1.5;background:#FAF8F5;padding:8px 12px;border-radius:8px;border:1px solid #E6DED9;">
-              <div style="margin-bottom:3px;"><strong style="color:#2B6CB0;">🏢 SmartGate Fusion4:</strong> <strong>MAE</strong>=Monitoring &amp; Enroll, <strong>KL</strong>=Kelola Lokasi, <strong>GP</strong>=Ganti Password, <strong>DK</strong>=Data Karyawan, <strong>KDB</strong>=Digital Badge, <strong>KK</strong>=Kontrak, <strong>OIL</strong>=Otorisasi Ijin/Lembur/Cuti.</div>
+              <div style="margin-bottom:3px;"><strong style="color:#2B6CB0;">🏢 SmartGate Fusion4:</strong> <strong>ER-&lt;Proj&gt;</strong>=Request Karyawan, <strong>PER</strong>=Proses HRD, <strong>DK</strong>=Data Karyawan, <strong>KK</strong>=Kontrak, <strong>KDB</strong>=Badge, <strong>MAE</strong>=Monitoring, <strong>KL</strong>=Lokasi, <strong>OIL</strong>=Ijin/Lembur.</div>
               <div style="margin-bottom:3px;"><strong style="color:#e8562c;">📦 SMMS Portal:</strong> <strong>MR</strong>=Master Resources, <strong>REQ</strong>=Request, <strong>RFQ</strong>=Buat RFQ, <strong>SVR</strong>=Seleksi Vendor, <strong>PO-&lt;Proj&gt;</strong>=Ajukan PO/SO, <strong>TV</strong>=Terima Vendor.</div>
               <div><strong style="color:#6B46C1;">⚡ Super Admin:</strong> Kosongkan atau ketik <strong>ALL</strong> untuk membuka seluruh menu tanpa batas.</div>
             </div>
@@ -628,9 +629,9 @@
 
       <div class="category-tabs" id="empReqTabs">
         <button type="button" class="tab-btn active" data-status="ALL" onclick="loadEmployeeRequestPage('ALL', this)">📋 Semua (<span id="countEmpReqAll">0</span>)</button>
-        <button type="button" class="tab-btn" data-status="PENDING" onclick="loadEmployeeRequestPage('PENDING', this)">⏳ Pending (<span id="countEmpReqPending">0</span>)</button>
-        <button type="button" class="tab-btn" data-status="APPROVED" onclick="loadEmployeeRequestPage('APPROVED', this)">✅ Disetujui (<span id="countEmpReqApproved">0</span>)</button>
-        <button type="button" class="tab-btn" data-status="IN PROGRESS" onclick="loadEmployeeRequestPage('IN PROGRESS', this)">🚀 In Progress (<span id="countEmpReqProgress">0</span>)</button>
+        <button type="button" class="tab-btn" data-status="PENDING_AER" onclick="loadEmployeeRequestPage('PENDING_AER', this)">⏳ Menunggu AER (<span id="countEmpReqAer">0</span>)</button>
+        <button type="button" class="tab-btn" data-status="PROSES_HRD" onclick="loadEmployeeRequestPage('PROSES_HRD', this)">🔵 Proses HRD / PER (<span id="countEmpReqHrd">0</span>)</button>
+        <button type="button" class="tab-btn" data-status="PENDING_APER" onclick="loadEmployeeRequestPage('PENDING_APER', this)">🟣 Menunggu Direksi / APER (<span id="countEmpReqAper">0</span>)</button>
         <button type="button" class="tab-btn" data-status="FULFILLED" onclick="loadEmployeeRequestPage('FULFILLED', this)">🎯 Selesai (<span id="countEmpReqFulfilled">0</span>)</button>
         <button type="button" class="tab-btn" data-status="REJECTED" onclick="loadEmployeeRequestPage('REJECTED', this)">❌ Ditolak (<span id="countEmpReqRejected">0</span>)</button>
       </div>

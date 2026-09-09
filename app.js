@@ -105,10 +105,26 @@ async function fetchKaryawanAuthor(id) {
 }
 
 function hasSectionAccess(key) {
-  const picRaw = (currentUser && currentUser.pic) ? String(currentUser.pic).trim() : '';
-  if (!picRaw) return true; // PIC kosong = default akses semua menu
-  const tokens = picRaw.toUpperCase().split(',').map(t => t.trim()).filter(Boolean);
-  if (tokens.includes('ALL') || tokens.includes('*')) return true;
+  if (!currentUser) return false;
+  const picRaw = String(currentUser.pic || '').toUpperCase();
+  const authorRaw = String(currentUser.author || '').toUpperCase();
+
+  if (!picRaw && !authorRaw) return true; // Default akses semua jika belum diset
+  if (picRaw.includes('ALL') || picRaw.includes('*') || authorRaw.includes('ALL') || authorRaw.includes('ADMIN')) return true;
+
+  if (key === 'ER') {
+    return (
+      picRaw.includes('ER') ||
+      picRaw.includes('PER') ||
+      authorRaw.includes('AER') ||
+      authorRaw.includes('APER') ||
+      authorRaw.includes('HR') ||
+      authorRaw.includes('BOD') ||
+      authorRaw.includes('LEAD')
+    );
+  }
+
+  const tokens = picRaw.split(',').map(t => t.trim()).filter(Boolean);
   return tokens.includes(key.toUpperCase());
 }
 
@@ -2055,21 +2071,45 @@ let empReqState = {
   selectedRequest: null
 };
 
+function canUserSubmitEmpReq() {
+  if (!currentUser) return false;
+  const pic = String(currentUser.pic || '').toUpperCase();
+  const auth = String(currentUser.author || '').toUpperCase();
+  return pic.includes('ER') || pic.includes('ALL') || auth.includes('ALL') || auth.includes('ADMIN');
+}
+
+function canUserApproveAer(projectCode = '') {
+  if (!currentUser) return false;
+  const auth = String(currentUser.author || '').toUpperCase();
+  if (auth.includes('ALL') || auth.includes('ADMIN')) return true;
+  if (auth.includes('AER-ALL') || auth.includes('AER')) return true;
+  if (projectCode) {
+    const projClean = String(projectCode).toUpperCase().replace(/\s+/g, '');
+    if (auth.includes(`AER-${projClean}`)) return true;
+  }
+  return false;
+}
+
+function canUserProcessHrd() {
+  if (!currentUser) return false;
+  const pic = String(currentUser.pic || '').toUpperCase();
+  const auth = String(currentUser.author || '').toUpperCase();
+  return pic.includes('PER') || pic.includes('HR') || pic.includes('ALL') || auth.includes('ALL') || auth.includes('ADMIN') || auth.includes('HR');
+}
+
+function canUserApproveAper() {
+  if (!currentUser) return false;
+  const auth = String(currentUser.author || '').toUpperCase();
+  return auth.includes('APER') || auth.includes('BOD') || auth.includes('DIR') || auth.includes('ALL') || auth.includes('ADMIN');
+}
+
 function hasEmployeeRequestAuthor() {
   if (!currentUser) return false;
-  const authorStr = String(currentUser.author || currentUser.Author || '').toUpperCase();
-  const kualifikasiStr = String(currentUser.kualifikasi || '').toUpperCase();
-  const picStr = String(currentUser.pic || '').toUpperCase();
-
+  const auth = String(currentUser.author || '').toUpperCase();
+  const pic = String(currentUser.pic || '').toUpperCase();
   return (
-    authorStr.includes('EMPLOYEE REQUEST') ||
-    authorStr.includes('LEAD') ||
-    authorStr.includes('ADMIN') ||
-    authorStr.includes('HR') ||
-    kualifikasiStr.includes('ADMIN') ||
-    kualifikasiStr.includes('HR') ||
-    picStr.includes('ALL') ||
-    picStr.includes('ER')
+    auth.includes('AER') || auth.includes('APER') || auth.includes('ALL') || auth.includes('ADMIN') ||
+    auth.includes('HR') || auth.includes('LEAD') || pic.includes('PER') || pic.includes('ER') || pic.includes('ALL')
   );
 }
 
@@ -2204,17 +2244,17 @@ async function updateEmpReqBadgeCounts() {
     if (error || !data) return;
 
     const all = data.length;
-    const pending = data.filter(r => String(r.status).toUpperCase() === 'PENDING').length;
-    const approved = data.filter(r => String(r.status).toUpperCase() === 'APPROVED').length;
-    const inProgress = data.filter(r => String(r.status).toUpperCase() === 'IN PROGRESS').length;
-    const fulfilled = data.filter(r => String(r.status).toUpperCase() === 'FULFILLED').length;
-    const rejected = data.filter(r => String(r.status).toUpperCase() === 'REJECTED').length;
+    const aerPending = data.filter(r => String(r.status).toUpperCase() === 'PENDING_AER' || String(r.status).toUpperCase() === 'PENDING').length;
+    const hrdProcess = data.filter(r => String(r.status).toUpperCase() === 'PROSES_HRD' || String(r.status).toUpperCase() === 'IN PROGRESS').length;
+    const aperPending = data.filter(r => String(r.status).toUpperCase() === 'PENDING_APER').length;
+    const fulfilled = data.filter(r => String(r.status).toUpperCase() === 'FULFILLED' || String(r.status).toUpperCase() === 'APPROVED').length;
+    const rejected = data.filter(r => String(r.status).toUpperCase().startsWith('REJECTED')).length;
 
     const setC = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     setC('countEmpReqAll', all);
-    setC('countEmpReqPending', pending);
-    setC('countEmpReqApproved', approved);
-    setC('countEmpReqProgress', inProgress);
+    setC('countEmpReqAer', aerPending);
+    setC('countEmpReqHrd', hrdProcess);
+    setC('countEmpReqAper', aperPending);
     setC('countEmpReqFulfilled', fulfilled);
     setC('countEmpReqRejected', rejected);
   } catch (e) {}
@@ -2227,23 +2267,19 @@ async function loadEmployeeRequestLokasiDropdown() {
   selectEl.innerHTML = '<option value="">-- Memuat Lokasi... --</option>';
   try {
     let locs = [];
-    // 1. Coba RPC list_lokasi_with_timelimit (sumber utama lokasiTbl)
     const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('list_lokasi_with_timelimit');
     if (!rpcErr && rpcData && rpcData.length > 0) {
       locs = rpcData.map(l => l.namalokasi || l.NamaLokasi).filter(Boolean);
     } else {
-      // 2. Fallback ke list_lokasi_full
       const { data: fullData, error: fullErr } = await supabaseClient.rpc('list_lokasi_full');
       if (!fullErr && fullData && fullData.length > 0) {
         locs = fullData.map(l => l.namalokasi || l.NamaLokasi).filter(Boolean);
       } else {
-        // 3. Fallback direct table
         const { data: tblData } = await supabaseClient.from('lokasiTbl').select('NamaLokasi');
         if (tblData) locs = tblData.map(l => l.NamaLokasi).filter(Boolean);
       }
     }
 
-    // Filter unique & sort alfabetis
     locs = [...new Set(locs)].filter(name => name && name.trim()).sort((a, b) => a.localeCompare(b, 'id'));
 
     selectEl.innerHTML = '<option value="">-- Pilih Lokasi / Site --</option>';
@@ -2257,6 +2293,27 @@ async function loadEmployeeRequestLokasiDropdown() {
     console.error('Error loadEmployeeRequestLokasiDropdown:', err);
     selectEl.innerHTML = '<option value="">Gagal memuat lokasi</option>';
   }
+}
+
+function getEmpReqStatusBadge(statusRaw) {
+  const status = String(statusRaw || 'PENDING_AER').toUpperCase();
+  if (status === 'PENDING_AER' || status === 'PENDING') {
+    return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#fef3c7; color:#b45309;">⏳ Menunggu AER</span>`;
+  }
+  if (status === 'PROSES_HRD' || status === 'IN PROGRESS') {
+    return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#dbeafe; color:#1d4ed8;">🔵 Proses HRD (PER)</span>`;
+  }
+  if (status === 'PENDING_APER') {
+    return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#f3e8ff; color:#7e22ce;">🟣 Menunggu Direksi</span>`;
+  }
+  if (status === 'FULFILLED' || status === 'APPROVED' || status === 'APPROVED_APER') {
+    return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#ecfdf5; color:#047857;">🟢 Selesai / ACC Direksi</span>`;
+  }
+  if (status.startsWith('REJECTED')) {
+    const label = status === 'REJECTED_AER' ? 'Ditolak AER' : (status === 'REJECTED_APER' ? 'Ditolak Direksi' : 'Ditolak');
+    return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#fee2e2; color:#b91c1c;">🔴 ${label}</span>`;
+  }
+  return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#f1f5f9; color:#475569;">${status}</span>`;
 }
 
 function renderEmployeeRequestTable() {
@@ -2281,15 +2338,6 @@ function renderEmployeeRequestTable() {
   }
 
   tbody.innerHTML = filtered.map(r => {
-    const status = String(r.status || 'PENDING').toUpperCase();
-    let badgeBg = '#fef3c7';
-    let badgeColor = '#b45309';
-
-    if (status === 'APPROVED') { badgeBg = '#dcfce7'; badgeColor = '#15803d'; }
-    else if (status === 'IN PROGRESS') { badgeBg = '#dbeafe'; badgeColor = '#1d4ed8'; }
-    else if (status === 'FULFILLED') { badgeBg = '#ecfdf5'; badgeColor = '#047857'; }
-    else if (status === 'REJECTED') { badgeBg = '#fee2e2'; badgeColor = '#b91c1c'; }
-
     const isAuthor = hasEmployeeRequestAuthor();
 
     return `
@@ -2305,11 +2353,7 @@ function renderEmployeeRequestTable() {
         <td><span style="font-weight:700; background:#f1f5f9; padding:2px 8px; border-radius:6px;">${r.jumlahorang || 1} Org</span></td>
         <td>${escapeHtml(r.lokasisite || '-')}</td>
         <td>${r.tanggaldibutuhkan || '-'}</td>
-        <td>
-          <span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:${badgeBg}; color:${badgeColor};">
-            ${status}
-          </span>
-        </td>
+        <td>${getEmpReqStatusBadge(r.status)}</td>
         <td style="text-align:center; white-space:nowrap;">
           <button type="button" class="btn-primary" style="padding:4px 8px; font-size:11px;" onclick="openEmployeeRequestDetail(${r.id})">
             👁️ Detail
@@ -2417,16 +2461,13 @@ function openEmployeeRequestDetail(id) {
   const modal = document.getElementById('modalEmpReqDetail');
   const bodyEl = document.getElementById('modalEmpReqBody');
   const boxApproval = document.getElementById('boxEmpReqApprovalAction');
-  const notesInput = document.getElementById('empReqApprovalNotes');
 
-  if (notesInput) notesInput.value = req.catatanapproval || '';
+  const status = String(req.status || 'PENDING_AER').toUpperCase();
 
-  const status = String(req.status || 'PENDING').toUpperCase();
-  let badgeBg = '#fef3c7'; let badgeColor = '#b45309';
-  if (status === 'APPROVED') { badgeBg = '#dcfce7'; badgeColor = '#15803d'; }
-  else if (status === 'IN PROGRESS') { badgeBg = '#dbeafe'; badgeColor = '#1d4ed8'; }
-  else if (status === 'FULFILLED') { badgeBg = '#ecfdf5'; badgeColor = '#047857'; }
-  else if (status === 'REJECTED') { badgeBg = '#fee2e2'; badgeColor = '#b91c1c'; }
+  // 3-Level Stepper Status Helper
+  const isAerDone = Boolean(req.aer_approved_by || req.aer_approved_at);
+  const isHrdDone = Boolean(req.hrd_processed_by || req.hrd_processed_at);
+  const isAperDone = Boolean(req.aper_approved_by || req.aper_approved_at);
 
   if (bodyEl) {
     bodyEl.innerHTML = `
@@ -2435,16 +2476,43 @@ function openEmployeeRequestDetail(id) {
           <span style="font-size:11px; color:#64748b; font-weight:700;">NO. REQUEST</span>
           <div style="font-size:16px; font-weight:800; font-family:monospace; color:#0f172a;">${escapeHtml(req.requestno)}</div>
         </div>
-        <span style="padding:4px 10px; font-size:12px; font-weight:700; border-radius:12px; background:${badgeBg}; color:${badgeColor};">
-          ${status}
-        </span>
+        <div>
+          ${getEmpReqStatusBadge(req.status)}
+        </div>
+      </div>
+
+      <!-- 3-STAGE WORKFLOW STEPPER -->
+      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; margin-bottom:14px;">
+        <span style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:8px;">📌 PROGRESS WORKFLOW 3-LEVEL:</span>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; font-size:11px; text-align:center;">
+          <!-- Level 1: AER -->
+          <div style="padding:6px; border-radius:6px; background:${isAerDone ? '#f0fdf4; border:1px solid #86efac;' : (status.startsWith('PENDING_AER') || status === 'PENDING' ? '#fef3c7; border:1px solid #fde047;' : '#f8fafc; border:1px solid #e2e8f0;')}">
+            <strong>1. Atasan / PM (AER)</strong><br>
+            <span>${isAerDone ? '✅ Disetujui' : (status === 'REJECTED_AER' ? '❌ Ditolak' : '⏳ Menunggu')}</span>
+            ${req.aer_approved_by ? `<div style="font-size:10px; color:#15803d; margin-top:2px;">oleh: ${escapeHtml(req.aer_approved_by)}</div>` : ''}
+          </div>
+
+          <!-- Level 2: PER (HRD) -->
+          <div style="padding:6px; border-radius:6px; background:${isHrdDone ? '#f0fdf4; border:1px solid #86efac;' : (status === 'PROSES_HRD' || status === 'IN PROGRESS' ? '#dbeafe; border:1px solid #93c5fd;' : '#f8fafc; border:1px solid #e2e8f0;')}">
+            <strong>2. Rekrutmen HRD (PER)</strong><br>
+            <span>${isHrdDone ? '✅ Seleksi Selesai' : (status === 'PROSES_HRD' || status === 'IN PROGRESS' ? '🔵 Sedang Proses' : '⏳ Menunggu')}</span>
+            ${req.hrd_processed_by ? `<div style="font-size:10px; color:#2563eb; margin-top:2px;">oleh: ${escapeHtml(req.hrd_processed_by)}</div>` : ''}
+          </div>
+
+          <!-- Level 3: APER (Direksi) -->
+          <div style="padding:6px; border-radius:6px; background:${isAperDone ? '#f0fdf4; border:1px solid #86efac;' : (status === 'PENDING_APER' ? '#f3e8ff; border:1px solid #d8b4fe;' : '#f8fafc; border:1px solid #e2e8f0;')}">
+            <strong>3. Direksi / BOD (APER)</strong><br>
+            <span>${isAperDone ? '🟢 Approved Final' : (status === 'REJECTED_APER' ? '❌ Ditolak' : '⏳ Menunggu')}</span>
+            ${req.aper_approved_by ? `<div style="font-size:10px; color:#15803d; margin-top:2px;">oleh: ${escapeHtml(req.aper_approved_by)}</div>` : ''}
+          </div>
+        </div>
       </div>
 
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px 14px; margin-bottom:12px;">
         <div><strong style="color:#64748b; font-size:11px;">PEMOHON:</strong><br><strong>${escapeHtml(req.pemohonnama)}</strong></div>
         <div><strong style="color:#64748b; font-size:11px;">DIVISI:</strong><br><strong style="color:#0f172a;">${escapeHtml(req.divisi || '-')}</strong></div>
         <div><strong style="color:#64748b; font-size:11px;">DEPARTEMEN:</strong><br>${escapeHtml(req.departemen || '-')}</div>
-        <div><strong style="color:#64748b; font-size:11px;">KODE / NAMA PROYEK:</strong><br>${escapeHtml(req.projectcode || '-')}</div>
+        <div><strong style="color:#64748b; font-size:11px;">KODE / NAMA PROYEK:</strong><br><strong style="color:#0284c7;">${escapeHtml(req.projectcode || '-')}</strong></div>
         <div><strong style="color:#64748b; font-size:11px;">LOKASI PENEMPATAN / SITE:</strong><br><strong style="color:#2563eb;">📍 ${escapeHtml(req.lokasisite || '-')}</strong></div>
         <div><strong style="color:#64748b; font-size:11px;">POSISI / KUALIFIKASI:</strong><br><strong style="font-size:14px; color:#2563eb;">${escapeHtml(req.posisijabatan)}</strong></div>
         <div><strong style="color:#64748b; font-size:11px;">JUMLAH KEBUTUHAN:</strong><br><strong style="color:#e8562c;">${req.jumlahorang || 1} Orang</strong></div>
@@ -2461,33 +2529,119 @@ function openEmployeeRequestDetail(id) {
         <div style="white-space:pre-line; color:#1e293b;">${escapeHtml(req.kualifikasikhusus || 'Tidak ada catatan khusus.')}</div>
       </div>
 
-      ${req.approvedby ? `
-        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px; margin-top:10px; font-size:12px;">
-          <strong style="color:#166534;">Ditinjau Oleh:</strong> ${escapeHtml(req.approvedby)} (${req.approvedat ? new Date(req.approvedat).toLocaleString('id-ID') : '-'})<br>
-          ${req.catatanapproval ? `<strong style="color:#166534;">Catatan Evaluasi:</strong> ${escapeHtml(req.catatanapproval)}` : ''}
+      <!-- AUDIT LOG CATATAN EVALUASI TIAP TINGKAT -->
+      ${req.aer_notes || req.aer_approved_by ? `
+        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; margin-top:10px; font-size:12px;">
+          <strong style="color:#334155;">📝 Catatan Atasan / PM (AER):</strong> ${escapeHtml(req.aer_notes || '-')}
+          <span style="color:#64748b; font-size:11px; display:block;">Oleh: ${escapeHtml(req.aer_approved_by || '-')} (${req.aer_approved_at ? new Date(req.aer_approved_at).toLocaleString('id-ID') : '-'})</span>
         </div>
       ` : ''}
 
-      <!-- Shortcut Pre-Fill Form Tambah Karyawan Baru -->
-      <div style="background:#f0fdfa; border:1.5px dashed #0d9488; border-radius:8px; padding:12px; margin-top:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-        <div style="flex:1; min-width:200px;">
-          <strong style="color:#0f766e; font-size:13px; display:flex; align-items:center; gap:5px;">
-            <span>👤</span> Registrasi Karyawan dari Request Ini
-          </strong>
-          <span style="font-size:11px; color:#115e59; display:block; margin-top:2px;">
-            Salin Divisi, Dept, Posisi &amp; Site langsung ke Form Karyawan Baru (Password default: <strong>12345</strong>).
-          </span>
+      ${req.hrd_notes || req.hrd_processed_by ? `
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:8px 10px; margin-top:8px; font-size:12px;">
+          <strong style="color:#1e40af;">📝 Catatan Proses HRD (PER):</strong> ${escapeHtml(req.hrd_notes || '-')}
+          <span style="color:#64748b; font-size:11px; display:block;">Oleh: ${escapeHtml(req.hrd_processed_by || '-')} (${req.hrd_processed_at ? new Date(req.hrd_processed_at).toLocaleString('id-ID') : '-'})</span>
         </div>
-        <button type="button" class="btn-primary" style="background:#0d9488; font-size:12px; padding:7px 14px; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" onclick="prefillKaryawanFromRequest(${req.id})">
-          ➕ Isi Form Karyawan Baru
-        </button>
-      </div>
+      ` : ''}
+
+      ${req.aper_notes || req.aper_approved_by ? `
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:8px 10px; margin-top:8px; font-size:12px;">
+          <strong style="color:#166534;">📝 Catatan Direksi / BOD (APER):</strong> ${escapeHtml(req.aper_notes || '-')}
+          <span style="color:#64748b; font-size:11px; display:block;">Oleh: ${escapeHtml(req.aper_approved_by || '-')} (${req.aper_approved_at ? new Date(req.aper_approved_at).toLocaleString('id-ID') : '-'})</span>
+        </div>
+      ` : ''}
+
+      <!-- SHORTCUT PRE-FILL DATA KARYAWAN JIKA SUDAH ACC DIREKSI / FULFILLED -->
+      ${(status === 'FULFILLED' || status === 'APPROVED' || status === 'APPROVED_APER') ? `
+        <div style="background:#f0fdfa; border:1.5px dashed #0d9488; border-radius:8px; padding:12px; margin-top:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div style="flex:1; min-width:200px;">
+            <strong style="color:#0f766e; font-size:13px; display:flex; align-items:center; gap:5px;">
+              <span>👤</span> Registrasi Karyawan dari Request Ini
+            </strong>
+            <span style="font-size:11px; color:#115e59; display:block; margin-top:2px;">
+              Salin Divisi, Dept, Posisi &amp; Site langsung ke Form Karyawan Baru (Password default: <strong>12345</strong>).
+            </span>
+          </div>
+          <button type="button" class="btn-primary" style="background:#0d9488; font-size:12px; padding:7px 14px; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" onclick="prefillKaryawanFromRequest(${req.id})">
+            ➕ Isi Form Karyawan Baru
+          </button>
+        </div>
+      ` : ''}
     `;
   }
 
-  // Tampilkan box approval jika user punya Author Employee Request
+  // RENDER DYNAMIC ACTION BOX BERDASARKAN ROLE LOGIN & STATUS SAAT INI
   if (boxApproval) {
-    boxApproval.style.display = hasEmployeeRequestAuthor() ? 'block' : 'none';
+    let actionHtml = '';
+    const canAer = canUserApproveAer(req.projectcode);
+    const canHrd = canUserProcessHrd();
+    const canAper = canUserApproveAper();
+
+    if (status === 'PENDING_AER' || status === 'PENDING') {
+      if (canAer) {
+        actionHtml = `
+          <label for="empReqActionNotes" style="font-weight:700; font-size:12px; color:#1e293b; display:block; margin-bottom:4px;">
+            ✍️ Catatan Evaluasi Project Manager / Atasan (AER):
+          </label>
+          <textarea id="empReqActionNotes" rows="2" placeholder="Tuliskan catatan persetujuan atau alasan penolakan proyek..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1; font-family:inherit; font-size:12px;"></textarea>
+          <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+            <button type="button" class="btn-primary" style="flex:1; min-width:140px; background:#16a34a;" onclick="executeEmpReqStep('AER_APPROVE')">
+              ✅ Setujui &amp; Teruskan ke HRD (AER)
+            </button>
+            <button type="button" class="btn-logout-card" style="flex:1; min-width:120px; color:#dc2626; border-color:#fca5a5;" onclick="executeEmpReqStep('AER_REJECT')">
+              ❌ Tolak Permintaan (AER)
+            </button>
+          </div>
+        `;
+      } else {
+        actionHtml = `<div style="color:#b45309; background:#fef3c7; padding:8px 12px; border-radius:6px; font-size:12px;">⏳ Menunggu persetujuan Atasan / Project Manager (Author: <strong>AER</strong>).</div>`;
+      }
+    } else if (status === 'PROSES_HRD' || status === 'IN PROGRESS') {
+      if (canHrd) {
+        actionHtml = `
+          <label for="empReqActionNotes" style="font-weight:700; font-size:12px; color:#1e293b; display:block; margin-bottom:4px;">
+            ✍️ Catatan Evaluasi &amp; Rekrutmen HRD (PER):
+          </label>
+          <textarea id="empReqActionNotes" rows="2" placeholder="Contoh: Kandidat sudah lolos interview teknis &amp; MCU, diajukan ke Direksi untuk ACC final..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1; font-family:inherit; font-size:12px;"></textarea>
+          <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+            <button type="button" class="btn-primary" style="flex:1; min-width:160px; background:#7c3aed;" onclick="executeEmpReqStep('HRD_PROCEED_BOD')">
+              📤 Ajukan Persetujuan Final ke Direksi (APER)
+            </button>
+            <button type="button" class="btn-primary" style="flex:1; min-width:140px; background:#2563eb;" onclick="executeEmpReqStep('HRD_UPDATE')">
+              💾 Simpan Update Catatan HRD
+            </button>
+          </div>
+        `;
+      } else {
+        actionHtml = `<div style="color:#1d4ed8; background:#dbeafe; padding:8px 12px; border-radius:6px; font-size:12px;">🔵 Sedang dalam proses seleksi &amp; rekrutmen oleh Tim HRD (PIC: <strong>PER</strong>).</div>`;
+      }
+    } else if (status === 'PENDING_APER') {
+      if (canAper) {
+        actionHtml = `
+          <label for="empReqActionNotes" style="font-weight:700; font-size:12px; color:#1e293b; display:block; margin-bottom:4px;">
+            ✍️ Catatan Persetujuan Direksi / BOD (APER):
+          </label>
+          <textarea id="empReqActionNotes" rows="2" placeholder="Tuliskan catatan otorisasi Direksi..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1; font-family:inherit; font-size:12px;"></textarea>
+          <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+            <button type="button" class="btn-primary" style="flex:1; min-width:140px; background:#059669;" onclick="executeEmpReqStep('APER_APPROVE')">
+              🟢 Setujui Final / ACC Direksi (APER)
+            </button>
+            <button type="button" class="btn-logout-card" style="flex:1; min-width:120px; color:#dc2626; border-color:#fca5a5;" onclick="executeEmpReqStep('APER_REJECT')">
+              ❌ Tolak Pengajuan (APER)
+            </button>
+          </div>
+        `;
+      } else {
+        actionHtml = `<div style="color:#7e22ce; background:#f3e8ff; padding:8px 12px; border-radius:6px; font-size:12px;">🟣 Menunggu persetujuan final dari Direksi / BOD (Author: <strong>APER</strong>).</div>`;
+      }
+    } else if (status === 'FULFILLED' || status === 'APPROVED') {
+      actionHtml = `<div style="color:#047857; background:#ecfdf5; padding:8px 12px; border-radius:6px; font-size:12px;">✅ Permintaan telah disetujui penuh oleh Direksi. Karyawan siap didaftarkan ke sistem.</div>`;
+    } else if (status.startsWith('REJECTED')) {
+      actionHtml = `<div style="color:#b91c1c; background:#fee2e2; padding:8px 12px; border-radius:6px; font-size:12px;">❌ Pengajuan permintaan ini telah ditolak.</div>`;
+    }
+
+    boxApproval.innerHTML = actionHtml;
+    boxApproval.style.display = 'block';
   }
 
   if (modal) modal.style.display = 'flex';
@@ -2545,33 +2699,29 @@ function prefillKaryawanFromRequest(reqId) {
   }, 300);
 }
 
-async function executeEmpReqDecision(newStatus) {
+async function executeEmpReqStep(action) {
   if (!empReqState.selectedRequest) return;
-  if (!hasEmployeeRequestAuthor()) {
-    showToast('Anda tidak memiliki otorisasi untuk mengubah status permintaan.', 'error');
-    return;
-  }
 
   const reqId = empReqState.selectedRequest.id;
-  const notes = (document.getElementById('empReqApprovalNotes')?.value || '').trim();
-  const approver = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'Author';
+  const notes = (document.getElementById('empReqActionNotes')?.value || '').trim();
+  const actor = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'System';
 
   try {
-    const { data, error } = await supabaseClient.rpc('process_employee_request_approval', {
+    const { data, error } = await supabaseClient.rpc('process_employee_request_step', {
       p_id: reqId,
-      p_approved_by: approver,
-      p_status: newStatus,
-      p_catatan: notes
+      p_actor_name: actor,
+      p_step_action: action,
+      p_notes: notes
     });
 
     if (error) throw error;
 
-    showToast(data?.message || `Status permintaan diubah menjadi ${newStatus}`, 'success');
+    showToast(data?.message || 'Status permintaan berhasil diperbarui.', 'success');
     closeModalEmpReqDetail();
     await loadEmployeeRequestPage(empReqState.currentTab);
   } catch (err) {
-    console.error('Error executeEmpReqDecision:', err);
-    showToast('Gagal memproses keputusan: ' + err.message, 'error');
+    console.error('Error executeEmpReqStep:', err);
+    showToast('Gagal memproses approval: ' + err.message, 'error');
   }
 }
 
