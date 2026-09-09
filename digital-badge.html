@@ -305,6 +305,7 @@ const btnSubmitPin = document.getElementById('btnSubmitPin');
 const pinOverlay = document.getElementById('pinOverlay');
 const pageContent = document.getElementById('pageContent');
 const pinWrapper = document.getElementById('pinWrapper');
+let pinSubmissionInProgress = false;
 
 function getPinValue() {
   if (realPinInput) return (realPinInput.value || '').replace(/[^0-9]/g, '').slice(0, 6);
@@ -339,6 +340,7 @@ function updatePinBoxes() {
 }
 
 function clearPinBoxes() {
+  pinSubmissionInProgress = false;
   if (realPinInput) {
     realPinInput.value = "";
     updatePinBoxes();
@@ -404,6 +406,7 @@ setTimeout(() => {
 }, 200);
 
 async function submitPin() {
+    if (pinSubmissionInProgress) return;
     const pin = getPinValue().trim();
     if (pinMsg) pinMsg.style.display = "none";
 
@@ -419,6 +422,7 @@ async function submitPin() {
       btnSubmitPin.disabled = true;
       btnSubmitPin.innerText = "Memeriksa...";
     }
+    pinSubmissionInProgress = true;
 
     try {
       let hasil = null;
@@ -465,6 +469,7 @@ async function submitPin() {
           btnSubmitPin.disabled = false;
           btnSubmitPin.innerText = "Tampilkan Badge";
         }
+        pinSubmissionInProgress = false;
         clearPinBoxes();
         return;
       }
@@ -575,11 +580,11 @@ async function submitPin() {
         btnSubmitPin.disabled = false;
         btnSubmitPin.innerText = "Tampilkan Badge";
       }
+      pinSubmissionInProgress = false;
     }
   }
 
   if (btnSubmitPin) {
-    btnSubmitPin.onclick = submitPin;
     btnSubmitPin.addEventListener('click', (e) => {
       e.preventDefault();
       submitPin();
