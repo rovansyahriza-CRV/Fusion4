@@ -1194,9 +1194,19 @@ function renderViewReportTable() {
   tbody.innerHTML = filtered.map(r => {
     let tgl = r.tanggal || '-';
     if (typeof tgl === 'string' && tgl.includes('T')) tgl = tgl.split('T')[0];
-    const reportCell = r.reportUrl
-      ? `<a href="${r.reportUrl}" target="_blank" rel="noopener" class="btn-logout-card" style="display:inline-flex;">📄 Lihat Report</a>`
-      : `<span class="badge-unit" style="background:#F1EEE9;color:#a09a92;">Belum ada</span>`;
+    let reportCell = '';
+    if (category === 'request') {
+      reportCell = `
+        <div style="display:inline-flex; gap:6px; align-items:center;">
+          ${r.reportUrl ? `<a href="${r.reportUrl}" target="_blank" rel="noopener" class="btn-logout-card" style="display:inline-flex;">📄 Lihat Report</a>` : `<span class="badge-unit" style="background:#F1EEE9;color:#a09a92;">Belum ada</span>`}
+          <button type="button" class="btn-icon" onclick="regenerateRequestReport('${r.noTransaksi}', this)" title="Refresh / Generate Ulang PDF Report" style="padding:4px 8px; font-size:12px; border-radius:6px; background:#f4efe9; border:1px solid #dcd8cc; cursor:pointer;">🔄</button>
+        </div>
+      `;
+    } else {
+      reportCell = r.reportUrl
+        ? `<a href="${r.reportUrl}" target="_blank" rel="noopener" class="btn-logout-card" style="display:inline-flex;">📄 Lihat Report</a>`
+        : `<span class="badge-unit" style="background:#F1EEE9;color:#a09a92;">Belum ada</span>`;
+    }
     return `
       <tr>
         <td><strong>${r.noTransaksi || '-'}</strong></td>
@@ -1205,6 +1215,24 @@ function renderViewReportTable() {
         <td style="text-align:center;">${reportCell}</td>
       </tr>`;
   }).join('');
+}
+
+async function regenerateRequestReport(refno, btnEl) {
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳'; }
+  try {
+    showToast(`Meng-update PDF report untuk ${refno}...`, 'info');
+    const uploaded = await refreshRequestReportPdf(refno);
+    if (uploaded && uploaded.directUrl) {
+      showToast(`PDF report ${refno} berhasil di-refresh!`, 'success');
+      loadViewReportPage('request');
+    } else {
+      showToast(`Gagal update PDF report ${refno}.`, 'error');
+    }
+  } catch (e) {
+    showToast(`Error: ${e.message}`, 'error');
+  } finally {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '🔄'; }
+  }
 }
 
 function showToast(message, type = 'success', duration = 3000) {

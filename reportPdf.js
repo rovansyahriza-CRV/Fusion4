@@ -314,10 +314,10 @@ async function buildReportPdf(config) {
       doc.setLineDashPattern([1, 1], 0);
       doc.roundedRect(cx - 9, y + 3, 18, 18, 1, 1, "S");
       doc.setLineDashPattern([], 0);
-      doc.setFontSize(6);
+      doc.setFontSize(6.5);
       doc.setTextColor(...hexToRgb(C.INK_SOFT));
-      doc.text("Tidak ada", cx, y + 11, { align: "center" });
-      doc.text("QrCodeID", cx, y + 14, { align: "center" });
+      const placeholderText = s.name === "—" ? "Menunggu" : "Tanda Tangan";
+      doc.text(placeholderText, cx, y + 12, { align: "center" });
     }
 
     doc.setFont("helvetica", "bold");
@@ -352,7 +352,8 @@ async function generateRequestReportPdf(data) {
   // data: { refNo, woNo, projectId, tanggalRequest, diajukanOleh, diajukanOlehSub,
   //         diajukanOlehQr, status, keperluan, items:[{kode,desk,qty,unit}],
   //         approvalHistory:[{tanggal, oleh, keterangan}],
-  //         disetujuiOleh, disetujuiOlehSub, disetujuiOlehQr (null kalau belum approve) }
+  //         direviewOleh, direviewOlehSub, direviewOlehQr,
+  //         disetujuiOleh, disetujuiOlehSub, disetujuiOlehQr }
   const itemsRows = data.items.map((it, i) => [
     String(i + 1),
     it.kode || "-",
@@ -361,11 +362,25 @@ async function generateRequestReportPdf(data) {
   ]);
 
   const signatures = [
-    { role: "Diajukan oleh", name: data.diajukanOleh, sub: data.diajukanOlehSub, qrPayload: data.diajukanOlehQr },
+    {
+      role: "Diajukan oleh",
+      name: data.diajukanOleh || "—",
+      sub: data.diajukanOlehSub || "Requester",
+      qrPayload: data.diajukanOlehQr || null,
+    },
+    {
+      role: "Direview oleh",
+      name: data.direviewOleh || "—",
+      sub: data.direviewOlehSub || (data.direviewOleh ? "Reviewer" : "Menunggu Review"),
+      qrPayload: data.direviewOlehQr || null,
+    },
+    {
+      role: "Disetujui oleh",
+      name: data.disetujuiOleh || "—",
+      sub: data.disetujuiOlehSub || (data.disetujuiOleh ? "Direktur" : "Menunggu Approval"),
+      qrPayload: data.disetujuiOlehQr || null,
+    },
   ];
-  if (data.disetujuiOleh) {
-    signatures.push({ role: "Disetujui oleh", name: data.disetujuiOleh, sub: data.disetujuiOlehSub, qrPayload: data.disetujuiOlehQr });
-  }
 
   const config = {
     eyebrow: "Material request",
@@ -524,7 +539,9 @@ async function generateRfqReportPdf(data) {
     },
     photo: null,
     signatures: [
-      { role: "Dibuat oleh", name: data.createdBy, sub: data.createdBySub, qrPayload: data.createdByQr },
+      { role: "Dibuat oleh", name: data.createdBy || "—", sub: data.createdBySub || "Purchasing", qrPayload: data.createdByQr || null },
+      { role: "Direview oleh", name: data.reviewedBy || "—", sub: data.reviewedBySub || (data.reviewedBy ? "Reviewer" : "Menunggu Review"), qrPayload: data.reviewedByQr || null },
+      { role: "Disetujui oleh", name: data.approvedBy || "—", sub: data.approvedBySub || (data.approvedBy ? "Direktur" : "Menunggu Approval"), qrPayload: data.approvedByQr || null },
     ],
   };
 
@@ -535,7 +552,9 @@ async function generateRfqReportPdf(data) {
 async function generateVendorSelectionReportPdf(data) {
   // data: { noRfq, tanggalSeleksi, diusulkanOleh, diusulkanOlehSub, diusulkanOlehQr, catatan,
   //         items:[{desk, qty, unit, vendorPemenang, hargaSatuan, subtotal}],
-  //         vendorSummary:[{nama, total}] }
+  //         vendorSummary:[{nama, total}],
+  //         direviewOleh, direviewOlehSub, direviewOlehQr,
+  //         disetujuiOleh, disetujuiOlehSub, disetujuiOlehQr }
   const usableW = 210 - 16 * 2;
   const noColW = 8, qtyColW = 18, vendorColW = 34, hargaColW = 30, subtotalColW = 30;
   const deskColW = usableW - noColW - qtyColW - vendorColW - hargaColW - subtotalColW;
@@ -574,7 +593,9 @@ async function generateVendorSelectionReportPdf(data) {
       : null,
     photo: null,
     signatures: [
-      { role: "Diusulkan oleh", name: data.diusulkanOleh, sub: data.diusulkanOlehSub, qrPayload: data.diusulkanOlehQr },
+      { role: "Diusulkan oleh", name: data.diusulkanOleh || "—", sub: data.diusulkanOlehSub || "Sponsor", qrPayload: data.diusulkanOlehQr || null },
+      { role: "Direview oleh", name: data.direviewOleh || "—", sub: data.direviewOlehSub || (data.direviewOleh ? "Procurement" : "Menunggu Review"), qrPayload: data.direviewOlehQr || null },
+      { role: "Disetujui oleh", name: data.disetujuiOleh || "—", sub: data.disetujuiOlehSub || (data.disetujuiOleh ? "Direktur" : "Menunggu Approval"), qrPayload: data.disetujuiOlehQr || null },
     ],
   };
 
@@ -663,15 +684,25 @@ async function refreshRequestReportPdf(refno, forcedStatus = null) {
       { tanggal: reqDateStr, oleh: reqByName, keterangan: 'Request diajukan' }
     ];
 
+    let direviewOleh = null;
+    let direviewOlehSub = null;
+    let direviewOlehQr = null;
+
     if (apprRow?.ReviewedAt && apprRow?.ReviewedBy) {
       const revEmp = getEmp(apprRow.ReviewedBy);
       const revName = revEmp ? revEmp.Nama : apprRow.ReviewedBy;
-      const revSub = revEmp?.Kualifikasi ? ` (${revEmp.Kualifikasi})` : '';
+      const revSub = revEmp?.Kualifikasi || 'Reviewer';
+      const revQr = revEmp?.QrCodeId || apprRow.ReviewedBy;
+
       approvalHistory.push({
         tanggal: new Date(apprRow.ReviewedAt).toLocaleString('id-ID'),
-        oleh: `${revName}${revSub}`,
+        oleh: `${revName} (${revSub})`,
         keterangan: 'Review disetujui, diteruskan ke Direktur'
       });
+
+      direviewOleh = revName;
+      direviewOlehSub = revSub;
+      direviewOlehQr = `QrCodeID=${revQr}|NoTransaksi=${refno}|Status=Reviewed`;
     }
 
     let disetujuiOleh = null;
@@ -732,6 +763,9 @@ async function refreshRequestReportPdf(refno, forcedStatus = null) {
       keperluan: firstReq.Purpose || '-',
       items: items,
       approvalHistory: approvalHistory,
+      direviewOleh: direviewOleh,
+      direviewOlehSub: direviewOlehSub,
+      direviewOlehQr: direviewOlehQr,
       disetujuiOleh: disetujuiOleh,
       disetujuiOlehSub: disetujuiOlehSub,
       disetujuiOlehQr: disetujuiOlehQr
