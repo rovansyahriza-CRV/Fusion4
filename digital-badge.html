@@ -110,13 +110,29 @@
   #pinModal h3 { margin: 0 0 6px; font-size: 18px; color: var(--charcoal); }
   #pinModal p { margin: 0 0 18px; font-size: 13px; color: var(--text-muted); }
   .pin-wrapper { position: relative; width: 100%; max-width: 290px; margin: 0 auto 18px; cursor: pointer; }
-  .pin-boxes { display: flex; gap: 8px; justify-content: center; margin-bottom: 0; }
+  #realPinInput {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    z-index: 10;
+    cursor: pointer;
+    font-size: 16px;
+    border: none;
+    background: transparent;
+    color: transparent;
+    caret-color: transparent;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pin-boxes { display: flex; gap: 8px; justify-content: center; margin-bottom: 0; pointer-events: none; }
   .pin-box {
     width: 40px; height: 50px; font-size: 24px; font-weight: 700; text-align: center;
     border-radius: 10px; border: 1.5px solid var(--border); background: #FAF7F3;
     color: var(--charcoal); display: flex; align-items: center; justify-content: center;
     transition: all 0.15s ease;
-    user-select: none; -webkit-user-select: none;
+    user-select: none;
   }
   .pin-box.active {
     border-color: var(--orange);
@@ -131,9 +147,11 @@
   button#btnSubmitPin {
     width: 100%; padding: 14px; font-size: 15px; font-weight: 700;
     border: none; border-radius: 12px; background: var(--orange); color: #fff; cursor: pointer;
+    transition: background 0.15s ease;
   }
+  button#btnSubmitPin:hover { background: var(--orange-dark); }
   button#btnSubmitPin:active { background: var(--orange-dark); }
-  button#btnSubmitPin:disabled { opacity: 0.5; }
+  button#btnSubmitPin:disabled { opacity: 0.5; cursor: not-allowed; }
   #pinMsg {
     margin-top: 12px; font-size: 13px; padding: 10px; border-radius: 8px;
     background: var(--danger-bg); color: var(--danger); display: none;
@@ -194,27 +212,20 @@
     <div class="pin-icon">🔒</div>
     <h3>Verifikasi PIN</h3>
     <p>Masukkan PIN Anda untuk menampilkan badge.</p>
-    <div class="pin-wrapper" id="pinWrapper">
-      <input 
-        type="tel" 
-        id="realPinInput" 
-        inputmode="numeric" 
-        pattern="[0-9]*" 
-        maxlength="6" 
-        autocomplete="one-time-code"
-        style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; z-index: 10; cursor: pointer; font-size: 32px; border: none; background: transparent; outline: none; caret-color: transparent;"
-        aria-label="Masukkan 6 Digit PIN"
-      >
-      <div class="pin-boxes" id="pinBoxesContainer" style="pointer-events: none;">
-        <div class="pin-box" data-idx="0"></div>
-        <div class="pin-box" data-idx="1"></div>
-        <div class="pin-box" data-idx="2"></div>
-        <div class="pin-box" data-idx="3"></div>
-        <div class="pin-box" data-idx="4"></div>
-        <div class="pin-box" data-idx="5"></div>
+    <form id="pinForm" autocomplete="off" onsubmit="return false;" style="margin:0; padding:0; width:100%;">
+      <div class="pin-wrapper" id="pinWrapper">
+        <input type="tel" id="realPinInput" name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" autofocus aria-label="6 Digit PIN">
+        <div class="pin-boxes" id="pinBoxesContainer">
+          <div class="pin-box active" data-idx="0"></div>
+          <div class="pin-box" data-idx="1"></div>
+          <div class="pin-box" data-idx="2"></div>
+          <div class="pin-box" data-idx="3"></div>
+          <div class="pin-box" data-idx="4"></div>
+          <div class="pin-box" data-idx="5"></div>
+        </div>
       </div>
-    </div>
-    <button type="button" id="btnSubmitPin">Tampilkan Badge</button>
+      <button type="submit" id="btnSubmitPin">Tampilkan Badge</button>
+    </form>
     <div id="pinMsg"></div>
   </div>
 </div>
@@ -300,6 +311,7 @@ function formatDriveDirectUrl(url) {
 
 const realPinInput = document.getElementById('realPinInput');
 const pinBoxes = Array.from(document.querySelectorAll('.pin-box'));
+const pinForm = document.getElementById('pinForm');
 const pinMsg = document.getElementById('pinMsg');
 const btnSubmitPin = document.getElementById('btnSubmitPin');
 const pinOverlay = document.getElementById('pinOverlay');
@@ -308,43 +320,51 @@ const pinWrapper = document.getElementById('pinWrapper');
 let pinSubmissionInProgress = false;
 
 function getPinValue() {
-  if (realPinInput) return (realPinInput.value || '').replace(/[^0-9]/g, '').slice(0, 6);
+  if (realPinInput) return (realPinInput.value || '').replace(/\D/g, '').slice(0, 6);
   return '';
 }
 
 function updatePinBoxes() {
   if (!realPinInput) return;
-  const val = (realPinInput.value || '').replace(/[^0-9]/g, '').slice(0, 6);
+  const val = getPinValue();
   realPinInput.value = val;
-  const isFocused = (document.activeElement === realPinInput);
+
+  const isFocused = document.activeElement === realPinInput;
+  const currentIdx = Math.min(val.length, 5);
 
   pinBoxes.forEach((box, i) => {
-    if (i < val.length) {
-      box.textContent = '●';
+    box.textContent = val[i] || '';
+    if (val[i]) {
       box.classList.add('filled');
       box.classList.remove('active');
     } else {
-      box.textContent = '';
       box.classList.remove('filled');
-      if (isFocused && i === val.length) {
-        box.classList.add('active');
-      } else {
-        box.classList.remove('active');
-      }
+      box.classList.toggle('active', isFocused && i === currentIdx);
     }
   });
 
-  if (val.length === 6) {
+  if (val.length === 6 && !pinSubmissionInProgress) {
     submitPin();
+  }
+}
+
+function focusPinInput() {
+  if (realPinInput) {
+    try {
+      realPinInput.focus();
+    } catch (err) {
+      // ignore
+    }
+    updatePinBoxes();
   }
 }
 
 function clearPinBoxes() {
   pinSubmissionInProgress = false;
   if (realPinInput) {
-    realPinInput.value = "";
+    realPinInput.value = '';
     updatePinBoxes();
-    realPinInput.focus();
+    focusPinInput();
   }
 }
 
@@ -360,15 +380,42 @@ if (realPinInput) {
       submitPin();
     }
   });
+  realPinInput.addEventListener('paste', (e) => {
+    const pasteData = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+    const digits = pasteData.replace(/\D/g, '').slice(0, 6);
+    if (digits) {
+      e.preventDefault();
+      realPinInput.value = digits;
+      updatePinBoxes();
+    }
+  });
 }
 
 if (pinWrapper) {
   pinWrapper.addEventListener('click', () => {
-    if (realPinInput) realPinInput.focus();
+    focusPinInput();
+  });
+}
+
+if (pinForm) {
+  pinForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitPin();
+  });
+}
+
+if (btnSubmitPin) {
+  btnSubmitPin.addEventListener('click', (e) => {
+    e.preventDefault();
+    submitPin();
   });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  focusPinInput();
+  setTimeout(focusPinInput, 100);
+  setTimeout(focusPinInput, 300);
+
   const urlParams = new URLSearchParams(window.location.search);
   const pinParam = urlParams.get('pin');
   const qrParam = urlParams.get('qr') || urlParams.get('QrCodeId') || urlParams.get('qrcodeid');
@@ -400,10 +447,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 });
-
-setTimeout(() => {
-  if (realPinInput) realPinInput.focus();
-}, 200);
 
 async function submitPin() {
     if (pinSubmissionInProgress) return;
@@ -487,6 +530,7 @@ async function submitPin() {
         btnSubmitPin.disabled = false;
         btnSubmitPin.innerText = "Tampilkan Badge";
       }
+      pinSubmissionInProgress = false;
 
       // Render data teks kartu
       try {
@@ -584,13 +628,6 @@ async function submitPin() {
     }
   }
 
-  if (btnSubmitPin) {
-    btnSubmitPin.addEventListener('click', (e) => {
-      e.preventDefault();
-      submitPin();
-    });
-  }
-
   const btnAbsen = document.getElementById('btnAbsenSekarang');
   if (btnAbsen) {
     btnAbsen.onclick = () => {
@@ -609,6 +646,7 @@ async function submitPin() {
       if (pageContent) pageContent.style.display = "none";
       if (pinOverlay) pinOverlay.style.display = "flex";
       clearPinBoxes();
+      focusPinInput();
     };
   }
 
