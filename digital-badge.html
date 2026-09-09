@@ -1721,6 +1721,47 @@ async function submitPin() {
     return words(n) + ' rupiah';
   }
 
+  function generateQrDataUrl(text, size = 160) {
+    return new Promise((resolve) => {
+      try {
+        if (typeof QRCode === 'undefined') {
+          console.warn('QRCode library not loaded.');
+          return resolve(null);
+        }
+        const holder = document.createElement('div');
+        holder.style.position = 'fixed';
+        holder.style.left = '-9999px';
+        holder.style.top = '0';
+        document.body.appendChild(holder);
+        new QRCode(holder, {
+          text: text,
+          width: size,
+          height: size,
+          colorDark: '#1c2321',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M,
+        });
+        setTimeout(() => {
+          try {
+            const canvas = holder.querySelector('canvas');
+            const img = holder.querySelector('img');
+            let dataUrl = null;
+            if (canvas) dataUrl = canvas.toDataURL('image/png');
+            else if (img) dataUrl = img.src;
+            document.body.removeChild(holder);
+            resolve(dataUrl);
+          } catch (e) {
+            try { document.body.removeChild(holder); } catch(_) {}
+            resolve(null);
+          }
+        }, 80);
+      } catch (err) {
+        console.warn('generateQrDataUrl error:', err);
+        resolve(null);
+      }
+    });
+  }
+
   async function generatePoPdfBase64(poHeader, vendorInfo, termData, items) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
@@ -1732,7 +1773,14 @@ async function submitPin() {
   const qrDataUrl = await generateQrDataUrl(validationUrl, 200);
 
   // Letterhead
-  doc.addImage(BIMA_LOGO_BASE64, 'PNG', 14, 10, 20, 20);
+  if (typeof BIMA_LOGO_BASE64 !== 'undefined' && BIMA_LOGO_BASE64) {
+    const logoSrc = BIMA_LOGO_BASE64.startsWith('data:') ? BIMA_LOGO_BASE64 : ('data:image/png;base64,' + BIMA_LOGO_BASE64);
+    try {
+      doc.addImage(logoSrc, 'PNG', 14, 10, 20, 20);
+    } catch (logoErr) {
+      console.warn('Gagal addImage logo:', logoErr);
+    }
+  }
   doc.setFontSize(13);
   doc.setTextColor(61, 61, 61);
   doc.text('PT. Bilal Mitra Aryatama', 38, 16);

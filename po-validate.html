@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Verifikasi Dokumen PO/SO — SMMS PT. Bilal Mitra Aryatama</title>
+  
+  <link rel="icon" type="image/png" href="logo-bima.png">
+  <link rel="apple-touch-icon" href="logo-bima.png">
+  <meta name="theme-color" content="#E04D23">
+
+  <!-- Fonts & Supabase -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root {
+      --primary: #E04D23;
+      --primary-dark: #B83A14;
+      --navy: #1B365D;
+      --navy-dark: #12243E;
+      --bg: #F7F5F0;
+      --surface: #FFFFFF;
+      --border: #E6DED9;
+      --text: #2A2826;
+      --muted: #7A7571;
+      --success: #178A4C;
+      --success-bg: #E8F7EE;
+      --danger: #D9312E;
+      --danger-bg: #FDE8E8;
+      --radius: 16px;
+      --shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 620px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 0 auto;
+    }
+
+    /* HEADER BANNER */
+    .header-card {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+      color: #fff;
+      padding: 24px 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header-logo {
+      width: 54px;
+      height: 54px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 4px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .header-info h1 {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+      margin-bottom: 3px;
+    }
+
+    .header-info p {
+      font-size: 12px;
+      color: #CAD5E2;
+      line-height: 1.4;
+    }
+
+    /* STATUS CARD */
+    .status-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      border: 1.5px solid var(--border);
+      text-align: center;
+    }
+
+    .badge-valid {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--success-bg);
+      color: var(--success);
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(23,138,76,0.2);
+    }
+
+    .badge-invalid {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--danger-bg);
+      color: var(--danger);
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(217,49,46,0.2);
+    }
+
+    .status-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--navy);
+      margin-bottom: 4px;
+    }
+
+    .status-docnum {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+
+    .status-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* DETAIL SECTION */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      border: 1.5px solid var(--border);
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--navy);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 16px;
+    }
+
+    @media (max-width: 480px) {
+      .info-grid { grid-template-columns: 1fr; }
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .info-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-val {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    /* ITEM TABLE */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th {
+      background: #F1EEE9;
+      color: var(--text);
+      font-weight: 700;
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1.5px solid var(--border);
+    }
+
+    td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .text-right { text-align: right; }
+
+    /* SUMMARY TOTAL */
+    .summary-box {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1.5px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .summary-total {
+      display: flex;
+      justify-content: space-between;
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--primary);
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      margin-top: 4px;
+    }
+
+    /* BUTTONS */
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 13px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      color: #fff;
+      background: var(--primary);
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 3px 12px rgba(224,77,35,0.25);
+      transition: all 0.2s ease;
+      margin-top: 14px;
+    }
+
+    .btn-action:hover {
+      background: var(--primary-dark);
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 10px;
+      line-height: 1.5;
+    }
+
+    .loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3.5px solid #E6DED9;
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- HEADER BRANDING -->
+    <header class="header-card">
+      <img src="logo-bima.png" onerror="this.onerror=null;this.src='BimaLogo.png'" alt="Logo BIMA" class="header-logo">
+      <div class="header-info">
+        <h1>PT. Bilal Mitra Aryatama</h1>
+        <p>Sistem Validasi Resmi & Keaslian Dokumen Transaksi SMMS BIMA</p>
+      </div>
+    </header>
+
+    <!-- MAIN VALIDATION CONTENT -->
+    <main id="validationContent">
+      <div class="card loader">
+        <div class="spinner"></div>
+        <div>Memverifikasi keaslian dokumen ke database...</div>
+      </div>
+    </main>
+
+    <footer class="footer-note">
+      Dokumen ini diverifikasi secara real-time dari database SMMS BIMA.<br>
+      © 2026 PT. Bilal Mitra Aryatama · All rights reserved.
+    </footer>
+
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function validateDoc() {
+      const contentEl = document.getElementById('validationContent');
+      const params = new URLSearchParams(window.location.search);
+      const docParam = params.get('doc') || params.get('docnumber') || params.get('po') || '';
+      const totalParam = params.get('total') || '';
+
+      if (!docParam) {
+        contentEl.innerHTML = `
+          <div class="status-card">
+            <div class="badge-invalid">⚠️ Parameter Tidak Lengkap</div>
+            <div class="status-title">Nomor Dokumen Tidak Ditemukan</div>
+            <p class="status-desc">Silakan scan ulang QR Code yang tertera pada dokumen fisik atau PDF resmi PO/SO.</p>
+          </div>
+        `;
+        return;
+      }
+
+      try {
+        const { data: poRow, error: poErr } = await supabaseClient
+          .from('purchaseOrder')
+          .select('*')
+          .ilike('DocNumber', docParam.trim())
+          .maybeSingle();
+
+        if (poErr || !poRow) {
+          contentEl.innerHTML = `
+            <div class="status-card">
+              <div class="badge-invalid">❌ DOKUMEN TIDAK VALID</div>
+              <div class="status-title">Dokumen Tidak Terdaftar</div>
+              <div class="status-docnum">${docParam}</div>
+              <p class="status-desc">Nomor dokumen di atas tidak tercatat dalam sistem resmi PT. Bilal Mitra Aryatama atau telah dibatalkan.</p>
+            </div>
+          `;
+          return;
+        }
+
+        // Ambil data pendukung
+        const [
+          { data: rfqRow },
+          { data: vendorRow },
+          { data: termRows },
+          { data: items }
+        ] = await Promise.all([
+          supabaseClient.from('rfq').select('NoRFQ, CreatedBy').eq('RFQID', poRow.RFQID).maybeSingle(),
+          supabaseClient.from('vendor').select('VendorName, Address, ContactNo, Email').eq('VendorID', poRow.VendorID).maybeSingle(),
+          supabaseClient.from('rfqVendorTerm').select('*').eq('RFQVendorID', poRow.RFQVendorID).order('RFQVendorTermID', { ascending: false }).limit(1),
+          supabaseClient.from('purchaseOrderDetail').select('*').eq('POID', poRow.POID)
+        ]);
+
+        const termRow = (termRows && termRows[0]) || null;
+        const isApproved = (poRow.Status === 'Approved' || poRow.ManagementApproval === 'Approved');
+        const docLabel = poRow.DocType === 'SO' ? 'Service Order (SO)' : 'Purchase Order (PO)';
+        const approvedDate = poRow.ManagementApprovalDate ? new Date(poRow.ManagementApprovalDate).toLocaleDateString('id-ID', { year:'numeric', month:'long', day:'numeric' }) : '-';
+        const createdDate = poRow.CreatedDate ? new Date(poRow.CreatedDate).toLocaleDateString('id-ID', { year:'numeric', month:'long', day:'numeric' }) : '-';
+
+        let subtotalItems = 0;
+        const itemsHtml = (items || []).map((it, idx) => {
+          subtotalItems += Number(it.Subtotal || 0);
+          const tglKirim = it.VendorDeliveryDate ? new Date(it.VendorDeliveryDate).toLocaleDateString('id-ID') : '-';
+          return `
+            <tr>
+              <td>${idx + 1}</td>
+              <td><strong>${it.ItemDescription || '-'}</strong></td>
+              <td>${it.Qty} ${it.Unit || ''}</td>
+              <td>${tglKirim}</td>
+              <td class="text-right">Rp ${Number(it.UnitPrice || 0).toLocaleString('id-ID')}</td>
+              <td class="text-right"><strong>Rp ${Number(it.Subtotal || 0).toLocaleString('id-ID')}</strong></td>
+            </tr>
+          `;
+        }).join('');
+
+        const mobilisasi = termRow ? Number(termRow.MobilisasiCost || 0) : 0;
+        const otherService = termRow ? Number(termRow.OtherServiceCost || 0) : 0;
+        const ppn = termRow ? Number(termRow.PPNAmount || 0) : 0;
+        const otherDesc = (termRow && termRow.OtherServiceDescription) ? ` (${termRow.OtherServiceDescription})` : '';
+
+        const badgeHtml = isApproved 
+          ? `<div class="badge-valid">✅ DOKUMEN ASLI & SAH TERVERIFIKASI</div>`
+          : `<div class="badge-invalid">⏳ STATUS DOKUMEN: ${poRow.Status || 'Draft'}</div>`;
+
+        contentEl.innerHTML = `
+          <div class="status-card">
+            ${badgeHtml}
+            <div class="status-title">${docLabel}</div>
+            <div class="status-docnum">${poRow.DocNumber}</div>
+            <p class="status-desc">
+              Dokumen ini disetujui oleh <strong>${poRow.ManagementApprovalBy || 'Direktur'}</strong> pada <strong>${approvedDate}</strong> dengan nilai total transaksi yang sah <strong>Rp ${Number(poRow.TotalAmount || 0).toLocaleString('id-ID')}</strong>.
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="card-title">
+              <span>📋 Informasi Dokumen</span>
+              <span style="font-size:12px; color:var(--primary);">${poRow.DocNumber}</span>
+            </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Vendor Dituju</span>
+                <span class="info-val">${vendorRow?.VendorName || '-'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Kontak Vendor</span>
+                <span class="info-val">${vendorRow?.ContactNo || vendorRow?.Email || '-'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Referensi RFQ</span>
+                <span class="info-val">${rfqRow?.NoRFQ || '-'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Titik Pengiriman</span>
+                <span class="info-val">${poRow.DeliveryPoint || '-'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Tgl. Diterbitkan</span>
+                <span class="info-val">${createdDate}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Disetujui Oleh (Tanda Tangan Digital)</span>
+                <span class="info-val" style="color:var(--success);">✅ ${poRow.ManagementApprovalBy || 'Direktur'} (${approvedDate})</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">
+              <span>📦 Rincian Item Barang / Jasa</span>
+              <span style="font-size:12px; color:var(--muted);">${(items || []).length} Item</span>
+            </div>
+            
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Deskripsi Item</th>
+                    <th>Qty</th>
+                    <th>Tgl. Kirim</th>
+                    <th class="text-right">Harga</th>
+                    <th class="text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml || '<tr><td colspan="6" style="text-align:center;">Tidak ada detail item</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="summary-box">
+              <div class="summary-row">
+                <span>Subtotal Item</span>
+                <span>Rp ${subtotalItems.toLocaleString('id-ID')}</span>
+              </div>
+              ${mobilisasi > 0 ? `
+              <div class="summary-row">
+                <span>Biaya Mobilisasi</span>
+                <span>Rp ${mobilisasi.toLocaleString('id-ID')}</span>
+              </div>` : ''}
+              ${otherService > 0 ? `
+              <div class="summary-row">
+                <span>Biaya Jasa Lain${otherDesc}</span>
+                <span>Rp ${otherService.toLocaleString('id-ID')}</span>
+              </div>` : ''}
+              ${ppn > 0 ? `
+              <div class="summary-row">
+                <span>PPN 11%</span>
+                <span>Rp ${Math.round(ppn).toLocaleString('id-ID')}</span>
+              </div>` : ''}
+              <div class="summary-total">
+                <span>TOTAL NILAI PO/SO</span>
+                <span>Rp ${Number(poRow.TotalAmount || 0).toLocaleString('id-ID')}</span>
+              </div>
+              <div class="summary-row" style="margin-top:6px; color:var(--text); font-weight:600;">
+                <span>Termin Pembayaran</span>
+                <span>${termRow?.PaymentTermType || 'Full Payment'}</span>
+              </div>
+            </div>
+
+            ${poRow.ReportURL ? `
+              <a href="${poRow.ReportURL}" target="_blank" rel="noopener" class="btn-action">
+                📄 Buka / Unduh Dokumen PDF Resmi
+              </a>
+            ` : ''}
+          </div>
+        `;
+      } catch (err) {
+        contentEl.innerHTML = `
+          <div class="status-card">
+            <div class="badge-invalid">⚠️ Terjadi Kesalahan</div>
+            <div class="status-title">Gagal Memuat Data</div>
+            <p class="status-desc">${err.message}</p>
+          </div>
+        `;
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', validateDoc);
+  </script>
+</body>
+</html>

@@ -65,24 +65,53 @@ function terbilang(n) {
 function generatePoQrDataUrl(text, size) {
   size = size || 200;
   return new Promise((resolve) => {
-    const tempDiv = document.createElement('div');
-    tempDiv.style.cssText = 'position:fixed; left:-9999px; top:-9999px;';
-    document.body.appendChild(tempDiv);
-    new QRCode(tempDiv, { text: text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
-    setTimeout(() => {
-      const canvas = tempDiv.querySelector('canvas');
-      const dataUrl = canvas ? canvas.toDataURL('image/png') : null;
-      document.body.removeChild(tempDiv);
-      resolve(dataUrl);
-    }, 100);
+    try {
+      if (typeof QRCode === 'undefined') {
+        console.warn('QRCode library not loaded.');
+        return resolve(null);
+      }
+      const holder = document.createElement('div');
+      holder.style.position = 'fixed';
+      holder.style.left = '-9999px';
+      holder.style.top = '0';
+      document.body.appendChild(holder);
+      new QRCode(holder, {
+        text: text,
+        width: size,
+        height: size,
+        colorDark: '#1c2321',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+      setTimeout(() => {
+        try {
+          const canvas = holder.querySelector('canvas');
+          const img = holder.querySelector('img');
+          let dataUrl = null;
+          if (canvas) dataUrl = canvas.toDataURL('image/png');
+          else if (img) dataUrl = img.src;
+          document.body.removeChild(holder);
+          resolve(dataUrl);
+        } catch (e) {
+          try { document.body.removeChild(holder); } catch(_) {}
+          resolve(null);
+        }
+      }, 80);
+    } catch (err) {
+      console.warn('generatePoQrDataUrl error:', err);
+      resolve(null);
+    }
   });
 }
 
 let cachedBimaLogoDataUrl = null;
 async function loadBimaLogoDataUrl() {
+  if (typeof BIMA_LOGO_BASE64 !== 'undefined' && BIMA_LOGO_BASE64) {
+    return BIMA_LOGO_BASE64.startsWith('data:') ? BIMA_LOGO_BASE64 : ('data:image/png;base64,' + BIMA_LOGO_BASE64);
+  }
   if (cachedBimaLogoDataUrl) return cachedBimaLogoDataUrl;
   try {
-    const res = await fetch('BimaLogo.png');
+    const res = await fetch('logo-bima.png');
     const blob = await res.blob();
     cachedBimaLogoDataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -92,8 +121,20 @@ async function loadBimaLogoDataUrl() {
     });
     return cachedBimaLogoDataUrl;
   } catch (e) {
-    console.warn('Gagal memuat BimaLogo.png untuk PDF:', e.message);
-    return null;
+    try {
+      const res2 = await fetch('BimaLogo.png');
+      const blob2 = await res2.blob();
+      cachedBimaLogoDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob2);
+      });
+      return cachedBimaLogoDataUrl;
+    } catch (e2) {
+      console.warn('Gagal memuat logo untuk PDF:', e2.message);
+      return null;
+    }
   }
 }
 
@@ -109,7 +150,13 @@ async function generatePoPdfBase64(poHeader, vendorInfo, termData, items) {
 
   // Letterhead
   const logoDataUrl = await loadBimaLogoDataUrl();
-  if (logoDataUrl) doc.addImage(logoDataUrl, 'PNG', 14, 10, 20, 20);
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', 14, 10, 20, 20);
+    } catch (logoErr) {
+      console.warn('Gagal addImage logo di PDF:', logoErr);
+    }
+  }
   doc.setFontSize(13);
   doc.setTextColor(61, 61, 61);
   doc.text('PT. Bilal Mitra Aryatama', 38, 16);
