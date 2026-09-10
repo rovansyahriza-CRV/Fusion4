@@ -2784,33 +2784,50 @@ function renderKandidatRekrutmenPanel(reqId, data) {
   const jumlahDibutuhkan = data?.jumlah_dibutuhkan || 1;
   const jumlahDiterima = data?.jumlah_diterima || 0;
 
-  const statusColor = { PROSES: '#b45309', DITOLAK: '#b91c1c', DITERIMA: '#047857' };
-  const statusBg = { PROSES: '#fef3c7', DITOLAK: '#fee2e2', DITERIMA: '#ecfdf5' };
-  const konfirmasiLabel = {
-    BELUM_DIKIRIM: '⚪ Belum dikirim',
-    MENUNGGU_KONFIRMASI: '🟡 Menunggu respon kandidat',
-    DIKONFIRMASI: '🟢 Sudah dikonfirmasi kandidat'
+  const statusColor = { PROSES: '#b45309', BATAL_INTERVIEW: '#7c3aed', LULUS_INTERVIEW: '#0369a1', DITOLAK: '#b91c1c', DITERIMA: '#047857' };
+  const statusBg = { PROSES: '#fef3c7', BATAL_INTERVIEW: '#ede9fe', LULUS_INTERVIEW: '#e0f2fe', DITOLAK: '#fee2e2', DITERIMA: '#ecfdf5' };
+  const statusLabel = { PROSES: 'Proses', BATAL_INTERVIEW: 'Batal Interview', LULUS_INTERVIEW: 'Lulus Interview', DITOLAK: 'Ditolak', DITERIMA: 'Diterima' };
+  const interviewLabel = {
+    BELUM_DIKIRIM: '⚪ Undangan interview belum dikirim',
+    MENUNGGU_KONFIRMASI: '🟡 Menunggu konfirmasi hadir',
+    DIKONFIRMASI: '🟢 Sudah konfirmasi hadir'
+  };
+  const tawaranLabel = {
+    BELUM_DIKIRIM: '⚪ Tawaran belum dikirim',
+    MENUNGGU_KONFIRMASI: '🟡 Menunggu respon tawaran',
+    DIKONFIRMASI: '🟢 Sudah respon tawaran'
   };
 
-  const rowsHtml = kandidatList.length ? kandidatList.map(k => `
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; background:#fff; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:6px; flex-wrap:wrap;">
-      <div style="flex:1; min-width:150px;">
-        <strong style="font-size:12px; color:#0f172a;">${escapeHtml(k.NamaKandidat)}</strong>
-        <span style="display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; border-radius:8px; background:${statusBg[k.Status] || '#f1f5f9'}; color:${statusColor[k.Status] || '#475569'};">${escapeHtml(k.Status)}</span>
-        <div style="font-size:10px; color:#64748b; margin-top:2px;">
-          Interview: ${k.TglInterview || '-'} • ${konfirmasiLabel[k.KonfirmasiStatus] || k.KonfirmasiStatus}
-          ${k.CvUrl ? ` • <a href="${k.CvUrl}" target="_blank" rel="noopener" style="color:#0d9488; font-weight:700;">📎 Lihat CV</a>` : ' • <span style="color:#94a3b8;">Belum ada CV</span>'}
+  const rowsHtml = kandidatList.length ? kandidatList.map(k => {
+    let actionBtn = '';
+    if (k.Status === 'PROSES' && k.InterviewKonfirmasiStatus === 'BELUM_DIKIRIM') {
+      actionBtn = `<button type="button" style="font-size:10px; padding:5px 8px; border-radius:6px; border:none; background:#0d9488; color:#fff; cursor:pointer;" onclick="kirimUndanganInterview(${k.Id}, '${escapeHtml(k.NamaKandidat).replace(/'/g, "\\'")}', ${reqId})">📩 Kirim Undangan Interview</button>`;
+    } else if (k.Status === 'PROSES' && k.InterviewKonfirmasiStatus === 'DIKONFIRMASI') {
+      actionBtn = `<button type="button" style="font-size:10px; padding:5px 8px; border-radius:6px; border:none; background:#0369a1; color:#fff; cursor:pointer;" onclick="bukaFormHasilInterview(${k.Id}, '${escapeHtml(k.NamaKandidat).replace(/'/g, "\\'")}', ${reqId})">📋 Isi Hasil Interview</button>`;
+    } else if (k.Status === 'LULUS_INTERVIEW' && (!k.KonfirmasiStatus || k.KonfirmasiStatus === 'BELUM_DIKIRIM')) {
+      actionBtn = `<button type="button" style="font-size:10px; padding:5px 8px; border-radius:6px; border:none; background:#047857; color:#fff; cursor:pointer;" onclick="kirimLinkKonfirmasi(${k.Id}, '${escapeHtml(k.NamaKandidat).replace(/'/g, "\\'")}', ${reqId})">📧 Kirim Tawaran Kerja</button>`;
+    } else if (k.Status === 'BATAL_INTERVIEW') {
+      actionBtn = `<button type="button" style="font-size:10px; padding:5px 8px; border-radius:6px; border:none; background:#7c3aed; color:#fff; cursor:pointer;" onclick="kirimUndanganInterview(${k.Id}, '${escapeHtml(k.NamaKandidat).replace(/'/g, "\\'")}', ${reqId})">🔁 Jadwal Ulang Interview</button>`;
+    }
+
+    return `
+    <div style="padding:8px 10px; background:#fff; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:6px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:150px;">
+          <strong style="font-size:12px; color:#0f172a;">${escapeHtml(k.NamaKandidat)}</strong>
+          <span style="display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; border-radius:8px; background:${statusBg[k.Status] || '#f1f5f9'}; color:${statusColor[k.Status] || '#475569'};">${statusLabel[k.Status] || k.Status}</span>
+          <div style="font-size:10px; color:#64748b; margin-top:2px;">
+            Interview: ${k.TglInterview || '-'} • ${interviewLabel[k.InterviewKonfirmasiStatus] || k.InterviewKonfirmasiStatus}
+            ${k.CvUrl ? ` • <a href="${k.CvUrl}" target="_blank" rel="noopener" style="color:#0d9488; font-weight:700;">📎 Lihat CV</a>` : ' • <span style="color:#94a3b8;">Belum ada CV</span>'}
+          </div>
+          ${k.InterviewHasil ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">Hasil interview: <strong>${k.InterviewHasil}</strong>${k.InterviewCatatan ? ' — ' + escapeHtml(k.InterviewCatatan) : ''}</div>` : ''}
+          ${(k.Status === 'LULUS_INTERVIEW' || k.Status === 'DITERIMA') ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">Tawaran kerja: ${tawaranLabel[k.KonfirmasiStatus] || k.KonfirmasiStatus || 'BELUM_DIKIRIM'}</div>` : ''}
         </div>
+        ${actionBtn ? `<div style="display:flex; gap:6px;">${actionBtn}</div>` : ''}
       </div>
-      ${k.Status === 'PROSES' ? `
-        <div style="display:flex; gap:6px;">
-          <button type="button" style="font-size:10px; padding:5px 8px; border-radius:6px; border:none; background:#0d9488; color:#fff; cursor:pointer;" onclick="kirimLinkKonfirmasi(${k.Id}, '${escapeHtml(k.NamaKandidat).replace(/'/g, "\\'")}', ${reqId})">
-            📧 Kirim Link
-          </button>
-        </div>
-      ` : ''}
     </div>
-  `).join('') : `<div style="font-size:11px; color:#64748b; padding:6px 0;">Belum ada kandidat yang disounding.</div>`;
+  `;
+  }).join('') : `<div style="font-size:11px; color:#64748b; padding:6px 0;">Belum ada kandidat yang disounding.</div>`;
 
   panel.innerHTML = `
     <strong style="color:#0f766e; font-size:13px; display:flex; align-items:center; gap:5px; margin-bottom:8px;">
@@ -2893,8 +2910,71 @@ async function submitKandidatBaru(reqId) {
   }
 }
 
+async function kirimUndanganInterview(kandidatId, namaKandidat, reqId) {
+  const email = (prompt(`Masukkan email ${namaKandidat} untuk kirim undangan interview:`) || '').trim();
+  if (!email) return;
+
+  try {
+    const { data: reqRes, error: reqErr } = await supabaseClient.rpc('kirim_undangan_interview_kandidat', { p_kandidat_id: kandidatId });
+    if (reqErr) throw reqErr;
+    if (reqRes?.status !== 'SUCCESS') {
+      showToast(reqRes?.message || 'Gagal generate undangan interview.', 'error');
+      return;
+    }
+
+    const { data: listData } = await supabaseClient.rpc('list_kandidat_rekrutmen', { p_request_id: reqId });
+    const kandidat = (listData?.kandidat || []).find(k => k.Id === kandidatId);
+    const tglInterview = kandidat?.TglInterview || '(jadwal menyusul)';
+    const link = `https://rovansyahriza-crv.github.io/Fusion4/konfirmasi-interview.html?kandidat=${kandidatId}`;
+
+    await fetch(RFQ_EMAIL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "SEND_SIMPLE_EMAIL",
+        to: email,
+        subject: `Undangan Interview — ${namaKandidat}`,
+        body: `Halo ${namaKandidat},\n\nAnda diundang untuk mengikuti proses interview pada tanggal ${tglInterview}.\nMohon konfirmasi kehadiran Anda melalui link berikut:\n${link}\n\nMasukkan PIN Anda: ${reqRes.pin}\n\nTerima kasih.`
+      })
+    });
+
+    showToast(`Undangan interview berhasil dikirim ke ${email}.`, 'success');
+    await loadKandidatRekrutmen(reqId);
+  } catch (err) {
+    console.error('Error kirimUndanganInterview:', err);
+    showToast('Gagal mengirim undangan interview: ' + err.message, 'error');
+  }
+}
+
+function bukaFormHasilInterview(kandidatId, namaKandidat, reqId) {
+  const catatan = prompt(`Catatan hasil interview untuk ${namaKandidat}:`, '');
+  if (catatan === null) return; // user cancel
+
+  const lulus = confirm(`Kandidat ${namaKandidat} LULUS interview?\n\nOK = Lulus (lanjut ke tawaran kerja)\nCancel = Tidak Lulus`);
+  submitHasilInterview(kandidatId, catatan, lulus ? 'LULUS' : 'TIDAK_LULUS', reqId);
+}
+
+async function submitHasilInterview(kandidatId, catatan, hasil, reqId) {
+  try {
+    const actor = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'System';
+    const { data, error } = await supabaseClient.rpc('submit_hasil_interview', {
+      p_kandidat_id: kandidatId,
+      p_catatan: catatan,
+      p_hasil: hasil,
+      p_actor_name: actor
+    });
+    if (error) throw error;
+
+    showToast(data?.message || 'Hasil interview tersimpan.', hasil === 'LULUS' ? 'success' : 'error');
+    await loadKandidatRekrutmen(reqId);
+  } catch (err) {
+    console.error('Error submitHasilInterview:', err);
+    showToast('Gagal menyimpan hasil interview: ' + err.message, 'error');
+  }
+}
+
 async function kirimLinkKonfirmasi(kandidatId, namaKandidat, reqId) {
-  const email = (prompt(`Masukkan email ${namaKandidat} untuk kirim link konfirmasi:`) || '').trim();
+  const email = (prompt(`Masukkan email ${namaKandidat} untuk kirim tawaran kerja:`) || '').trim();
   if (!email) return;
 
   try {
@@ -2902,8 +2982,15 @@ async function kirimLinkKonfirmasi(kandidatId, namaKandidat, reqId) {
     const { data: listData, error: listErr } = await supabaseClient.rpc('list_kandidat_rekrutmen', { p_request_id: reqId });
     if (listErr) throw listErr;
     const kandidat = (listData?.kandidat || []).find(k => k.Id === kandidatId);
-    if (!kandidat || !kandidat.Pin) {
-      showToast('Data kandidat/PIN tidak ditemukan.', 'error');
+    if (!kandidat) {
+      showToast('Data kandidat tidak ditemukan.', 'error');
+      return;
+    }
+
+    const { data: sendRes, error: sendErr } = await supabaseClient.rpc('catat_pengiriman_konfirmasi_kandidat', { p_kandidat_id: kandidatId });
+    if (sendErr) throw sendErr;
+    if (sendRes?.status !== 'SUCCESS') {
+      showToast(sendRes?.message || 'Kandidat belum berstatus Lulus Interview.', 'error');
       return;
     }
 
@@ -2920,13 +3007,11 @@ async function kirimLinkKonfirmasi(kandidatId, namaKandidat, reqId) {
       })
     });
 
-    await supabaseClient.rpc('catat_pengiriman_konfirmasi_kandidat', { p_kandidat_id: kandidatId });
-
-    showToast(`Link konfirmasi berhasil dikirim ke ${email}.`, 'success');
+    showToast(`Tawaran kerja berhasil dikirim ke ${email}.`, 'success');
     await loadKandidatRekrutmen(reqId);
   } catch (err) {
     console.error('Error kirimLinkKonfirmasi:', err);
-    showToast('Gagal mengirim link konfirmasi: ' + err.message, 'error');
+    showToast('Gagal mengirim tawaran kerja: ' + err.message, 'error');
   }
 }
 
@@ -2969,3 +3054,6 @@ async function deleteEmployeeRequest(id) {
     showToast('Gagal menghapus permintaan: ' + err.message, 'error');
   }
 }
+
+
+
