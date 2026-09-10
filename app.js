@@ -2413,7 +2413,7 @@ function renderEmployeeRequestTable() {
             👁️ Detail
           </button>
           ${isAuthor ? `
-            <button type="button" class="btn-logout-card" style="padding:4px 8px; font-size:11px; color:#dc2626; border-color:#fca5a5; margin-left:4px;" onclick="deleteEmployeeRequest(${r.id})">
+            <button type="button" class="btn-logout-card" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="deleteEmployeeRequest(${r.id})">
               🗑️
             </button>
           ` : ''}
@@ -2643,7 +2643,7 @@ function openEmployeeRequestDetail(id) {
             <button type="button" class="btn-primary" style="flex:1; min-width:140px; background:#16a34a;" onclick="executeEmpReqStep('AER_APPROVE')">
               ✅ Setujui &amp; Teruskan ke HRD (AER)
             </button>
-            <button type="button" class="btn-logout-card" style="flex:1; min-width:120px; color:#dc2626; border-color:#fca5a5;" onclick="executeEmpReqStep('AER_REJECT')">
+            <button type="button" class="btn-logout-card" style="flex:1; min-width:120px; " onclick="executeEmpReqStep('AER_REJECT')">
               ❌ Tolak Permintaan (AER)
             </button>
           </div>
@@ -2681,7 +2681,7 @@ function openEmployeeRequestDetail(id) {
             <button type="button" class="btn-primary" style="flex:1; min-width:140px; background:#059669;" onclick="executeEmpReqStep('APER_APPROVE')">
               🟢 Setujui Final / ACC Direksi (APER)
             </button>
-            <button type="button" class="btn-logout-card" style="flex:1; min-width:120px; color:#dc2626; border-color:#fca5a5;" onclick="executeEmpReqStep('APER_REJECT')">
+            <button type="button" class="btn-logout-card" style="flex:1; min-width:120px; " onclick="executeEmpReqStep('APER_REJECT')">
               ❌ Tolak Pengajuan (APER)
             </button>
           </div>
