@@ -2298,6 +2298,7 @@ async function updateEmpReqBadgeCounts() {
     const aerPending = data.filter(r => String(r.status).toUpperCase() === 'PENDING_AER' || String(r.status).toUpperCase() === 'PENDING').length;
     const hrdProcess = data.filter(r => String(r.status).toUpperCase() === 'PROSES_HRD' || String(r.status).toUpperCase() === 'IN PROGRESS').length;
     const aperPending = data.filter(r => String(r.status).toUpperCase() === 'PENDING_APER').length;
+    const rekrutmenAktif = data.filter(r => String(r.status).toUpperCase() === 'REKRUTMEN_AKTIF').length;
     const fulfilled = data.filter(r => String(r.status).toUpperCase() === 'FULFILLED' || String(r.status).toUpperCase() === 'APPROVED').length;
     const rejected = data.filter(r => String(r.status).toUpperCase().startsWith('REJECTED')).length;
 
@@ -2306,6 +2307,7 @@ async function updateEmpReqBadgeCounts() {
     setC('countEmpReqAer', aerPending);
     setC('countEmpReqHrd', hrdProcess);
     setC('countEmpReqAper', aperPending);
+    setC('countEmpReqRekrutmen', rekrutmenAktif);
     setC('countEmpReqFulfilled', fulfilled);
     setC('countEmpReqRejected', rejected);
   } catch (e) {}
