@@ -1,25 +1,26 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fusion4 SmartGate — Admin Portal</title>
-  <link rel="icon" type="image/png" href="fusion4.png">
-  <link rel="apple-touch-icon" href="fusion4.png">
+  <title>SMMS BIMA — Portal Resources</title>
+  <link rel="icon" type="image/png" href="logo-bima.png">
+  <link rel="apple-touch-icon" href="logo-bima.png">
   <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Fusion4 SmartGate">
+  <meta name="apple-mobile-web-app-title" content="SMMS BIMA">
   <meta name="theme-color" content="#E04D23">
 
   <link rel="stylesheet" href="style.css">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="po-pdf-functions.js"></script>
   <script src="driveBridge.js"></script>
+  <script src="reportPdf.js"></script>
 </head>
 
 <body class="layout-sidebar">
@@ -27,86 +28,120 @@
   <div id="toastContainer"></div>
   <!-- LEFT SIDEBAR -->
   <aside class="sidebar">
+    <!-- Header Kurva Oranye BIMA -->
     <div class="sidebar-header-orange">
       <div class="brand-box">
         <div class="logo-circle">
-          <img src="fusion4.png" onerror="this.onerror=null;this.src='icon-192.png';" alt="Logo Fusion4" class="bima-logo-img">
+          <img src="logo-bima.png" onerror="this.onerror=null;this.src='BimaLogo.png'" alt="Logo BIMA" class="bima-logo-img">
         </div>
         <div class="brand-text">
-          <span class="brand-title">Fusion4</span>
-          <span class="brand-sub">SMARTGATE ADMIN</span>
+          <span class="brand-title">SMMS</span>
+          <span class="brand-sub">BIMA PORTAL</span>
         </div>
       </div>
     </div>
 
+    <!-- Navigasi Menu Sidebar -->
     <nav class="sidebar-menu">
       <span class="menu-label">MAIN MENU</span>
-
-      <button type="button" class="sidebar-nav-btn active" id="btnNavMonitoring" onclick="attemptNav('MAE', 'sec-monitoring', this, () => loadMonitoringPage('attendance'));">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
-        </svg>
-        <span>Monitoring Attendance &amp; Enroll</span>
+      <button type="button" class="sidebar-nav-btn active" data-pic="Input Master Resources" onclick="switchMainSection('sec-master', this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+        <span>Master Resources</span>
       </button>
 
-      <button type="button" class="sidebar-nav-btn" id="btnNavLokasi" onclick="attemptNav('KL', 'sec-lokasi', this, () => loadLokasiPage());">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-          <circle cx="12" cy="10" r="3"/>
-        </svg>
-        <span>Kelola Lokasi</span>
+      <button type="button" class="sidebar-nav-btn" data-pic="Create Request|Review Request" onclick="switchMainSection('sec-request', this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span>Request</span>
       </button>
 
-      <button type="button" class="sidebar-nav-btn" id="btnNavPasswordAdmin" onclick="attemptNav('GP', 'sec-password-admin', this, () => loadPasswordAdminPage());">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-        </svg>
-        <span>Ganti Password (Admin)</span>
+      <button type="button" class="sidebar-nav-btn" data-section="sec-approval" id="btnNavApproval" style="display:none;" onclick="switchMainSection('sec-approval', this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span>Approval</span>
       </button>
 
-      <button type="button" class="sidebar-nav-btn" id="btnNavKaryawan" onclick="attemptNav('DK', 'sec-karyawan', this, () => loadKaryawanPage());">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-        <span>Data Karyawan</span>
+      <button type="button" class="sidebar-nav-btn" data-section="sec-vendor" id="btnNavVendor" style="display:none;" onclick="switchMainSection('sec-vendor', this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span>Vendor</span>
       </button>
 
-      <button type="button" class="sidebar-nav-btn" id="btnNavBadge" onclick="attemptNav('KDB', 'sec-badge', this, () => loadBadgePage());">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="9" r="2.5"/><path d="M8 17c0-2 2-3 4-3s4 1 4 3"/>
-        </svg>
-        <span>Kelola Digital Badge</span>
-      </button>
+    <button type="button" class="sidebar-nav-btn" data-section="sec-approval-rfq" id="btnNavApprovalRfq" style="display:none;" onclick="switchMainSection('sec-approval-rfq', this); loadApprovalRfqPage();">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+      <span style="text-align:left; display:inline-block;">Approval Seleksi Vendor</span>
+    </button>
 
-      <button type="button" class="sidebar-nav-btn" id="btnNavKontrak" onclick="attemptNav('KK', 'sec-kontrak', this, () => loadKontrakPage());">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
-        </svg>
-        <span>Kontrak Karyawan</span>
-      </button>
+    <button id="btnNavApprovalPo" style="display:none;" class="sidebar-nav-btn" onclick="switchMainSection('sec-approval-po', this); loadApprovalPoPage();">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+      <span>Approval PO/SO</span>
+    </button>
 
-      <button type="button" class="sidebar-nav-btn" id="btnNavEmployeeRequest" onclick="attemptNav('ER', 'sec-employee-request', this, () => loadEmployeeRequestPage());">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-          <circle cx="9" cy="7" r="4"></circle>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-          <line x1="19" y1="8" x2="19" y2="14"></line>
-          <line x1="22" y1="11" x2="16" y2="11"></line>
-        </svg>
-        <span>Permintaan Karyawan</span>
-      </button>
+    <button type="button" class="sidebar-nav-btn" data-pic="Create RFQ" onclick="switchMainSection('sec-rfq', this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="4" width="20" height="16" rx="2"/>
+        <polyline points="22 6 12 13 2 6"/>
+      </svg>
+      <span>Buat RFQ</span>
+    </button>
 
-      <button type="button" class="sidebar-nav-btn" id="btnNavOtorisasi" onclick="attemptNav('OIL', 'sec-otorisasi', this, () => loadOtorisasiPage('queue'));">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          <path d="M9 12l2 2 4-4"/>
-        </svg>
-        <span>Otorisasi Ijin &amp; Lembur</span>
-      </button>
+    <button type="button" class="sidebar-nav-btn" data-pic="Create RFQ" onclick="switchMainSection('sec-rfq-selection', this); loadRfqSelectionPage();">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/>
+      <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/>
+      <path d="M7 21h10"/>
+      <path d="M12 3v18"/>
+      <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>
+    </svg>
+      <span>Seleksi Vendor RFQ</span>
+    </button>
+
+    <button type="button" class="sidebar-nav-btn" data-pic="Create RFQ" onclick="switchMainSection('sec-po-submit', this); loadPoSubmitPage();">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m22 2-7 20-4-9-9-4Z"/>
+        <path d="M22 2 11 13"/>
+      </svg>
+      <span>Ajukan PO/SO</span>
+    </button>
+
+    <button type="button" class="sidebar-nav-btn" data-pic="Terima Vendor" onclick="switchMainSection('sec-vendor-receiving', this); loadVendorReceivingPage();">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 8v13H3V8"/>
+        <path d="M1 3h22v5H1z"/>
+        <path d="M10 12h4"/>
+      </svg>
+      <span>Terima dari Vendor</span>
+    </button>
+
+    <!-- Menu View Report: sengaja TANPA data-pic / restriksi akses dulu -- PIC/hak akses
+         menyusul di-set belakangan (belum ditentukan siapa yang boleh lihat apa). -->
+    <button type="button" class="sidebar-nav-btn" id="btnNavViewReport" onclick="switchMainSection('sec-view-report', this); loadViewReportPage('request');">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <circle cx="11.5" cy="16" r="2.2"/>
+        <path d="M15.5 20l2.3 2.3" stroke-linecap="round"/>
+      </svg>
+      <span>View Report</span>
+    </button>
+
+    <!-- Buka Monitoring (web GitHub Pages) langsung di browser default, bukan section
+         di dalam app ini -- makanya pakai <a target="_blank">, bukan switchMainSection(). -->
+    <a class="sidebar-nav-btn" href="https://rovansyahriza-crv.github.io/SMMS-BIMA/monitoring.html" target="_blank" rel="noopener noreferrer">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+      <span>Monitoring (Web)</span>
+    </a>
+
     </nav>
 
+    <!-- User Profile Bottom Sidebar -->
     <div class="sidebar-user">
       <div id="userInfo"></div>
     </div>
@@ -114,807 +149,424 @@
 
   <!-- MAIN CONTENT AREA -->
   <main class="main-wrapper">
-
-    <!-- ============ SECTION: MONITORING ATTENDANCE & ENROLL ============ -->
-    <section id="sec-monitoring" class="app-section">
+    
+    <!-- SECTION 1: MASTER RESOURCES -->
+    <section id="sec-master" class="app-section">
       <div class="page-title-section">
-        <span class="category-tag">MONITORING</span>
-        <h2>Monitoring Attendance &amp; Enroll</h2>
-        <p>Pantau data absensi dan status enroll wajah karyawan (read-only, sumber data dari sistem SmartGate mobile).</p>
+        <span class="category-tag">MASTER DATA RESOURCES</span>
+        <h2>Kelola master data resources</h2>
+        <p>Pilih kategori resource di bawah ini untuk mengelola data master terkait.</p>
       </div>
 
-      <div class="category-tabs" id="monitoringTabs">
-        <button type="button" class="tab-btn active" data-monitor-cat="attendance" onclick="loadMonitoringPage('attendance', this)">📋 Attendance</button>
-        <button type="button" class="tab-btn" data-monitor-cat="enroll" onclick="loadMonitoringPage('enroll', this)">🧑‍💼 Status Enroll</button>
+      <div class="category-tabs">
+        <button class="tab-btn active" data-sheet="Material" data-group="GroupMaterial">Material</button>
+        <button class="tab-btn" data-sheet="Consumables" data-group="GroupConsumables">Consumables</button>
+        <button class="tab-btn" data-sheet="HeavyEquipment" data-group="GroupHeavyEquipment">Heavy Equipment</button>
+        <button class="tab-btn" data-sheet="Tools" data-group="GroupTools">Tools</button>
+        <button class="tab-btn" data-sheet="ServiceOrder" data-group="GroupServiceOrder">Service Order</button>
       </div>
 
-      <div class="card table-card" style="margin-top:14px;">
-        <div class="card-header space-between">
-          <div>
-            <h3 id="monitoringTitle">📋 Data Attendance</h3>
-            <p class="card-subtitle" id="monitoringSubtitle">Log absensi terbaru dari tabel absensi.</p>
+      <!-- Form Input Card -->
+      <div class="card form-card">
+        <div class="card-header">
+          <h3 id="formTitle">+ Input Master Material Baru</h3>
+        </div>
+        <form id="formStok" class="form-grid">
+          <input type="hidden" id="editId" value="">
+
+          <div class="input-group">
+            <label for="group">Kelompok Item (Group)</label>
+            <input type="text" id="group" list="groupOptions" placeholder="Ketik untuk mencari / pilih Group..." autocomplete="off" required>
+            <datalist id="groupOptions"></datalist>
           </div>
-          <span class="badge-count" id="monitoringCount">0 Data</span>
-        </div>
 
-        <div style="padding:0 4px 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-          <input type="text" id="monitoringSearch" placeholder="Cari..." oninput="renderMonitoringTable()"
-            style="flex:1;min-width:180px;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
-          <input type="date" id="monitoringDateFilter" onchange="loadMonitoringPage('attendance')"
-            style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
-        </div>
+          <div class="input-group">
+            <label for="specification">Spesifikasi</label>
+            <input type="text" id="specification" list="specificationOptions" placeholder="Ketik untuk mencari / isi spesifikasi..." autocomplete="off" required>
+            <datalist id="specificationOptions"></datalist>
+          </div>
 
-        <div class="table-responsive">
-          <table>
-            <thead id="monitoringTableHead"></thead>
-            <tbody id="monitoringTableBody">
-              <tr><td style="text-align:center; color:#777;">Memuat data...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
+          <div class="input-group">
+            <label for="size">Ukuran (Size)</label>
+            <input type="text" id="size" placeholder="Misal: Ukuran / Kapasitas">
+          </div>
 
-    <!-- ============ SECTION: KELOLA LOKASI (sama seperti SMMS) ============ -->
-    <section id="sec-lokasi" class="app-section" style="display:none;">
-      <div class="page-title-section">
-        <span class="category-tag">KELOLA LOKASI</span>
-        <h2>Master Data Lokasi / Site</h2>
-        <p>Tambah, edit, atau hapus titik lokasi (dipakai buat geofencing GPS pas Attendance / Pindah Lokasi).</p>
+          <div class="input-group">
+            <label for="unit">Satuan (Unit)</label>
+            <input type="text" id="unit" placeholder="Misal: Sak, Batang, Unit, Hours" required>
+          </div>
+
+          <div class="form-action flex-action">
+            <button type="submit" id="btnSubmit" class="btn-primary">Tambah Master Item</button>
+            <button type="button" id="btnCancel" class="btn-secondary" style="display: none;">Batal</button>
+          </div>
+        </form>
       </div>
 
+      <!-- Table Master Data Card -->
       <div class="card table-card">
         <div class="card-header space-between">
           <div>
-            <h3>📍 Daftar Lokasi</h3>
-            <p class="card-subtitle">Semua site yang terdaftar di lokasiTbl.</p>
+            <h3 id="tableTitle">List Master Data Material</h3>
+            <p class="card-subtitle">Data tersinkronisasi otomatis dari Google Sheets</p>
           </div>
-          <span class="badge-count" id="lokasiCount">0 Lokasi</span>
+          <span class="badge-count" id="totalCount">0 Items</span>
         </div>
-        <div style="padding:0 4px 12px;">
-          <input type="text" id="lokasiSearch" placeholder="Cari nama lokasi..." oninput="renderLokasiTable()"
-            style="width:100%;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
+
+        <div class="table-search-bar">
+          <input type="text" id="globalSearch" class="search-input" placeholder="🔍 Cari berdasarkan Group, Spesifikasi, atau Ukuran...">
         </div>
+
         <div class="table-responsive">
           <table>
             <thead>
               <tr>
-                <th>Nama Lokasi</th>
-                <th>Latitude</th>
-                <th>Longitude</th>
-                <th>Radius (m)</th>
-                <th>Jam Kerja (TimeLimit)</th>
-                <th>Status</th>
-                <th>Type</th>
-                <th style="text-align:center;">Aksi</th>
+                <th style="width: 60px;">ID</th>
+                <th>GROUP</th>
+                <th>SPESIFIKASI</th>
+                <th>SIZE</th>
+                <th>UNIT</th>
+                <th style="text-align: center;">AKSI</th>
               </tr>
             </thead>
-            <tbody id="lokasiTableBody">
-              <tr><td colspan="8" style="text-align:center;color:#777;">Memuat data...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card form-card" style="margin-top:16px;">
-        <div class="card-header">
-          <h3 id="lokasiFormTitle">+ Tambah Lokasi Baru</h3>
-        </div>
-
-        <div class="form-grid">
-          <input type="hidden" id="lokasiEditId" value="">
-          <div class="input-group">
-            <label for="lokasiNama">Nama Lokasi</label>
-            <input type="text" id="lokasiNama" placeholder="Contoh: Site BIMA - Gudang Utama">
-          </div>
-          <div class="input-group">
-            <label for="lokasiRadius">Radius Geofence (meter)</label>
-            <input type="number" id="lokasiRadius" placeholder="Contoh: 100" value="100">
-          </div>
-          <div class="input-group">
-            <label for="lokasiStatus">Status</label>
-            <select id="lokasiStatus">
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <label for="lokasiType">Type</label>
-            <input type="text" id="lokasiType" placeholder="Contoh: Site / Gudang / Office">
-          </div>
-        </div>
-
-        <!-- PENGATURAN JAM KERJA (TIMELIMIT) -->
-        <div style="margin: 16px 0 6px; padding: 14px 16px; background: #FAF8F5; border: 1.5px solid #E6DED9; border-radius: 12px;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-            <span style="font-size: 16px;">⏰</span>
-            <strong style="font-size: 13.5px; color: #2A2826;">Pengaturan Jam Kerja (TimeLimit Absensi)</strong>
-            <span style="font-size: 11.5px; color: #8A8580;">(WITA - Disimpan ke timeLimitTbl)</span>
-          </div>
-          <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px;">
-            <div class="input-group">
-              <label for="lokasiJamMasuk1" style="font-size: 11.5px;">Jam Masuk 1 (Pagi)</label>
-              <input type="time" id="lokasiJamMasuk1" value="07:30" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid #d9d2cc;">
-            </div>
-            <div class="input-group">
-              <label for="lokasiJamIstirahat" style="font-size: 11.5px;">Jam Istirahat (Siang)</label>
-              <input type="time" id="lokasiJamIstirahat" value="12:00" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid #d9d2cc;">
-            </div>
-            <div class="input-group">
-              <label for="lokasiJamMasuk2" style="font-size: 11.5px;">Jam Masuk 2 (Siang)</label>
-              <input type="time" id="lokasiJamMasuk2" value="13:00" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid #d9d2cc;">
-            </div>
-            <div class="input-group">
-              <label for="lokasiJamPulang" style="font-size: 11.5px;">Jam Pulang (Sore)</label>
-              <input type="time" id="lokasiJamPulang" value="17:00" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid #d9d2cc;">
-            </div>
-          </div>
-        </div>
-
-        <div style="display:flex; gap:10px; margin:14px 0 10px; flex-wrap:wrap;">
-          <input type="text" id="lokasiSearchAlamat" placeholder="Cari alamat/tempat di peta..."
-            style="flex:1; min-width:220px; padding:10px 12px; border-radius:8px; border:1.5px solid #e6ded9;">
-          <button type="button" class="btn-logout-card" onclick="searchAlamatLokasi()">🔍 Cari di Peta</button>
-        </div>
-        <p style="font-size:12.5px;color:#8A8580;margin:0 0 8px;">Klik atau geser pin di peta buat nentuin titik lokasi -- Latitude/Longitude di bawah keisi otomatis.</p>
-        <div id="lokasiMap" style="width:100%; height:340px; border-radius:12px; border:1.5px solid #e6ded9;"></div>
-
-        <div class="form-grid" style="margin-top:14px;">
-          <div class="input-group">
-            <label for="lokasiLat">Latitude</label>
-            <input type="text" id="lokasiLat" readonly style="background:#EFECE6;color:#888;">
-          </div>
-          <div class="input-group">
-            <label for="lokasiLng">Longitude</label>
-            <input type="text" id="lokasiLng" readonly style="background:#EFECE6;color:#888;">
-          </div>
-        </div>
-
-        <div class="form-action flex-action" style="margin-top:16px;">
-          <button type="button" id="btnSubmitLokasi" class="btn-primary" onclick="submitLokasi()">💾 Simpan Lokasi</button>
-          <button type="button" class="btn-logout-card" onclick="resetLokasiForm()">↺ Batal / Form Baru</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ SECTION: GANTI PASSWORD (ADMIN RESET) ============ -->
-    <section id="sec-password-admin" class="app-section" style="display:none;">
-      <div class="page-title-section">
-        <span class="category-tag">GANTI PASSWORD</span>
-        <h2>Reset Password Karyawan (Admin)</h2>
-        <p>Admin bisa reset password absen karyawan langsung tanpa perlu tau password lama.</p>
-      </div>
-
-      <div class="card form-card" style="max-width:520px;">
-        <div class="card-header">
-          <h3>🔑 Reset Password</h3>
-        </div>
-        <div class="card-form-body">
-          <div class="input-group">
-            <label for="pwAdminKaryawan">Pilih Karyawan</label>
-            <select id="pwAdminKaryawan" style="width:100%; padding:10px; border-radius:8px; border:1.5px solid #e6ded9;">
-              <option value="">-- Memuat daftar karyawan... --</option>
-            </select>
-          </div>
-          <div class="input-group" style="margin-top:14px;">
-            <label for="pwAdminNew">Password Baru</label>
-            <input type="text" id="pwAdminNew" placeholder="Isi password baru">
-          </div>
-          <div class="form-action" style="margin-top:16px;">
-            <button type="button" id="btnPwAdminSubmit" class="btn-primary" onclick="submitPasswordAdmin()">💾 Reset Password</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ SECTION: DATA KARYAWAN ============ -->
-    <section id="sec-karyawan" class="app-section" style="display:none;">
-      <div class="page-title-section">
-        <span class="category-tag">DATA KARYAWAN</span>
-        <h2>Data Karyawan</h2>
-        <p>Tambah karyawan baru sekaligus setup akun login-nya (password, PIN, Author, PIC). Digital PIN buat Badge di-generate otomatis. Field detail lain (KTP, alamat, dll) bisa dilengkapi belakangan.</p>
-      </div>
-
-      <div class="card table-card">
-        <div class="card-header space-between">
-          <div>
-            <h3>👤 Daftar Karyawan</h3>
-            <p class="card-subtitle">Data inti dari karyawanTbl &amp; paswordTbl.</p>
-          </div>
-          <span class="badge-count" id="karyawanCount">0 Karyawan</span>
-        </div>
-        <div style="padding:0 4px 12px;">
-          <input type="text" id="karyawanSearch" placeholder="Cari nama / QrCodeId..." oninput="renderKaryawanTable()"
-            style="width:100%;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
-        </div>
-        <div class="table-responsive">
-          <table>
-            <thead>
-              <tr>
-                <th>Nama</th>
-                <th>QrCodeId</th>
-                <th>Digital PIN</th>
-                <th>Type</th>
-                <th>Kualifikasi</th>
-                <th>Departemen / Divisi</th>
-                <th>Tgl Masuk</th>
-                <th>Status</th>
-                <th style="text-align:center;">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="karyawanTableBody">
-              <tr><td colspan="9" style="text-align:center; color:#777;">Memuat data...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card form-card" style="margin-top:16px;">
-        <div class="card-header">
-          <h3 id="karyawanFormTitle">+ Tambah Karyawan Baru</h3>
-          <p class="card-subtitle" id="karyawanFormHint">QrCodeId &amp; Digital PIN di-generate otomatis. Field detail lain (KTP, alamat, dll) bisa dilengkapi belakangan.</p>
-        </div>
-
-        <input type="hidden" id="karyawanEditId" value="">
-
-        <div class="form-grid">
-          <div class="input-group">
-            <label for="karyawanNama">Nama Personnel</label>
-            <input type="text" id="karyawanNama" placeholder="Nama lengkap karyawan">
-          </div>
-          <div class="input-group karyawan-create-only">
-            <label for="karyawanType">Type (HO / Project)</label>
-            <input type="text" id="karyawanType" placeholder="Contoh: HO, Project 014">
-          </div>
-          <div class="input-group karyawan-create-only">
-            <label for="karyawanKualifikasi">Kualifikasi / Jabatan</label>
-            <input type="text" id="karyawanKualifikasi" placeholder="Contoh: Site Supervisor">
-          </div>
-          <div class="input-group">
-            <label for="karyawanDepartemen">Departemen</label>
-            <input type="text" id="karyawanDepartemen" placeholder="Contoh: HRGA">
-          </div>
-          <div class="input-group">
-            <label for="karyawanDivisi">Divisi</label>
-            <input type="text" id="karyawanDivisi" placeholder="Contoh: Operasional">
-          </div>
-          <div class="input-group karyawan-create-only">
-            <label for="karyawanTglMasuk">Tanggal Masuk</label>
-            <input type="date" id="karyawanTglMasuk">
-          </div>
-          <div class="input-group karyawan-create-only">
-            <label for="karyawanPassword">Password Login Absen</label>
-            <input type="password" id="karyawanPassword" placeholder="Default: 12345" value="12345">
-          </div>
-          <div class="input-group">
-            <label for="karyawanAuthor">Author (Otorisasi Approval &amp; Web Lapangan)</label>
-            <input type="text" id="karyawanAuthor" placeholder="Contoh: AER-101, APER, AR-101, ASV-101, APO-101">
-            <div style="font-size:11px;color:#8A8580;margin:5px 0 0;line-height:1.5;background:#FAF8F5;padding:8px 12px;border-radius:8px;border:1px solid #E6DED9;">
-              <div style="margin-bottom:3px;"><strong style="color:#0284c7;">👥 Employee Request:</strong> <strong>AER-&lt;Proj&gt;</strong> (Approval Request Proyek), <strong>APER</strong> (Approval Final Proses Direksi / BOD).</div>
-              <div style="margin-bottom:3px;"><strong style="color:#e8562c;">📑 SMMS Approval:</strong> <strong>AR-&lt;Proj&gt;</strong> (Approval Request), <strong>ASV-&lt;Proj&gt;</strong> (Approval Seleksi Vendor), <strong>APO-&lt;Proj&gt;</strong> (Approval PO/SO), <strong>AV</strong> (Approval Vendor).</div>
-              <div><strong style="color:#1E8449;">🚚 Web Lapangan:</strong> <strong>KBS-&lt;Proj&gt;</strong> (Kirim Barang Site), <strong>TBS-&lt;Proj&gt;</strong> (Terima Barang Site), <strong>EUR-&lt;Proj&gt;</strong> (End User Receiving).</div>
-            </div>
-          </div>
-          <div class="input-group">
-            <label for="karyawanPic">PIC (Akses Menu Sidebar)</label>
-            <input type="text" id="karyawanPic" placeholder="Contoh: ER-101, PER, MAE, KL, DK -- Kosongin/ALL = akses semua">
-            <div style="font-size:11px;color:#8A8580;margin:5px 0 0;line-height:1.5;background:#FAF8F5;padding:8px 12px;border-radius:8px;border:1px solid #E6DED9;">
-              <div style="margin-bottom:3px;"><strong style="color:#2B6CB0;">🏢 SmartGate Fusion4:</strong> <strong>ER-&lt;Proj&gt;</strong>=Request Karyawan, <strong>PER</strong>=Proses HRD, <strong>DK</strong>=Data Karyawan, <strong>KK</strong>=Kontrak, <strong>KDB</strong>=Badge, <strong>MAE</strong>=Monitoring, <strong>KL</strong>=Lokasi, <strong>OIL</strong>=Ijin/Lembur.</div>
-              <div style="margin-bottom:3px;"><strong style="color:#e8562c;">📦 SMMS Portal:</strong> <strong>MR</strong>=Master Resources, <strong>REQ</strong>=Request, <strong>RFQ</strong>=Buat RFQ, <strong>SVR</strong>=Seleksi Vendor, <strong>PO-&lt;Proj&gt;</strong>=Ajukan PO/SO, <strong>TV</strong>=Terima Vendor.</div>
-              <div><strong style="color:#6B46C1;">⚡ Super Admin:</strong> Kosongkan atau ketik <strong>ALL</strong> untuk membuka seluruh menu tanpa batas.</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="form-action flex-action" style="margin-top:16px;">
-          <button type="button" id="btnSubmitKaryawan" class="btn-primary" onclick="submitKaryawanBaru()">💾 Simpan Karyawan Baru</button>
-          <button type="button" id="btnResetKaryawan" class="btn-logout-card" onclick="resetKaryawanForm()">↺ Kosongkan Form</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ SECTION: KELOLA DIGITAL BADGE ============ -->
-    <section id="sec-badge" class="app-section" style="display:none;">
-      <div class="page-title-section">
-        <span class="category-tag">DIGITAL BADGE</span>
-        <h2>Kelola Digital Badge Karyawan</h2>
-        <p>Kelola foto, jabatan/kualifikasi, dan status aktif badge digital karyawan.</p>
-      </div>
-
-      <div class="card table-card">
-        <div class="card-header space-between">
-          <div>
-            <h3>🪪 Daftar Badge Karyawan</h3>
-            <p class="card-subtitle">Data ditarik dari karyawanTbl &amp; paswordTbl.</p>
-          </div>
-          <span class="badge-count" id="badgeCount">0 Karyawan</span>
-        </div>
-        <div style="padding:0 4px 12px;">
-          <input type="text" id="badgeSearch" placeholder="Cari nama / QrCodeId..." oninput="renderBadgeTable()"
-            style="width:100%;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
-        </div>
-        <div class="table-responsive">
-          <table>
-            <thead>
-              <tr>
-                <th>Foto</th>
-                <th>Nama</th>
-                <th>QrCodeId</th>
-                <th>Kualifikasi</th>
-                <th>Status</th>
-                <th style="text-align:center;">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="badgeTableBody">
-              <tr><td colspan="6" style="text-align:center;color:#777;">Memuat data...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card form-card" style="margin-top:16px; max-width:520px;">
-        <div class="card-header">
-          <h3 id="badgeFormTitle">Edit Badge Karyawan</h3>
-        </div>
-        <input type="hidden" id="badgeEditId" value="">
-        <div class="card-form-body">
-          <div class="input-group">
-            <label for="badgeNamaLabel">Nama</label>
-            <input type="text" id="badgeNamaLabel" disabled style="background:#EFECE6;color:#888;">
-          </div>
-          <div class="input-group" style="margin-top:12px;">
-            <label for="badgeKualifikasi">Kualifikasi / Jabatan</label>
-            <input type="text" id="badgeKualifikasi" placeholder="Contoh: Site Supervisor">
-          </div>
-          <div class="input-group" style="margin-top:12px;">
-            <label for="badgeStatus">Status Aktif</label>
-            <select id="badgeStatus">
-              <option value="true">Active</option>
-              <option value="false">Inactive</option>
-            </select>
-          </div>
-          <div class="input-group" style="margin-top:12px;">
-            <label for="badgeFotoFile">Upload / Ganti Foto</label>
-            <input type="file" id="badgeFotoFile" accept="image/*">
-          </div>
-          <div class="form-action flex-action" style="margin-top:16px;">
-            <button type="button" id="btnSubmitBadge" class="btn-primary" onclick="submitBadge()">💾 Simpan Badge</button>
-            <button type="button" class="btn-logout-card" onclick="resetBadgeForm()">↺ Batal</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ SECTION: KONTRAK KARYAWAN ============ -->
-    <section id="sec-kontrak" class="app-section" style="display:none;">
-      <div class="page-title-section">
-        <span class="category-tag">KONTRAK KARYAWAN</span>
-        <h2>Master Data Kontrak Karyawan</h2>
-        <p>Kelola data kontrak kerja karyawan -- jenis kontrak, masa berlaku, gaji pokok, dan file kontrak.</p>
-      </div>
-
-      <div class="card table-card">
-        <div class="card-header space-between">
-          <div>
-            <h3>📄 Daftar Kontrak</h3>
-            <p class="card-subtitle">Kontrak yang mau habis (&lt; 30 hari) ditandai merah.</p>
-          </div>
-          <span class="badge-count" id="kontrakCount">0 Kontrak</span>
-        </div>
-        <div style="padding:0 4px 12px;">
-          <input type="text" id="kontrakSearch" placeholder="Cari nama karyawan..." oninput="renderKontrakTable()"
-            style="width:100%;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
-        </div>
-        <div class="table-responsive">
-          <table>
-            <thead>
-              <tr>
-                <th>Karyawan</th>
-                <th>Jenis</th>
-                <th>No. Kontrak</th>
-                <th>Mulai</th>
-                <th>Berakhir</th>
-                <th>Gaji Pokok</th>
-                <th>File</th>
-                <th style="text-align:center;">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="kontrakTableBody">
-              <tr><td colspan="8" style="text-align:center;color:#777;">Memuat data...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card form-card" style="margin-top:16px;">
-        <div class="card-header">
-          <h3 id="kontrakFormTitle">+ Tambah Kontrak Baru</h3>
-        </div>
-
-        <div class="form-grid">
-          <input type="hidden" id="kontrakEditId" value="">
-          <div class="input-group">
-            <label for="kontrakKaryawan">Karyawan</label>
-            <select id="kontrakKaryawan" style="width:100%; padding:10px; border-radius:8px; border:1.5px solid #e6ded9;">
-              <option value="">-- Memuat daftar karyawan... --</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <label for="kontrakJenis">Jenis Kontrak</label>
-            <select id="kontrakJenis">
-              <option value="PKWT">PKWT</option>
-              <option value="PKWTT">PKWTT</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <label for="kontrakNomor">Nomor Kontrak</label>
-            <input type="text" id="kontrakNomor" placeholder="Contoh: 001/HR-BIMA/2026">
-          </div>
-          <div class="input-group">
-            <label for="kontrakGaji">Gaji Pokok (Rp)</label>
-            <input type="number" id="kontrakGaji" placeholder="Contoh: 5000000">
-          </div>
-          <div class="input-group">
-            <label for="kontrakMulai">Tanggal Mulai</label>
-            <input type="date" id="kontrakMulai">
-          </div>
-          <div class="input-group">
-            <label for="kontrakBerakhir">Tanggal Berakhir</label>
-            <input type="date" id="kontrakBerakhir">
-          </div>
-          <div class="input-group">
-            <label for="kontrakFile">Upload File Kontrak (PDF)</label>
-            <input type="file" id="kontrakFile" accept="application/pdf">
-          </div>
-        </div>
-
-        <div class="form-action flex-action" style="margin-top:16px;">
-          <button type="button" id="btnSubmitKontrak" class="btn-primary" onclick="submitKontrak()">💾 Simpan Kontrak</button>
-          <button type="button" class="btn-logout-card" onclick="resetKontrakForm()">↺ Batal / Form Baru</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ SECTION: OTORISASI IJIN & LEMBUR ============ -->
-    <section id="sec-otorisasi" class="app-section" style="display:none;">
-      <div class="page-title-section">
-        <span class="category-tag">WORKFLOW APPROVAL</span>
-        <h2>Otorisasi Ijin &amp; Lembur (SPKL)</h2>
-        <p>Kelola persetujuan berjenjang (Propose ➔ Review ➔ Approved) dan pantau penerbitan Voucher PIN / Kode Ijin.</p>
-      </div>
-
-      <div class="category-tabs" id="otorisasiTabs">
-        <button type="button" class="tab-btn active" data-oto-tab="queue" onclick="loadOtorisasiPage('queue', this)">📥 Antrean Approval Saya</button>
-        <button type="button" class="tab-btn" data-oto-tab="all" onclick="loadOtorisasiPage('all', this)">📝 Semua Pengajuan</button>
-        <button type="button" class="tab-btn" data-oto-tab="vouchers" onclick="loadOtorisasiPage('vouchers', this)">🎫 Voucher &amp; Kode Aktif</button>
-      </div>
-
-      <div class="card table-card" style="margin-top:14px;">
-        <div class="card-header space-between">
-          <div>
-            <h3 id="otorisasiTitle">📥 Antrean Approval Saya</h3>
-            <p class="card-subtitle" id="otorisasiSubtitle">Permohonan yang memerlukan tindakan otorisasi dari akun Anda.</p>
-          </div>
-          <div style="display:flex; gap:10px; align-items:center;">
-            <button type="button" class="btn-primary" onclick="openModalBuatPengajuan()" style="padding:8px 16px; font-size:13px; font-weight:700;">+ Buat Pengajuan Baru</button>
-            <span class="badge-count" id="otorisasiCount">0 Data</span>
-          </div>
-        </div>
-
-        <div style="padding:0 4px 12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <input type="text" id="otorisasiSearch" placeholder="Cari nama, tipe, atau status..." oninput="renderOtorisasiTable()"
-            style="flex:1; min-width:180px; max-width:320px; padding:8px 12px; border-radius:8px; border:1.5px solid #e6ded9;">
-          <input type="date" id="otorisasiDateFilter" onchange="loadOtorisasiPage(currentOtorisasiTab)"
-            style="padding:8px 12px; border-radius:8px; border:1.5px solid #e6ded9;">
-        </div>
-
-        <div class="table-responsive">
-          <table>
-            <thead id="otorisasiTableHead"></thead>
-            <tbody id="otorisasiTableBody">
-              <tr><td style="text-align:center; color:#777;">Memuat data...</td></tr>
-            </tbody>
+            <tbody id="tabelStok"></tbody>
           </table>
         </div>
       </div>
     </section>
 
-    <!-- ============ SECTION: EMPLOYEE REQUEST (PERMINTAAN KARYAWAN) ============ -->
-    <section id="sec-employee-request" class="app-section" style="display:none;">
+    <!-- SECTION 2: MATERIAL REQUEST -->
+    <section id="sec-request" class="app-section" style="display: none;">
       <div class="page-title-section">
-        <span class="category-tag">MANPOWER REQUISITION</span>
-        <h2>Permintaan Karyawan (Employee Request)</h2>
-        <p>Formulir pengajuan dan otorisasi kebutuhan tenaga kerja baru untuk site / proyek PT BIMA.</p>
+        <span class="category-tag">MATERIAL REQUEST SYSTEM</span>
+        <h2>Form Permintaan</h2>
+        <p>Isi rincian kebutuhan material proyek di lapangan untuk diproses oleh tim logistik.</p>
       </div>
 
-      <div class="category-tabs" id="empReqTabs">
-        <button type="button" class="tab-btn active" data-status="ALL" onclick="loadEmployeeRequestPage('ALL', this)">📋 Semua (<span id="countEmpReqAll">0</span>)</button>
-        <button type="button" class="tab-btn" data-status="PENDING_AER" onclick="loadEmployeeRequestPage('PENDING_AER', this)">⏳ Menunggu AER (<span id="countEmpReqAer">0</span>)</button>
-        <button type="button" class="tab-btn" data-status="PROSES_HRD" onclick="loadEmployeeRequestPage('PROSES_HRD', this)">🔵 Proses HRD / PER (<span id="countEmpReqHrd">0</span>)</button>
-        <button type="button" class="tab-btn" data-status="PENDING_APER" onclick="loadEmployeeRequestPage('PENDING_APER', this)">🟣 Menunggu Direksi / APER (<span id="countEmpReqAper">0</span>)</button>
-        <button type="button" class="tab-btn" data-status="FULFILLED" onclick="loadEmployeeRequestPage('FULFILLED', this)">🎯 Selesai (<span id="countEmpReqFulfilled">0</span>)</button>
-        <button type="button" class="tab-btn" data-status="REJECTED" onclick="loadEmployeeRequestPage('REJECTED', this)">❌ Ditolak (<span id="countEmpReqRejected">0</span>)</button>
+      <!-- Card Form Request Material -->
+    <div class="card form-card">
+      <div class="card-header">
+        <h3>📝 Input Pengajuan Material Baru</h3>
       </div>
+      <form id="formRequestBatch" onsubmit="handleBatchSubmitRequest(event)">
 
-      <div class="card table-card" style="margin-top:14px;">
-        <div class="card-header space-between">
-          <div>
-            <h3 id="empReqTableTitle">📄 Daftar Permintaan Karyawan</h3>
-            <p class="card-subtitle">Riwayat pengajuan kebutuhan tenaga kerja dan status persetujuan.</p>
+        <!-- MAIN FORM (Header, isi sekali) -->
+        <div class="form-grid" style="margin-bottom: 20px;">
+          <div class="input-group">
+            <label for="reqProjectID">Project ID</label>
+            <input type="text" id="reqProjectID" placeholder="Contoh: 101" required>
           </div>
-          <span class="badge-count" id="empReqBadgeCount">0 Permintaan</span>
+          <div class="input-group">
+            <label for="reqWoNo">Work Order No (WO_NO)</label>
+            <input type="text" id="reqWoNo" placeholder="Contoh: WO-2026-001" required>
+          </div>
+          <div class="input-group">
+            <label for="reqPurpose">Purpose (Peruntukan)</label>
+            <input type="text" id="reqPurpose" placeholder="Contoh: Cutting job / Civil work" required>
+          </div>
+          <div class="input-group">
+            <label for="reqExpectedDate">Expected Date (Tgl Dibutuhkan)</label>
+            <input type="date" id="reqExpectedDate" required>
+          </div>
+          <div class="input-group">
+            <label for="reqRefNo">Ref No (Otomatis System)</label>
+            <input type="text" id="reqRefNo" placeholder="Digenerate otomatis saat submit" readonly
+              style="background-color:#EFECE6; cursor:not-allowed; color:#888;">
+          </div>
         </div>
 
-        <div style="padding:0 4px 12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <input type="text" id="empReqSearch" placeholder="Cari posisi, site, pemohon, no. req..." oninput="renderEmployeeRequestTable()"
-            style="flex:1; min-width:200px; max-width:340px; padding:8px 12px; border-radius:8px; border:1.5px solid #e6ded9;">
-          <button type="button" class="btn-primary" onclick="scrollToEmpReqForm()" style="display:inline-flex; align-items:center; gap:6px; padding:8px 16px; font-size:13px;">
-            ➕ Buat Permintaan Baru
+        <!-- SUB FORM (Detail Item, bisa lebih dari 1 baris) -->
+        <div class="card-header space-between" style="margin-top: 10px;">
+          <h4 style="margin:0;">Detail Item</h4>
+          <button type="button" class="btn-logout-card" onclick="addRequestRow()" title="Tambah Baris Item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Tambah Item</span>
           </button>
         </div>
 
         <div class="table-responsive">
           <table>
-            <thead>
-              <tr>
-                <th>No. Request</th>
-                <th>Tanggal</th>
-                <th>Pemohon</th>
-                <th>Divisi &amp; Dept</th>
-                <th>Posisi / Kualifikasi</th>
-                <th>Jml</th>
-                <th>Lokasi Site</th>
-                <th>Target Butuh</th>
-                <th>Status</th>
-                <th style="text-align:center;">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="empReqTableBody">
-              <tr><td colspan="10" style="text-align:center; color:#777;">Memuat data...</td></tr>
-            </tbody>
+          <thead>
+            <tr>
+              <th>Item Group</th>
+              <th>Item Description</th>
+              <th style="width:120px;">Qty</th>
+              <th style="width:110px;">Unit</th>
+              <th style="width:110px;">Durasi</th>
+              <th style="width:100px;">Sat. Durasi</th>
+              <th style="width:90px;"></th>
+            </tr>
+          </thead>
+            <tbody id="datasheetBody"></tbody>
           </table>
         </div>
-      </div>
 
-      <!-- Form Pengajuan Baru -->
-      <div class="card form-card" id="cardEmpReqForm" style="margin-top:16px;">
-        <div class="card-header">
-          <h3 id="empReqFormTitle">➕ Form Pengajuan Permintaan Karyawan (Manpower Requisition)</h3>
-        </div>
-
-        <form id="formEmployeeRequest" onsubmit="event.preventDefault(); submitEmployeeRequest();">
-          <div class="form-grid">
-            <div class="input-group">
-              <label for="empReqPemohon">Pemohon (Requester)</label>
-              <input type="text" id="empReqPemohon" readonly style="background:#f1f5f9; font-weight:600; cursor:not-allowed;">
-            </div>
-
-            <div class="input-group">
-              <label for="empReqDivisi">Divisi (Division)</label>
-              <select id="empReqDivisi" required onchange="handleEmpReqDivisiChange()">
-                <option value="">-- Pilih Divisi --</option>
-                <option value="Finance">Finance</option>
-                <option value="Operation">Operation</option>
-                <option value="Human Resources">Human Resources</option>
-                <option value="Supply Chains">Supply Chains</option>
-                <option value="Bussiness Development">Bussiness Development</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqDepartemen">Departemen (Department)</label>
-              <select id="empReqDepartemen" required onchange="handleEmpReqDepartemenChange()">
-                <option value="">-- Pilih Divisi Terlebih Dahulu --</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqPosisi">Posisi / Kualifikasi Jabatan (Qualification)</label>
-              <select id="empReqPosisi" required onchange="handleEmpReqPosisiChange()">
-                <option value="">-- Pilih Departemen Terlebih Dahulu --</option>
-              </select>
-            </div>
-
-            <div class="input-group" id="groupEmpReqPosisiCustom" style="display:none;">
-              <label for="empReqPosisiCustom">Nama Posisi Kustom (Lainnya)</label>
-              <input type="text" id="empReqPosisiCustom" placeholder="Tuliskan nama posisi / jabatan spesifik...">
-            </div>
-
-            <div class="input-group">
-              <label for="empReqProject">Kode / Nama Proyek</label>
-              <input type="text" id="empReqProject" placeholder="Contoh: PHM Balikpapan Project / BPN-2026">
-            </div>
-
-            <div class="input-group">
-              <label for="empReqLokasi">Lokasi Penempatan / Site</label>
-              <select id="empReqLokasi" required>
-                <option value="">-- Memuat Lokasi... --</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqJumlah">Jumlah Kebutuhan (Orang)</label>
-              <input type="number" id="empReqJumlah" min="1" max="100" value="1" required>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqTanggalButuh">Tanggal Dibutuhkan (Target On-Board)</label>
-              <input type="date" id="empReqTanggalButuh" required>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqDurasi">Estimasi Durasi Kerja</label>
-              <select id="empReqDurasi" required>
-                <option value="PKWT 3 Bulan">PKWT 3 Bulan</option>
-                <option value="PKWT 6 Bulan">PKWT 6 Bulan</option>
-                <option value="PKWT 1 Tahun">PKWT 1 Tahun</option>
-                <option value="Project-Based (Sesuai Proyek)">Project-Based (Sesuai Proyek)</option>
-                <option value="Permanen (PKWTT)">Permanen (PKWTT)</option>
-                <option value="Harian Lepas">Harian Lepas</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqGender">Preferensi Jenis Kelamin</label>
-              <select id="empReqGender">
-                <option value="Laki-laki / Perempuan">Laki-laki / Perempuan (Bebas)</option>
-                <option value="Laki-laki">Laki-laki</option>
-                <option value="Perempuan">Perempuan</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqPendidikan">Pendidikan Minimal</label>
-              <select id="empReqPendidikan">
-                <option value="SMA / SMK Sederajat">SMA / SMK Sederajat</option>
-                <option value="Diploma (D3)">Diploma (D3)</option>
-                <option value="Sarjana (S1)">Sarjana (S1)</option>
-                <option value="Tidak Ada Syarat Khusus">Tidak Ada Syarat Khusus</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqPengalaman">Pengalaman Kerja Minimal</label>
-              <select id="empReqPengalaman">
-                <option value="Fresh Graduate / Pemula">Fresh Graduate / Pemula</option>
-                <option value="1 - 2 Tahun">1 - 2 Tahun</option>
-                <option value="3 - 5 Tahun">3 - 5 Tahun</option>
-                <option value="> 5 Tahun (Senior)">> 5 Tahun (Senior)</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label for="empReqAlasan">Alasan Permintaan</label>
-              <select id="empReqAlasan" required>
-                <option value="Proyek Baru">Proyek Baru</option>
-                <option value="Tambahan Beban Kerja (Overload)">Tambahan Beban Kerja (Overload)</option>
-                <option value="Penggantian Karyawan Resign / Pindah">Penggantian Karyawan Resign / Pindah</option>
-                <option value="Backfill / Penugasan Khusus">Backfill / Penugasan Khusus</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="input-group" style="margin-top:14px;">
-            <label for="empReqKualifikasi">Kualifikasi Khusus &amp; Uraian Tugas</label>
-            <textarea id="empReqKualifikasi" rows="3" placeholder="Tuliskan sertifikasi wajib (misal: Sertifikat Migas / BNSP 6G, SIO Rigger, K3 Umum), keahlian khusus, atau tanggung jawab utama..."></textarea>
-          </div>
-
-          <div class="form-action flex-action" style="margin-top:16px;">
-            <button type="submit" id="btnSubmitEmpReq" class="btn-primary">💾 Kirim Permintaan Karyawan</button>
-            <button type="button" class="btn-logout-card" onclick="resetEmployeeRequestForm()">↺ Reset Form</button>
-          </div>
-        </form>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Modal Detail & Approval Employee Request -->
-  <div id="modalEmpReqDetail" class="modal-overlay" style="display: none;">
-    <div class="modal-card" style="max-width: 640px; max-height: 90vh; overflow-y: auto;">
-      <div class="modal-header">
-        <h3 id="modalEmpReqTitle">📋 Detail Permintaan Karyawan</h3>
-        <p id="modalEmpReqSubtitle">Rincian pengajuan kebutuhan tenaga kerja</p>
-      </div>
-      <div id="modalEmpReqBody" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 14px; font-size: 13px; line-height: 1.7;">
-        <!-- Body generated via JS -->
-      </div>
-
-      <!-- Box Approval Action khusus Author Employee Request / HR -->
-      <div id="boxEmpReqApprovalAction" style="display:none; border-top: 1.5px dashed #cbd5e1; padding-top: 14px; margin-top: 12px;">
-        <label for="empReqApprovalNotes" style="font-weight:600; font-size:13px; color:#334155; display:block; margin-bottom:6px;">Catatan Approval / Evaluasi:</label>
-        <textarea id="empReqApprovalNotes" rows="2" placeholder="Tuliskan catatan persetujuan atau alasan penolakan..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit; font-size:13px;"></textarea>
-
-        <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap:wrap;">
-          <button type="button" id="btnEmpReqApprove" class="btn-primary" style="flex: 1; min-width: 110px; background: #16a34a;" onclick="executeEmpReqDecision('APPROVED')">✅ Setujui</button>
-          <button type="button" id="btnEmpReqProgress" class="btn-primary" style="flex: 1; min-width: 110px; background: #2563eb;" onclick="executeEmpReqDecision('IN PROGRESS')">🚀 In Progress</button>
-          <button type="button" id="btnEmpReqFulfill" class="btn-primary" style="flex: 1; min-width: 110px; background: #059669;" onclick="executeEmpReqDecision('FULFILLED')">🎯 Selesai</button>
-          <button type="button" id="btnEmpReqReject" class="btn-logout-card" style="flex: 1; min-width: 110px; color: #dc2626; border-color: #fca5a5;" onclick="executeEmpReqDecision('REJECTED')">❌ Tolak</button>
-        </div>
-      </div>
-
-      <div style="display: flex; justify-content: flex-end; margin-top: 14px;">
-        <button type="button" class="btn-logout-card" onclick="closeModalEmpReqDetail()" style="padding: 10px 18px;">Tutup</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal Buat Pengajuan Baru -->
-  <div id="modalPengajuanIjinLembur" class="modal-overlay" style="display: none;">
-    <div class="modal-card" style="max-width: 520px; max-height: 90vh; overflow-y: auto;">
-      <div class="modal-header">
-        <h3>📝 Pengajuan Ijin / Lembur Baru</h3>
-        <p>Sistem akan otomatis menghitung jalur otorisasi berjenjang (1-3 Level).</p>
-      </div>
-      <form id="formPengajuanBaru" onsubmit="event.preventDefault(); submitFormPengajuanBaru();">
-        <div class="input-group">
-          <label for="pengajuanKaryawan">Pilih Karyawan (Pemohon)</label>
-          <select id="pengajuanKaryawan" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
-            <option value="">-- Pilih Karyawan --</option>
-          </select>
-        </div>
-        <div class="input-group" style="margin-top: 12px;">
-          <label for="pengajuanTipe">Tipe Pengajuan</label>
-          <select id="pengajuanTipe" required onchange="togglePengajuanTipeFields(this.value)" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
-            <option value="IJIN">🚪 Ijin Keluar / Pulang Mendadak</option>
-            <option value="LEMBUR">⏱️ Lembur Kerja (SPKL)</option>
-          </select>
-        </div>
-        <div class="input-group" style="margin-top: 12px;">
-          <label for="pengajuanTanggal">Tanggal Pelaksanaan</label>
-          <input type="date" id="pengajuanTanggal" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
-        </div>
-        <div id="groupPengajuanLemburExtra" style="display: none; margin-top: 12px;">
-          <div class="input-group">
-            <label for="pengajuanLokasi">Lokasi / Area Project</label>
-            <select id="pengajuanLokasi" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
-              <option value="">-- Pilih Lokasi / Site --</option>
-            </select>
-          </div>
-          <div class="input-group" style="margin-top: 12px;">
-            <label for="pengajuanDurasi">Estimasi Durasi Lembur (Jam)</label>
-            <input type="number" id="pengajuanDurasi" min="0.5" max="24" step="0.5" placeholder="Contoh: 3" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
-          </div>
-        </div>
-        <div class="input-group" style="margin-top: 12px;">
-          <label for="pengajuanAlasan">Alasan / Uraian Tugas</label>
-          <textarea id="pengajuanAlasan" rows="3" required placeholder="Tuliskan keterangan detail keperluan ijin atau uraian tugas lembur..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit;"></textarea>
-        </div>
-        <div style="display: flex; gap: 10px; margin-top: 20px;">
-          <button type="submit" id="btnSubmitPengajuanBaru" class="btn-primary" style="flex: 1;">Kirim Pengajuan</button>
-          <button type="button" class="btn-logout-card" onclick="closeModalBuatPengajuan()" style="padding: 10px 16px;">Batal</button>
+        <div class="form-action flex-action" style="margin-top:16px;">
+          <button type="submit" id="btnSubmitBatchRequest" class="btn-primary">🚀 Kirim Semua Item Request</button>
         </div>
       </form>
     </div>
-  </div>
 
-  <!-- Modal Aksi Approval / Review / Propose -->
-  <div id="modalApprovalAction" class="modal-overlay" style="display: none;">
-    <div class="modal-card" style="max-width: 500px; max-height: 90vh; overflow-y: auto;">
-      <div class="modal-header">
-        <h3 id="modalApprovalTitle">⚡ Otorisasi Pengajuan</h3>
-        <p id="modalApprovalSubtitle">Verifikasi data sebelum menyetujui atau menolak.</p>
+        <!-- Card Table Status Request -->
+        <div class="card table-card">
+          <div class="card-header space-between">
+            <div>
+              <h3>📋 Riwayat Pengajuan Request</h3>
+              <p class="card-subtitle">Daftar pengajuan material yang telah dikirim ke pusat</p>
+            </div>
+            <span class="badge-count" id="totalRequestCount">0 Request</span>
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 70px;">ID</th>
+                  <th style="width: 20%;">REQ. NO</th>
+                  <th>Item & Spesifikasi</th>
+                  <th>Qty</th>
+                  <th>Tgl Butuh</th>
+                  <th style="text-align: center;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="tabelRequest">
+                <tr><td colspan="6" style="text-align:center; color: #777;">Belum ada data pengajuan.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+    </section>
+
+    <section id="sec-approval" class="app-section" style="display:none;">
+      <h2>Approval Request</h2>
+      <table class="data-table" id="tableApproval">
+        <thead>
+          <tr>
+            <th>RefNo</th>
+            <th>Project</th>
+            <th>No. WO</th>
+            <th>Keperluan</th>
+            <th>Requester</th>
+            <th>Tanggal</th>
+            <th>Level Saat Ini</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="approvalTableBody">
+          <tr><td colspan="8" style="text-align:center;">Memuat data...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  <section id="sec-vendor" class="app-section" style="display:none;">
+    <h2>Approval Vendor</h2>   
+    <table class="data-table" id="tableVendor">
+      <thead>
+        <tr>
+          <th>Nama Vendor</th>
+          <th>Kategori</th>
+          <th>Kontak</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="vendorTableBody">
+        <tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="sec-approval-rfq" class="app-section" style="display:none;">
+    <h2>Approval Seleksi Vendor RFQ</h2>
+    <table class="data-table" id="tableApprovalRfq">
+      <thead>
+        <tr>
+          <th>No. RFQ</th>
+          <th>Vendor Diusulkan</th>
+          <th>Total Penawaran</th>
+          <th>Diusulkan Oleh</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="approvalRfqTableBody">
+        <tr><td colspan="5" style="text-align:center;">Memuat data...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="sec-approval-po" class="app-section" style="display:none;">
+    <h2>Approval PO/SO</h2>
+    <table id="tableApprovalPo" style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr style="background:#f0eae6;">
+          <th style="padding:10px; text-align:left;">DOC NUMBER</th>
+          <th style="padding:10px; text-align:left;">TIPE</th>
+          <th style="padding:10px; text-align:left;">NO RFQ</th>
+          <th style="padding:10px; text-align:left;">VENDOR</th>
+          <th style="padding:10px; text-align:left;">TOTAL</th>
+          <th style="padding:10px; text-align:left;">DIAJUKAN OLEH</th>
+          <th style="padding:10px; text-align:left;">AKSI</th>
+        </tr>
+      </thead>
+      <tbody id="approvalPoTableBody">
+        <tr><td colspan="7" style="text-align:center; padding:16px;">Memuat data...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="sec-rfq" class="app-section" style="display:none;">
+    <h2>Buat RFQ & Undang Vendor</h2>
+
+    <h3 style="font-size:14px; margin-top:20px;">1. Pilih Item Request (Status: Approved)</h3>
+    <input type="text" id="searchRfqRequest" placeholder="Cari RefNo atau Item..." style="width:100%; padding:10px; margin:8px 0; border:1.5px solid #e6ded9; border-radius:8px; box-sizing:border-box;">
+    <table class="data-table" id="tableRfqRequest">
+      <thead>
+        <tr>
+          <th style="width:36px;"></th>
+          <th>RefNo</th>
+          <th>Item</th>
+          <th>Qty</th>
+          <th>Project</th>
+          <th>Riwayat RFQ</th>
+          <th>Sisa Qty</th>
+        </tr>
+      </thead>
+      <tbody id="rfqRequestTableBody">
+        <tr><td colspan="7" style="text-align:center;">Memuat data...</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:14px; margin-top:20px;">2. Pilih Vendor yang Diundang</h3>
+    <input type="text" id="searchRfqVendor" placeholder="Cari Nama Vendor atau Kategori..." style="width:100%; padding:10px; margin:8px 0; border:1.5px solid #e6ded9; border-radius:8px; box-sizing:border-box;">
+    <table class="data-table" id="tableRfqVendor">
+      <thead>
+        <tr>
+          <th style="width:36px;"></th>
+          <th>Nama Vendor</th>
+          <th>Kategori</th>
+          <th>Email</th>
+        </tr>
+      </thead>
+      <tbody id="rfqVendorTableBody">
+        <tr><td colspan="4" style="text-align:center;">Memuat data...</td></tr>
+      </tbody>
+    </table>
+
+      <label style="display:block; margin-top:16px; font-weight:600; font-size:13px;">Titik Pengiriman (Delivery Point)</label>
+      <input type="text" id="rfqDeliveryPoint" placeholder="Contoh: Site Balikpapan Baru, Gudang Utama, dll" style="width:100%; padding:10px; margin-top:6px; border:1.5px solid #e6ded9; border-radius:8px;">
+
+      <label style="display:block; margin-top:16px; font-weight:600; font-size:13px;">Catatan (opsional)</label>
+      <textarea id="rfqNotes" rows="2" style="width:100%; margin-top:6px; padding:10px; border:1.5px solid #e6ded9; border-radius:8px;"></textarea>
+
+    <button id="btnSubmitRfq" onclick="submitRFQ()" style="margin-top:16px; background:#e8562c; color:#fff; border:none; padding:12px 20px; border-radius:8px; font-weight:700; cursor:pointer;">Buat RFQ & Kirim Undangan</button>
+  </section>
+
+  <section id="sec-rfq-selection" class="app-section" style="display:none;">
+    <h2>Seleksi Vendor RFQ</h2>
+    <div style="margin-bottom:16px;">
+      <label for="selectRfqForSelection"><strong>Pilih RFQ:</strong></label><br>
+      <select id="selectRfqForSelection" onchange="loadRfqSelectionDetail(this.value)" style="padding:8px 12px;min-width:280px;border-radius:8px;border:1.5px solid #e6ded9;">
+        <option value="">-- Pilih RFQ --</option>
+      </select>
+    </div>
+    <div id="rfqSelectionContent"></div>
+  </section>
+
+  <section id="sec-po-submit" class="app-section" style="display:none;">
+    <h2>Ajukan PO/SO</h2>
+    <div style="margin-bottom:12px;">
+      <input type="text" id="searchPoSubmit" placeholder="Cari No RFQ atau Vendor..." style="width:100%; padding:8px 12px; border:1.5px solid #e6ded9; border-radius:8px;">
+    </div>
+    <table id="tablePoSubmit" style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr style="background:#f0eae6;">
+          <th style="padding:10px; text-align:left;"><input type="checkbox" id="chkAllPoSubmit"></th>
+          <th style="padding:10px; text-align:left;">DOC NUMBER</th>
+          <th style="padding:10px; text-align:left;">TIPE</th>
+          <th style="padding:10px; text-align:left;">NO RFQ</th>
+          <th style="padding:10px; text-align:left;">VENDOR</th>
+          <th style="padding:10px; text-align:left;">TOTAL</th>
+        </tr>
+      </thead>
+      <tbody id="poSubmitTableBody">
+        <tr><td colspan="6" style="text-align:center; padding:16px;">Memuat data...</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:16px;">
+      <button onclick="submitPoForApproval()" style="padding:10px 20px; background:#e8562c; color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer;">Ajukan Approval</button>
+    </div>
+  </section>
+
+  <section id="sec-vendor-receiving" class="app-section" style="display:none;">
+    <h2>Terima Barang dari Vendor</h2>
+    <div style="margin-bottom:16px;">
+      <label for="selectPoForReceiving"><strong>Pilih PO/SO (Approved):</strong></label><br>
+      <select id="selectPoForReceiving" onchange="loadPoReceivingDetail(this.value)" style="padding:8px 12px;min-width:280px;border-radius:8px;border:1.5px solid #e6ded9;">
+        <option value="">-- Pilih PO/SO --</option>
+      </select>
+    </div>
+    <div id="poReceivingContent"></div>
+  </section>
+
+  <section id="sec-view-report" class="app-section" style="display:none;">
+    <div class="page-title-section">
+      <span class="category-tag">VIEW REPORT</span>
+      <h2>Report Semua Tahapan Transaksi</h2>
+      <p>Lihat & buka ulang PDF report dari tiap tahap alur transaksi, dari Request sampai Terima End User.</p>
+    </div>
+
+    <div class="category-tabs" id="viewReportTabs">
+      <button type="button" class="tab-btn active" data-report-cat="request" onclick="loadViewReportPage('request', this)">Request</button>
+      <button type="button" class="tab-btn" data-report-cat="rfq" onclick="loadViewReportPage('rfq', this)">RFQ</button>
+      <button type="button" class="tab-btn" data-report-cat="vendorSelection" onclick="loadViewReportPage('vendorSelection', this)">Selection Vendor</button>
+      <button type="button" class="tab-btn" data-report-cat="poso" onclick="loadViewReportPage('poso', this)">PO/SO</button>
+      <button type="button" class="tab-btn" data-report-cat="siteReceiving" onclick="loadViewReportPage('siteReceiving', this)">Site Receiving</button>
+      <button type="button" class="tab-btn" data-report-cat="endUserReceiving" onclick="loadViewReportPage('endUserReceiving', this)">End User Receiving</button>
+    </div>
+
+    <div class="card table-card" style="margin-top:14px;">
+      <div class="card-header space-between">
+        <div>
+          <h3 id="viewReportTitle">📄 Report Request</h3>
+          <p class="card-subtitle" id="viewReportSubtitle">Daftar transaksi Request beserta link report PDF-nya.</p>
+        </div>
+        <span class="badge-count" id="viewReportCount">0 Transaksi</span>
       </div>
-      <div id="modalApprovalBody" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 14px; font-size: 13px; line-height: 1.6;">
-        <!-- Ringkasan data pengajuan -->
+
+      <div style="padding:0 4px 12px;">
+        <input type="text" id="viewReportSearch" placeholder="Cari No. Transaksi..." oninput="renderViewReportTable()"
+          style="width:100%;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
       </div>
-      <div class="input-group">
-        <label for="modalApprovalNotes">Catatan / Keterangan (Opsional):</label>
-        <textarea id="modalApprovalNotes" rows="2" placeholder="Tuliskan catatan khusus atau alasan penolakan..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit;"></textarea>
-      </div>
-      <div style="display: flex; gap: 10px; margin-top: 18px;">
-        <button type="button" id="btnConfirmApprove" class="btn-primary" style="flex: 1;" onclick="executeApprovalDecision(true)">Setujui</button>
-        <button type="button" id="btnConfirmReject" class="btn-logout-card" style="color: #dc2626; border-color: #fca5a5;" onclick="executeApprovalDecision(false)">Tolak (Reject)</button>
-        <button type="button" class="btn-logout-card" onclick="closeModalApprovalAction()" style="padding: 10px 14px;">Tutup</button>
+
+      <div class="table-responsive">
+        <table>
+          <thead id="viewReportTableHead">
+            <tr>
+              <th>No. Transaksi</th>
+              <th>Tanggal</th>
+              <th>Keterangan</th>
+              <th style="text-align:center;">Report</th>
+            </tr>
+          </thead>
+          <tbody id="viewReportTableBody">
+            <tr><td colspan="4" style="text-align:center; color:#777;">Memuat data...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
-  </div>
+  </section>
+
+  </main>
 
   <!-- Modal Login Overlay -->
   <div id="loginModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
       <div class="modal-header">
-        <h3>🔑 Login Fusion4 SmartGate</h3>
+        <h3>🔑 Login SMMS BIMA</h3>
         <p>Pilih Nama Karyawan dan Masukkan Password</p>
       </div>
       <form id="formLogin">
@@ -933,6 +585,7 @@
     </div>
   </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
 
 </body>

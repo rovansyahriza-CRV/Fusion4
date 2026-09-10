@@ -21,6 +21,7 @@ ALTER TABLE "karyawanTbl" ADD COLUMN IF NOT EXISTS "Type" TEXT;
 ALTER TABLE "karyawanTbl" ADD COLUMN IF NOT EXISTS "TglMasuk" DATE;
 ALTER TABLE "karyawanTbl" ADD COLUMN IF NOT EXISTS "QrCodeId" TEXT;
 ALTER TABLE "karyawanTbl" ADD COLUMN IF NOT EXISTS "DigitalPin" TEXT;
+ALTER TABLE "karyawanTbl" ADD COLUMN IF NOT EXISTS "DigitalPIN" BIGINT;
 ALTER TABLE "karyawanTbl" ADD COLUMN IF NOT EXISTS "IsActive" BOOLEAN DEFAULT true;
 ALTER TABLE "karyawanTbl" ADD COLUMN IF NOT EXISTS "FotoUrl" TEXT;
 ALTER TABLE "karyawanTbl" ADD COLUMN IF NOT EXISTS "FotoFileId" TEXT;
@@ -45,6 +46,33 @@ SET "pic" = COALESCE(NULLIF("PIC", ''), "pic"),
 UPDATE "paswordTbl" 
 SET "pic" = 'PER', "PIC" = 'PER', "Author" = 'AER' 
 WHERE "Id" = 21 AND "PIC" = 'PER';
+
+-- Perbaikan Data PIN 5-digit yang ada saat ini (Gusar ID 11 & Puji Priyanto ID 15)
+UPDATE "karyawanTbl"
+SET 
+    "DigitalPIN" = 357731,
+    "DigitalPin" = '357731'
+WHERE "Id" = 11;
+
+UPDATE "karyawanTbl"
+SET 
+    "DigitalPIN" = 473031,
+    "DigitalPin" = '473031'
+WHERE "Id" = 15;
+
+-- Sinkronisasi menyeluruh: pastikan semua kolom DigitalPin (TEXT) dan DigitalPIN (BIGINT) terisi sama
+UPDATE "karyawanTbl"
+SET 
+    "DigitalPin" = COALESCE("DigitalPin", "DigitalPIN"::TEXT),
+    "DigitalPIN" = COALESCE("DigitalPIN", NULLIF("DigitalPin", '')::BIGINT)
+WHERE "DigitalPin" IS NULL OR "DigitalPIN" IS NULL;
+
+-- Jika ada PIN yang masih di bawah 6 digit (< 100000), kalikan 10 + 1
+UPDATE "karyawanTbl"
+SET 
+    "DigitalPIN" = ("DigitalPIN" * 10 + 1),
+    "DigitalPin" = ("DigitalPIN" * 10 + 1)::TEXT
+WHERE "DigitalPIN" IS NOT NULL AND "DigitalPIN" < 100000;
 
 -- 4. Bersihkan seluruh overload function lama agar tidak terjadi ambigu
 DO $$
@@ -116,11 +144,11 @@ BEGIN
     PERFORM setval('"karyawanTbl_Id_seq"', v_new_id, true);
     PERFORM setval('"paswordTbl_Id_seq"', v_new_id, true);
 
-    -- Generate QrCodeId & Digital PIN unik
+    -- Generate QrCodeId & Digital PIN unik (Strict 6-digit: 100000 - 999999, tidak pernah diawali 0)
     v_qrcodeid := 'K-' || LPAD(v_new_id::TEXT, 4, '0');
-    v_digitalpin := LPAD(FLOOR(RANDOM() * 900000 + 100000)::TEXT, 6, '0');
+    v_digitalpin := (FLOOR(RANDOM() * 900000 + 100000))::TEXT;
 
-    -- INSERT ke karyawanTbl dengan "Id" eksplisit
+    -- INSERT ke karyawanTbl dengan "Id" eksplisit (sinkronisasi DigitalPin & DigitalPIN)
     INSERT INTO "karyawanTbl" (
         "Id",
         "NamaPersonnel",
@@ -131,6 +159,7 @@ BEGIN
         "TglMasuk",
         "QrCodeId",
         "DigitalPin",
+        "DigitalPIN",
         "IsActive"
     ) VALUES (
         v_new_id,
@@ -142,6 +171,7 @@ BEGIN
         v_tgl_masuk,
         v_qrcodeid,
         v_digitalpin,
+        v_digitalpin::BIGINT,
         true
     );
 
@@ -271,7 +301,7 @@ BEGIN
         k."Divisi"::TEXT AS divisi,
         k."TglMasuk"::DATE AS tglmasuk,
         k."QrCodeId"::TEXT AS qrcodeid,
-        k."DigitalPin"::TEXT AS digitalpin,
+        COALESCE(NULLIF(k."DigitalPin", ''), k."DigitalPIN"::TEXT, '') AS digitalpin,
         COALESCE(k."IsActive", true) AS isactive,
         p."Author"::TEXT AS author,
         COALESCE(NULLIF(p."PIC", ''), p."pic")::TEXT AS pic

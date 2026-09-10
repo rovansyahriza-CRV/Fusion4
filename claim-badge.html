@@ -749,7 +749,7 @@
     document.getElementById('badgeCardRole').textContent = matchedPerson.Kualifikasi || 'Karyawan';
     document.getElementById('badgeCardDept').textContent = matchedPerson.Departemen ? `${matchedPerson.Departemen} / ${matchedPerson.Divisi || '-'}` : 'PT BIMA';
     document.getElementById('badgeCardQrId').textContent = matchedPerson.QrCodeId || '-';
-    document.getElementById('badgeCardPin').textContent = matchedPerson.DigitalPIN || '123456';
+    document.getElementById('badgeCardPin').textContent = String(matchedPerson.DigitalPin || matchedPerson.DigitalPIN || '123456').padStart(6, '0');
 
     function formatDriveDirectUrl(url) {
       if (!url) return '';

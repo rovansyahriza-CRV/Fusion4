@@ -403,11 +403,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const { data: karRow } = await supabaseClient
         .from('karyawanTbl')
-        .select('DigitalPIN')
+        .select('DigitalPIN, DigitalPin')
         .ilike('QrCodeId', qrParam.trim())
         .maybeSingle();
-      if (karRow && karRow.DigitalPIN) {
-        const pStr = String(karRow.DigitalPIN).padStart(6, '0');
+      if (karRow && (karRow.DigitalPin || karRow.DigitalPIN)) {
+        const pinRaw = karRow.DigitalPin || String(karRow.DigitalPIN);
+        const pStr = String(pinRaw).padStart(6, '0');
         if (realPinInput) {
           realPinInput.value = pStr;
           updatePinBoxes();
@@ -459,9 +460,9 @@ async function submitPin() {
         const pinNum = parseInt(pin, 10);
         let query = supabaseClient.from('karyawanTbl').select('*');
         if (!isNaN(pinNum)) {
-          query = query.or(`DigitalPIN.eq.${pinNum},DigitalPIN.eq.${pin},QrCodeId.eq.${pin}`);
+          query = query.or(`DigitalPIN.eq.${pinNum},DigitalPin.eq.${pin},QrCodeId.eq.${pin}`);
         } else {
-          query = query.or(`DigitalPIN.eq.${pin},QrCodeId.eq.${pin}`);
+          query = query.or(`DigitalPin.eq.${pin},QrCodeId.eq.${pin}`);
         }
         const { data: karRows, error: karErr } = await query;
         if (!karErr && karRows && karRows.length > 0) {
