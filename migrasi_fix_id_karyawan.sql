@@ -48,8 +48,8 @@ SET "pic" = 'PER', "PIC" = 'PER', "Author" = 'AER'
 WHERE "Id" = 21 AND "PIC" = 'PER';
 
 -- Perbaikan Data PIN 5-digit yang ada saat ini (Gusar ID 11 & Puji Priyanto ID 15)
--- Catatan: Disable trigger sementara agar tidak terblokir oleh prevent_digitalpin_change
-ALTER TABLE "karyawanTbl" DISABLE TRIGGER ALL;
+-- Catatan: Disable trigger USER sementara agar tidak menyentuh system trigger (RI_ConstraintTrigger)
+ALTER TABLE "karyawanTbl" DISABLE TRIGGER USER;
 
 UPDATE "karyawanTbl"
 SET 
@@ -77,7 +77,7 @@ SET
     "DigitalPin" = ("DigitalPIN" * 10 + 1)::TEXT
 WHERE "DigitalPIN" IS NOT NULL AND "DigitalPIN" < 100000;
 
-ALTER TABLE "karyawanTbl" ENABLE TRIGGER ALL;
+ALTER TABLE "karyawanTbl" ENABLE TRIGGER USER;
 
 -- 4. Bersihkan seluruh overload function lama agar tidak terjadi ambigu
 DO $$
