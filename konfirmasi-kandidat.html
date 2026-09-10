@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Konfirmasi Penerimaan Posisi</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 0 16px; color: #2C3E50; background: #fdf6f3; }
+  .brand { text-align: center; margin: 24px 0; }
+  .brand img { height: 56px; }
+  .brand .powered { font-size: 10px; color: #999; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 6px; }
+
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(61, 61, 61, 0.12);
+    padding: 28px 24px;
+    text-align: center;
+  }
+  .card p { color: #666; font-size: 14px; line-height: 1.5; }
+
+  input {
+    width: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+    font-size: 14px;
+    border: 1.5px solid #e6ded9;
+    border-radius: 8px;
+    background: #fdfaf9;
+    font-family: inherit;
+    text-align: center;
+    font-size: 22px;
+    letter-spacing: 8px;
+    margin-bottom: 14px;
+  }
+
+  button { width: 100%; background: #0d9488; color: white; border: none; padding: 12px 24px; font-size: 15px; font-weight: 700; cursor: pointer; border-radius: 8px; margin-top: 8px; }
+  button:hover:not(:disabled) { background: #0b7a70; }
+  button:disabled { background: #999; cursor: not-allowed; }
+  button.decline { background: #fff; color: #b91c1c; border: 1.5px solid #fca5a5; }
+  button.decline:hover:not(:disabled) { background: #fee2e2; }
+
+  #error { background: #FADBD8; color: #C0392B; padding: 12px; border-radius: 8px; margin-bottom: 16px; display: none; text-align: center; font-size: 13px; }
+  .pin-error { color: #C0392B; font-size: 12px; margin-top: -8px; margin-bottom: 12px; display: none; }
+
+  .posisi-box { background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 10px; padding: 12px; margin-bottom: 20px; text-align: left; font-size: 13px; }
+  .posisi-box strong { color: #0f766e; }
+</style>
+</head>
+<body>
+
+<div class="brand">
+  <img src="logo-bima.png" alt="BIMA - Bilal Mitra Aryatama">
+  <div class="powered">Fusion4 SmartGate — HRD</div>
+</div>
+
+<div id="error"></div>
+<div id="app" class="card">Memuat data...</div>
+
+<script>
+const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const params = new URLSearchParams(window.location.search);
+const kandidatId = Number(params.get("kandidat"));
+
+function showError(msg) {
+  const el = document.getElementById("error");
+  el.textContent = msg;
+  el.style.display = "block";
+  document.getElementById("app").innerHTML = "";
+}
+
+async function init() {
+  if (!kandidatId) {
+    showError("Link tidak lengkap. Pastikan Anda membuka link dari email pemberitahuan.");
+    return;
+  }
+
+  try {
+    const { data, error } = await supabaseClient.rpc('get_detail_konfirmasi_kandidat', { p_kandidat_id: kandidatId });
+    if (error) throw error;
+
+    if (data.status !== 'SUCCESS') {
+      showError(data.message || "Link tidak valid.");
+      return;
+    }
+
+    if (data.konfirmasiStatus === 'DIKONFIRMASI') {
+      document.getElementById("app").innerHTML = `
+        <p><strong>Anda sudah mengonfirmasi sebelumnya.</strong></p>
+        <p>Terima kasih atas responnya.</p>
+      `;
+      return;
+    }
+
+    renderPinGate(data);
+  } catch (err) {
+    showError("Terjadi kendala memuat data: " + err.message + " Silakan muat ulang halaman.");
+  }
+}
+
+function renderPinGate(data) {
+  document.getElementById("app").innerHTML = `
+    <div class="posisi-box">
+      Halo <strong>${data.namaKandidat}</strong>,<br>
+      Anda dinyatakan lolos seleksi untuk posisi:<br>
+      <strong>${data.posisi || '-'}</strong> — ${data.divisi || '-'}<br>
+      📍 ${data.lokasiSite || '-'} ${data.projectCode ? '(' + data.projectCode + ')' : ''}
+    </div>
+    <p>Masukkan PIN yang dikirimkan melalui email untuk mengonfirmasi kesediaan Anda.</p>
+    <input type="text" id="pinInput" maxlength="6" inputmode="numeric" placeholder="••••••">
+    <div class="pin-error" id="pinError">PIN salah atau sudah kedaluwarsa.</div>
+    <button id="btnTerima">✅ Ya, Saya Menerima Tawaran Ini</button>
+    <button id="btnTolak" class="decline">❌ Maaf, Saya Tidak Bisa Menerima</button>
+  `;
+
+  document.getElementById("btnTerima").addEventListener("click", () => submitRespon('DITERIMA'));
+  document.getElementById("btnTolak").addEventListener("click", () => {
+    if (confirm('Anda yakin ingin menolak tawaran posisi ini?')) submitRespon('DITOLAK');
+  });
+}
+
+async function submitRespon(decision) {
+  const pin = (document.getElementById("pinInput").value || '').trim();
+  if (!pin) {
+    document.getElementById("pinError").textContent = "PIN wajib diisi.";
+    document.getElementById("pinError").style.display = "block";
+    return;
+  }
+
+  document.getElementById("btnTerima").disabled = true;
+  document.getElementById("btnTolak").disabled = true;
+
+  try {
+    const { data, error } = await supabaseClient.rpc('respon_konfirmasi_kandidat', {
+      p_kandidat_id: kandidatId,
+      p_pin: pin,
+      p_decision: decision
+    });
+    if (error) throw error;
+
+    if (data.status !== 'SUCCESS') {
+      document.getElementById("pinError").textContent = data.message || "PIN salah.";
+      document.getElementById("pinError").style.display = "block";
+      document.getElementById("btnTerima").disabled = false;
+      document.getElementById("btnTolak").disabled = false;
+      return;
+    }
+
+    document.getElementById("app").innerHTML = `
+      <p style="font-size:15px; font-weight:700; color:#0f766e;">${data.message}</p>
+    `;
+  } catch (err) {
+    document.getElementById("pinError").textContent = "Gagal memproses: " + err.message;
+    document.getElementById("pinError").style.display = "block";
+    document.getElementById("btnTerima").disabled = false;
+    document.getElementById("btnTolak").disabled = false;
+  }
+}
+
+init();
+</script>
+
+</body>
+</html>
