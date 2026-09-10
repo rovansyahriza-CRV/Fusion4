@@ -2799,6 +2799,7 @@ function renderKandidatRekrutmenPanel(reqId, data) {
         <span style="display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; border-radius:8px; background:${statusBg[k.Status] || '#f1f5f9'}; color:${statusColor[k.Status] || '#475569'};">${escapeHtml(k.Status)}</span>
         <div style="font-size:10px; color:#64748b; margin-top:2px;">
           Interview: ${k.TglInterview || '-'} • ${konfirmasiLabel[k.KonfirmasiStatus] || k.KonfirmasiStatus}
+          ${k.CvUrl ? ` • <a href="${k.CvUrl}" target="_blank" rel="noopener" style="color:#0d9488; font-weight:700;">📎 Lihat CV</a>` : ' • <span style="color:#94a3b8;">Belum ada CV</span>'}
         </div>
       </div>
       ${k.Status === 'PROSES' ? `
@@ -2821,7 +2822,11 @@ function renderKandidatRekrutmenPanel(reqId, data) {
         <input type="text" id="kandidatNama-${reqId}" placeholder="Nama Kandidat" style="padding:6px 8px; font-size:12px; border-radius:6px; border:1px solid #cbd5e1;">
         <input type="date" id="kandidatTglInterview-${reqId}" style="padding:6px 8px; font-size:12px; border-radius:6px; border:1px solid #cbd5e1;">
       </div>
-      <button type="button" style="margin-top:6px; width:100%; padding:7px; font-size:12px; font-weight:700; border:none; border-radius:6px; background:#0d9488; color:#fff; cursor:pointer;" onclick="submitKandidatBaru(${reqId})">
+      <div style="margin-top:6px;">
+        <label style="font-size:11px; color:#0f766e; font-weight:700; display:block; margin-bottom:3px;">📎 Lampirkan CV (opsional — PDF/DOCX/gambar)</label>
+        <input type="file" id="kandidatCv-${reqId}" accept=".pdf,.doc,.docx,image/*" style="width:100%; font-size:11px; padding:4px; border-radius:6px; border:1px solid #cbd5e1; background:#fff;">
+      </div>
+      <button type="button" id="btnTambahKandidat-${reqId}" style="margin-top:8px; width:100%; padding:7px; font-size:12px; font-weight:700; border:none; border-radius:6px; background:#0d9488; color:#fff; cursor:pointer;" onclick="submitKandidatBaru(${reqId})">
         ➕ Tambah Kandidat
       </button>
     </div>
@@ -2831,15 +2836,36 @@ function renderKandidatRekrutmenPanel(reqId, data) {
 async function submitKandidatBaru(reqId) {
   const namaEl = document.getElementById(`kandidatNama-${reqId}`);
   const tglEl = document.getElementById(`kandidatTglInterview-${reqId}`);
+  const cvEl = document.getElementById(`kandidatCv-${reqId}`);
+  const btnEl = document.getElementById(`btnTambahKandidat-${reqId}`);
   const nama = (namaEl?.value || '').trim();
   const tgl = tglEl?.value || null;
+  const cvFile = cvEl?.files?.[0] || null;
 
   if (!nama) {
     showToast('Nama kandidat wajib diisi!', 'error');
     return;
   }
 
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = cvFile ? '⏳ Mengunggah CV...' : '⏳ Menyimpan...'; }
+
   try {
+    let cvUrl = null, cvFileId = null, cvFileName = null;
+
+    // Upload CV ke Google Drive dulu (kalau ada file dipilih)
+    if (cvFile) {
+      if (typeof uploadToDrive !== 'function') {
+        showToast('Fitur upload Drive belum siap (driveBridge.js belum termuat). Kandidat tetap disimpan tanpa CV.', 'error');
+      } else {
+        const ext = cvFile.name.split('.').pop() || 'pdf';
+        const fileName = `CV_${nama.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${ext}`;
+        const uploadRes = await uploadToDrive('reports', fileName, cvFile.type || 'application/octet-stream', cvFile);
+        cvUrl = uploadRes.directUrl || uploadRes.viewUrl || null;
+        cvFileId = uploadRes.fileId || null;
+        cvFileName = cvFile.name;
+      }
+    }
+
     const actor = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'System';
     const { data, error } = await supabaseClient.rpc('submit_kandidat_rekrutmen', {
       p_request_id: reqId,
@@ -2847,17 +2873,23 @@ async function submitKandidatBaru(reqId) {
       p_tgl_interview: tgl,
       p_status: 'PROSES',
       p_notes: null,
-      p_actor_name: actor
+      p_actor_name: actor,
+      p_cv_url: cvUrl,
+      p_cv_fileid: cvFileId,
+      p_cv_filename: cvFileName
     });
     if (error) throw error;
 
     showToast(data?.message || 'Kandidat berhasil dicatat.', 'success');
     if (namaEl) namaEl.value = '';
     if (tglEl) tglEl.value = '';
+    if (cvEl) cvEl.value = '';
     await loadKandidatRekrutmen(reqId);
   } catch (err) {
     console.error('Error submitKandidatBaru:', err);
     showToast('Gagal mencatat kandidat: ' + err.message, 'error');
+  } finally {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '➕ Tambah Kandidat'; }
   }
 }
 
@@ -2937,3 +2969,6 @@ async function deleteEmployeeRequest(id) {
     showToast('Gagal menghapus permintaan: ' + err.message, 'error');
   }
 }
+
+
+
