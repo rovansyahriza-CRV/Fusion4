@@ -1,6 +1,7 @@
 const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const RFQ_EMAIL_URL = "https://script.google.com/macros/s/AKfycbww8VikG_wpAvQro1-9vLC_llnvKFigFotzKXS-T_kaIHKA4q2QGbYXqZObEF5j_1Hr/exec"; // shared GAS email sender (dipakai bareng SMMS-BIMA)
 
 // State Aplikasi
 let currentUser = null;
@@ -2356,8 +2357,11 @@ function getEmpReqStatusBadge(statusRaw) {
   if (status === 'PENDING_APER') {
     return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#f3e8ff; color:#7e22ce;">🟣 Menunggu Direksi</span>`;
   }
+  if (status === 'REKRUTMEN_AKTIF') {
+    return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#f0fdfa; color:#0d9488;">🔎 Proses Rekrutmen</span>`;
+  }
   if (status === 'FULFILLED' || status === 'APPROVED' || status === 'APPROVED_APER') {
-    return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#ecfdf5; color:#047857;">🟢 Selesai / ACC Direksi</span>`;
+    return `<span style="display:inline-block; padding:3px 8px; font-size:11px; font-weight:700; border-radius:12px; background:#ecfdf5; color:#047857;">🟢 Terisi Penuh</span>`;
   }
   if (status.startsWith('REJECTED')) {
     const label = status === 'REJECTED_AER' ? 'Ditolak AER' : (status === 'REJECTED_APER' ? 'Ditolak Direksi' : 'Ditolak');
@@ -2601,23 +2605,24 @@ function openEmployeeRequestDetail(id) {
         </div>
       ` : ''}
 
-      <!-- SHORTCUT PRE-FILL DATA KARYAWAN JIKA SUDAH ACC DIREKSI / FULFILLED -->
+      <!-- PANEL TRACKING REKRUTMEN (muncul begitu Direksi/APER approve, sampai posisi terisi penuh) -->
+      ${(status === 'REKRUTMEN_AKTIF') ? `
+        <div id="panelRekrutmen-${req.id}" style="background:#f0fdfa; border:1.5px dashed #0d9488; border-radius:8px; padding:12px; margin-top:12px;">
+          <div style="font-size:12px; color:#0f766e;">⏳ Memuat data kandidat...</div>
+        </div>
+      ` : ''}
+
+      <!-- INFO KALAU SUDAH TERISI PENUH -->
       ${(status === 'FULFILLED' || status === 'APPROVED' || status === 'APPROVED_APER') ? `
-        <div style="background:#f0fdfa; border:1.5px dashed #0d9488; border-radius:8px; padding:12px; margin-top:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <div style="flex:1; min-width:200px;">
-            <strong style="color:#0f766e; font-size:13px; display:flex; align-items:center; gap:5px;">
-              <span>👤</span> Registrasi Karyawan dari Request Ini
-            </strong>
-            <span style="font-size:11px; color:#115e59; display:block; margin-top:2px;">
-              Salin Divisi, Dept, Posisi &amp; Site langsung ke Form Karyawan Baru (Password default: <strong>12345</strong>).
-            </span>
-          </div>
-          <button type="button" class="btn-primary" style="background:#0d9488; font-size:12px; padding:7px 14px; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" onclick="prefillKaryawanFromRequest(${req.id})">
-            ➕ Isi Form Karyawan Baru
-          </button>
+        <div style="background:#ecfdf5; border:1px solid #86efac; border-radius:8px; padding:10px 12px; margin-top:12px; font-size:12px; color:#047857;">
+          ✅ Kebutuhan posisi ini sudah terisi penuh. Kandidat yang diterima sudah otomatis tercatat.
         </div>
       ` : ''}
     `;
+  }
+
+  if (status === 'REKRUTMEN_AKTIF') {
+    loadKandidatRekrutmen(req.id);
   }
 
   // RENDER DYNAMIC ACTION BOX BERDASARKAN ROLE LOGIN & STATUS SAAT INI
@@ -2684,8 +2689,12 @@ function openEmployeeRequestDetail(id) {
       } else {
         actionHtml = `<div style="color:#7e22ce; background:#f3e8ff; padding:8px 12px; border-radius:6px; font-size:12px;">🟣 Menunggu persetujuan final dari Direksi / BOD (Author: <strong>APER</strong>).</div>`;
       }
+    } else if (status === 'REKRUTMEN_AKTIF') {
+      actionHtml = canHrd
+        ? `<div style="color:#0f766e; background:#f0fdfa; padding:8px 12px; border-radius:6px; font-size:12px;">🔎 Permintaan sudah di-ACC Direksi. Catat kandidat yang disounding di panel atas.</div>`
+        : `<div style="color:#0f766e; background:#f0fdfa; padding:8px 12px; border-radius:6px; font-size:12px;">🔎 Sudah di-ACC Direksi, Tim HRD sedang proses sourcing kandidat.</div>`;
     } else if (status === 'FULFILLED' || status === 'APPROVED') {
-      actionHtml = `<div style="color:#047857; background:#ecfdf5; padding:8px 12px; border-radius:6px; font-size:12px;">✅ Permintaan telah disetujui penuh oleh Direksi. Karyawan siap didaftarkan ke sistem.</div>`;
+      actionHtml = `<div style="color:#047857; background:#ecfdf5; padding:8px 12px; border-radius:6px; font-size:12px;">✅ Permintaan telah terisi penuh. Semua kandidat yang diterima sudah didaftarkan ke sistem.</div>`;
     } else if (status.startsWith('REJECTED')) {
       actionHtml = `<div style="color:#b91c1c; background:#fee2e2; padding:8px 12px; border-radius:6px; font-size:12px;">❌ Pengajuan permintaan ini telah ditolak.</div>`;
     }
@@ -2749,6 +2758,144 @@ function prefillKaryawanFromRequest(reqId) {
   }, 300);
 }
 
+// ==================== PANEL TRACKING REKRUTMEN (kandidat per request) ====================
+
+async function loadKandidatRekrutmen(reqId) {
+  const panel = document.getElementById(`panelRekrutmen-${reqId}`);
+  if (!panel) return;
+
+  try {
+    const { data, error } = await supabaseClient.rpc('list_kandidat_rekrutmen', { p_request_id: reqId });
+    if (error) throw error;
+    renderKandidatRekrutmenPanel(reqId, data);
+  } catch (err) {
+    console.error('Error loadKandidatRekrutmen:', err);
+    panel.innerHTML = `<div style="color:#b91c1c; font-size:12px;">Gagal memuat data kandidat: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderKandidatRekrutmenPanel(reqId, data) {
+  const panel = document.getElementById(`panelRekrutmen-${reqId}`);
+  if (!panel) return;
+
+  const kandidatList = data?.kandidat || [];
+  const jumlahDibutuhkan = data?.jumlah_dibutuhkan || 1;
+  const jumlahDiterima = data?.jumlah_diterima || 0;
+
+  const statusColor = { PROSES: '#b45309', DITOLAK: '#b91c1c', DITERIMA: '#047857' };
+  const statusBg = { PROSES: '#fef3c7', DITOLAK: '#fee2e2', DITERIMA: '#ecfdf5' };
+  const konfirmasiLabel = {
+    BELUM_DIKIRIM: '⚪ Belum dikirim',
+    MENUNGGU_KONFIRMASI: '🟡 Menunggu respon kandidat',
+    DIKONFIRMASI: '🟢 Sudah dikonfirmasi kandidat'
+  };
+
+  const rowsHtml = kandidatList.length ? kandidatList.map(k => `
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; background:#fff; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:6px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:150px;">
+        <strong style="font-size:12px; color:#0f172a;">${escapeHtml(k.NamaKandidat)}</strong>
+        <span style="display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; border-radius:8px; background:${statusBg[k.Status] || '#f1f5f9'}; color:${statusColor[k.Status] || '#475569'};">${escapeHtml(k.Status)}</span>
+        <div style="font-size:10px; color:#64748b; margin-top:2px;">
+          Interview: ${k.TglInterview || '-'} • ${konfirmasiLabel[k.KonfirmasiStatus] || k.KonfirmasiStatus}
+        </div>
+      </div>
+      ${k.Status === 'PROSES' ? `
+        <div style="display:flex; gap:6px;">
+          <button type="button" style="font-size:10px; padding:5px 8px; border-radius:6px; border:none; background:#0d9488; color:#fff; cursor:pointer;" onclick="kirimLinkKonfirmasi(${k.Id}, '${escapeHtml(k.NamaKandidat).replace(/'/g, "\\'")}', ${reqId})">
+            📧 Kirim Link
+          </button>
+        </div>
+      ` : ''}
+    </div>
+  `).join('') : `<div style="font-size:11px; color:#64748b; padding:6px 0;">Belum ada kandidat yang disounding.</div>`;
+
+  panel.innerHTML = `
+    <strong style="color:#0f766e; font-size:13px; display:flex; align-items:center; gap:5px; margin-bottom:8px;">
+      <span>🔎</span> Proses Rekrutmen — ${jumlahDiterima} / ${jumlahDibutuhkan} Orang Terisi
+    </strong>
+    <div id="kandidatListWrap-${reqId}">${rowsHtml}</div>
+    <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #99f6e4;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+        <input type="text" id="kandidatNama-${reqId}" placeholder="Nama Kandidat" style="padding:6px 8px; font-size:12px; border-radius:6px; border:1px solid #cbd5e1;">
+        <input type="date" id="kandidatTglInterview-${reqId}" style="padding:6px 8px; font-size:12px; border-radius:6px; border:1px solid #cbd5e1;">
+      </div>
+      <button type="button" style="margin-top:6px; width:100%; padding:7px; font-size:12px; font-weight:700; border:none; border-radius:6px; background:#0d9488; color:#fff; cursor:pointer;" onclick="submitKandidatBaru(${reqId})">
+        ➕ Tambah Kandidat
+      </button>
+    </div>
+  `;
+}
+
+async function submitKandidatBaru(reqId) {
+  const namaEl = document.getElementById(`kandidatNama-${reqId}`);
+  const tglEl = document.getElementById(`kandidatTglInterview-${reqId}`);
+  const nama = (namaEl?.value || '').trim();
+  const tgl = tglEl?.value || null;
+
+  if (!nama) {
+    showToast('Nama kandidat wajib diisi!', 'error');
+    return;
+  }
+
+  try {
+    const actor = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'System';
+    const { data, error } = await supabaseClient.rpc('submit_kandidat_rekrutmen', {
+      p_request_id: reqId,
+      p_nama_kandidat: nama,
+      p_tgl_interview: tgl,
+      p_status: 'PROSES',
+      p_notes: null,
+      p_actor_name: actor
+    });
+    if (error) throw error;
+
+    showToast(data?.message || 'Kandidat berhasil dicatat.', 'success');
+    if (namaEl) namaEl.value = '';
+    if (tglEl) tglEl.value = '';
+    await loadKandidatRekrutmen(reqId);
+  } catch (err) {
+    console.error('Error submitKandidatBaru:', err);
+    showToast('Gagal mencatat kandidat: ' + err.message, 'error');
+  }
+}
+
+async function kirimLinkKonfirmasi(kandidatId, namaKandidat, reqId) {
+  const email = (prompt(`Masukkan email ${namaKandidat} untuk kirim link konfirmasi:`) || '').trim();
+  if (!email) return;
+
+  try {
+    // Ambil PIN & detail terbaru dari list (supaya PIN akurat, bukan tebakan client)
+    const { data: listData, error: listErr } = await supabaseClient.rpc('list_kandidat_rekrutmen', { p_request_id: reqId });
+    if (listErr) throw listErr;
+    const kandidat = (listData?.kandidat || []).find(k => k.Id === kandidatId);
+    if (!kandidat || !kandidat.Pin) {
+      showToast('Data kandidat/PIN tidak ditemukan.', 'error');
+      return;
+    }
+
+    const link = `https://rovansyahriza-crv.github.io/Fusion4/konfirmasi-kandidat.html?kandidat=${kandidatId}`;
+
+    await fetch(RFQ_EMAIL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "SEND_SIMPLE_EMAIL",
+        to: email,
+        subject: `Konfirmasi Penerimaan Posisi — ${namaKandidat}`,
+        body: `Halo ${namaKandidat},\n\nSelamat! Anda dinyatakan lolos seleksi. Silakan konfirmasi kesediaan Anda melalui link berikut:\n${link}\n\nMasukkan PIN Anda: ${kandidat.Pin}\n\nTerima kasih.`
+      })
+    });
+
+    await supabaseClient.rpc('catat_pengiriman_konfirmasi_kandidat', { p_kandidat_id: kandidatId });
+
+    showToast(`Link konfirmasi berhasil dikirim ke ${email}.`, 'success');
+    await loadKandidatRekrutmen(reqId);
+  } catch (err) {
+    console.error('Error kirimLinkKonfirmasi:', err);
+    showToast('Gagal mengirim link konfirmasi: ' + err.message, 'error');
+  }
+}
+
 async function executeEmpReqStep(action) {
   if (!empReqState.selectedRequest) return;
 
@@ -2788,6 +2935,3 @@ async function deleteEmployeeRequest(id) {
     showToast('Gagal menghapus permintaan: ' + err.message, 'error');
   }
 }
-
-
-
