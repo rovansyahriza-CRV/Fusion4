@@ -2969,6 +2969,3 @@ async function deleteEmployeeRequest(id) {
     showToast('Gagal menghapus permintaan: ' + err.message, 'error');
   }
 }
-
-
-
