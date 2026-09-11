@@ -675,8 +675,9 @@ async function initGPS() {
     try {
       pos = await getGeo({ enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 });
     } catch (e2) {
-      showBanner(locBanner, "🔴 Gagal ambil GPS. Aktifkan GPS/WiFi di HP.", "fail");
-      showRetry();
+      showBanner(locBanner, "🟡 GPS tidak bisa diambil (aktifkan GPS/WiFi kalau ada). Lokasi tidak tercatat, tapi daftar kiriman tetap ditampilkan.", "info");
+      matchedLat = null; matchedLng = null; matchedLocation = null;
+      showPendingDeliveries(projectCode);
       return;
     }
   }
@@ -693,16 +694,18 @@ async function initGPS() {
     const dist = loc ? (loc.Distance !== undefined ? loc.Distance : loc.distance) : 0;
 
     if (!loc || !isInside) {
-      showBanner(locBanner, "🔴 Di luar area site terdaftar" + (namaLokasi ? " (" + namaLokasi + ")" : "") + ".", "fail");
-      showRetry();
+      matchedLocation = null;
+      showBanner(locBanner, "🟡 Lokasi GPS tercatat, tapi di luar area site terdaftar" + (namaLokasi ? " (terdekat: " + namaLokasi + ", " + Math.round(dist) + "m)" : "") + ". Daftar kiriman tetap ditampilkan.", "info");
+      showPendingDeliveries(projectCode);
       return;
     }
     matchedLocation = { namalokasi: namaLokasi, ...loc };
     showBanner(locBanner, `🟢 Lokasi: ${namaLokasi} (jarak ${Math.round(dist)}m)`, "ok");
     showPendingDeliveries(projectCode);
   } catch (e) {
-    showBanner(locBanner, "🔴 Gagal cek lokasi: " + e.message, "fail");
-    showRetry();
+    matchedLocation = null;
+    showBanner(locBanner, "🟡 GPS tercatat, tapi gagal cek kecocokan lokasi (" + e.message + "). Daftar kiriman tetap ditampilkan.", "info");
+    showPendingDeliveries(projectCode);
   }
 }
 
@@ -919,7 +922,7 @@ document.getElementById('btnSubmitDispatch').onclick = async () => {
 async function showPendingDeliveries(projCode) {
   const pendingCard = document.getElementById('pendingCard');
   const listWrap = document.getElementById('pendingListWrap');
-  document.getElementById('pendingSiteLabel').textContent = matchedLocation ? matchedLocation.namalokasi : "-";
+  document.getElementById('pendingSiteLabel').textContent = matchedLocation ? matchedLocation.namalokasi : "GPS di luar/tanpa area terdaftar (tercatat sebagai koordinat mentah)";
   pendingCard.style.display = "block";
   listWrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Memuat daftar kiriman...</p>';
 
@@ -930,10 +933,11 @@ async function showPendingDeliveries(projCode) {
       return;
     }
 
+    // Catatan: GPS tidak lagi dipakai buat mengunci/filter -- cuma dicatat sebagai metadata lokasi.
+    // Semua kiriman project ini ditampilkan apapun DestinationSite-nya, biar Penerima yang konfirmasi manual.
     const { data: rows, error } = await supabaseClient
       .from('delivery')
-      .select('DeliveryID, POID, PODetailID, QtyDelivered, SuratJalanNo, PengirimBy, DeliveryDate, Notes')
-      .eq('DestinationSite', matchedLocation ? matchedLocation.namalokasi : '__none__')
+      .select('DeliveryID, POID, PODetailID, QtyDelivered, SuratJalanNo, PengirimBy, DeliveryDate, Notes, DestinationSite')
       .in('POID', projectPoIds);
     if (error) throw error;
 
@@ -1044,6 +1048,7 @@ async function showPendingDeliveries(projCode) {
       card.dataset.suratJalan = suratJalanNo;
       card.innerHTML = `
         <h4>No. Surat Jalan: ${suratJalanNo}</h4>
+        <p>📍 Tujuan Site: <strong>${first.DestinationSite || '-'}</strong></p>
         <p>Pengirim: ${pengirimNamaMap[first.PengirimBy] || '-'}</p>
         <p>Tanggal Kirim: ${first.DeliveryDate ? new Date(first.DeliveryDate).toLocaleString('id-ID') : '-'}</p>
         <div class="site-receive-detail" style="display:none; margin-top:12px;">
