@@ -361,7 +361,12 @@
         <div class="form-grid">
           <div class="input-group">
             <label for="karyawanNama">Nama Personnel</label>
-            <input type="text" id="karyawanNama" placeholder="Nama lengkap karyawan">
+            <input type="text" id="karyawanNama" placeholder="Nama lengkap karyawan" oninput="cekDuplikatNamaKaryawan()">
+            <div id="karyawanNamaHint" style="font-size:11px; margin-top:4px; display:none;"></div>
+          </div>
+          <div class="input-group karyawan-create-only" id="karyawanEmailWrap" style="display:none;">
+            <label for="karyawanEmail">Email (buat kirim link Digital Badge &amp; PIN otomatis)</label>
+            <input type="email" id="karyawanEmail" placeholder="nama@email.com">
           </div>
           <div class="input-group karyawan-create-only">
             <label for="karyawanType">Type (HO / Project)</label>
@@ -535,10 +540,15 @@
         <div class="form-grid">
           <input type="hidden" id="kontrakEditId" value="">
           <div class="input-group">
-            <label for="kontrakKaryawan">Karyawan</label>
-            <select id="kontrakKaryawan" style="width:100%; padding:10px; border-radius:8px; border:1.5px solid #e6ded9;">
-              <option value="">-- Memuat daftar karyawan... --</option>
-            </select>
+            <label for="kontrakKaryawanInput">Karyawan</label>
+            <input type="text" id="kontrakKaryawanInput" list="kontrakKaryawanDatalist" placeholder="Ketik nama karyawan (pilih dari saran, atau ketik nama baru)" autocomplete="off" oninput="cekKaryawanKontrak()">
+            <datalist id="kontrakKaryawanDatalist"></datalist>
+            <input type="hidden" id="kontrakKaryawan" value="">
+            <div id="kontrakKaryawanHint" style="font-size:11px; margin-top:4px; display:none;"></div>
+          </div>
+          <div class="input-group" id="kontrakEmailWrap" style="display:none;">
+            <label for="kontrakEmail">Email Karyawan Baru (opsional — kirim link Digital Badge &amp; PIN)</label>
+            <input type="email" id="kontrakEmail" placeholder="nama@email.com">
           </div>
           <div class="input-group">
             <label for="kontrakJenis">Jenis Kontrak</label>

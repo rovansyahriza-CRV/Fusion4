@@ -933,12 +933,54 @@ function editKaryawan(id) {
 
 function resetKaryawanForm() {
   ['karyawanNama','karyawanType','karyawanKualifikasi','karyawanDepartemen','karyawanDivisi',
-   'karyawanTglMasuk','karyawanAuthor','karyawanPic','karyawanEditId']
+   'karyawanTglMasuk','karyawanAuthor','karyawanPic','karyawanEditId','karyawanEmail']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const passEl = document.getElementById('karyawanPassword');
   if (passEl) passEl.value = '12345';
+  const hintEl = document.getElementById('karyawanNamaHint');
+  if (hintEl) hintEl.style.display = 'none';
+  const emailWrap = document.getElementById('karyawanEmailWrap');
+  if (emailWrap) emailWrap.style.display = 'none';
   setKaryawanEditMode(false);
   document.getElementById('karyawanFormTitle').textContent = '+ Tambah Karyawan Baru';
+}
+
+let karyawanNamaCheckTimer = null;
+function cekDuplikatNamaKaryawan() {
+  clearTimeout(karyawanNamaCheckTimer);
+  karyawanNamaCheckTimer = setTimeout(() => {
+    const nama = (document.getElementById('karyawanNama')?.value || '').trim();
+    const hintEl = document.getElementById('karyawanNamaHint');
+    const emailWrap = document.getElementById('karyawanEmailWrap');
+    const editId = document.getElementById('karyawanEditId')?.value || '';
+
+    if (editId || nama.length < 3) {
+      if (hintEl) hintEl.style.display = 'none';
+      if (emailWrap) emailWrap.style.display = 'none';
+      return;
+    }
+
+    const namaLower = nama.toLowerCase();
+    const match = (karyawanState.rows || []).find(r =>
+      String(r.namapersonnel || '').toLowerCase().trim() === namaLower
+    );
+
+    if (match) {
+      if (hintEl) {
+        hintEl.style.display = 'block';
+        hintEl.style.color = '#b45309';
+        hintEl.textContent = `⚠️ Sudah ada karyawan dengan nama sama: ${match.namapersonnel} (${match.qrcodeid}). Pastikan ini bukan duplikat.`;
+      }
+      if (emailWrap) emailWrap.style.display = 'none';
+    } else {
+      if (hintEl) {
+        hintEl.style.display = 'block';
+        hintEl.style.color = '#0d9488';
+        hintEl.textContent = '✅ Nama baru, belum ada di data. Isi email (opsional) untuk kirim link Digital Badge & PIN otomatis.';
+      }
+      if (emailWrap) emailWrap.style.display = '';
+    }
+  }, 400);
 }
 
 async function submitKaryawanBaru() {
@@ -980,6 +1022,7 @@ async function submitKaryawanBaru() {
     const kualifikasi = document.getElementById('karyawanKualifikasi')?.value.trim() || '';
     const tglMasuk = document.getElementById('karyawanTglMasuk')?.value || null;
     const password = document.getElementById('karyawanPassword')?.value || '';
+    const email = document.getElementById('karyawanEmail')?.value.trim() || '';
 
     if (!password) { showToast('Password login absen wajib diisi.', 'error'); return; }
 
@@ -993,6 +1036,7 @@ async function submitKaryawanBaru() {
       p_password: password,
       p_author: author || null,
       p_pic: pic || null,
+      p_email: email || null,
     });
     if (error) throw error;
 
@@ -1000,6 +1044,27 @@ async function submitKaryawanBaru() {
       const pinInfo = hasil.digitalpin ? ` Digital PIN: ${hasil.digitalpin}` : '';
       const qrInfo = hasil.qrcodeid ? ` QrCodeId: ${hasil.qrcodeid}` : '';
       showToast((hasil.message || 'Karyawan baru berhasil dibuat.') + qrInfo + pinInfo, 'success');
+
+      if (email && hasil.digitalpin) {
+        try {
+          const link = `https://rovansyahriza-crv.github.io/Fusion4/digital-badge.html?pin=${hasil.digitalpin}`;
+          await fetch(RFQ_EMAIL_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+              action: "SEND_SIMPLE_EMAIL",
+              to: email,
+              subject: `Akses Digital Badge Anda — ${nama}`,
+              body: `Halo ${nama},\n\nAnda telah terdaftar di Fusion4 SmartGate. Berikut akses Digital Badge Anda:\n\nLink: ${link}\nPIN: ${hasil.digitalpin}\n\nSimpan PIN ini baik-baik, jangan dibagikan ke orang lain.\n\nTerima kasih.`
+            })
+          });
+          showToast(`Email link Digital Badge & PIN berhasil dikirim ke ${email}.`, 'success');
+        } catch (emailErr) {
+          console.error('Gagal kirim email badge:', emailErr);
+          showToast('Karyawan tersimpan, tapi gagal kirim email: ' + emailErr.message, 'error');
+        }
+      }
+
       resetKaryawanForm();
       loadKaryawanPage();
     } else {
@@ -1150,23 +1215,57 @@ async function loadKontrakPage() {
   }
 }
 
+let kontrakKaryawanCache = [];
+
 async function loadKontrakKaryawanDropdown() {
-  const selectEl = document.getElementById('kontrakKaryawan');
-  if (!selectEl) return;
-  selectEl.innerHTML = '<option value="">-- Memuat daftar karyawan... --</option>';
+  const datalistEl = document.getElementById('kontrakKaryawanDatalist');
+  if (!datalistEl) return;
 
   try {
     const { data, error } = await supabaseClient.rpc('get_active_karyawan');
     if (error) throw error;
-    selectEl.innerHTML = '<option value="">-- Pilih Karyawan --</option>';
-    (data || []).forEach(k => {
-      const opt = document.createElement('option');
-      opt.value = k.id;
-      opt.textContent = `${k.nama} (ID: ${k.id})`;
-      selectEl.appendChild(opt);
-    });
+    kontrakKaryawanCache = data || [];
+    datalistEl.innerHTML = kontrakKaryawanCache.map(k => `<option value="${escapeHtml(k.nama)}">`).join('');
   } catch (err) {
-    selectEl.innerHTML = '<option value="">Gagal memuat daftar karyawan</option>';
+    console.error('Gagal memuat daftar karyawan untuk kontrak:', err);
+  }
+}
+
+function cekKaryawanKontrak() {
+  const inputEl = document.getElementById('kontrakKaryawanInput');
+  const hiddenEl = document.getElementById('kontrakKaryawan');
+  const hintEl = document.getElementById('kontrakKaryawanHint');
+  const emailWrap = document.getElementById('kontrakEmailWrap');
+  const editId = document.getElementById('kontrakEditId')?.value || '';
+  const nama = (inputEl?.value || '').trim();
+
+  if (editId) return; // mode edit: kunci ke karyawan yang sudah ter-link, jangan diubah logic-nya
+
+  if (nama.length < 2) {
+    hiddenEl.value = '';
+    if (hintEl) hintEl.style.display = 'none';
+    if (emailWrap) emailWrap.style.display = 'none';
+    return;
+  }
+
+  const match = kontrakKaryawanCache.find(k => String(k.nama || '').toLowerCase().trim() === nama.toLowerCase());
+
+  if (match) {
+    hiddenEl.value = match.id;
+    if (hintEl) {
+      hintEl.style.display = 'block';
+      hintEl.style.color = '#0d9488';
+      hintEl.textContent = `✅ Karyawan ditemukan: ${match.nama} (ID: ${match.id}).`;
+    }
+    if (emailWrap) emailWrap.style.display = 'none';
+  } else {
+    hiddenEl.value = '';
+    if (hintEl) {
+      hintEl.style.display = 'block';
+      hintEl.style.color = '#b45309';
+      hintEl.textContent = '⚠️ Nama belum ada di data. Klik "Simpan Kontrak" akan otomatis membuat data karyawan baru. Isi email (opsional) untuk kirim link Digital Badge & PIN.';
+    }
+    if (emailWrap) emailWrap.style.display = '';
   }
 }
 
@@ -1230,6 +1329,11 @@ function editKontrak(id) {
   document.getElementById('kontrakFormTitle').textContent = `✏️ Edit Kontrak: ${row.namakaryawan || ''}`;
   document.getElementById('kontrakEditId').value = row.id;
   document.getElementById('kontrakKaryawan').value = row.karyawanid;
+  document.getElementById('kontrakKaryawanInput').value = row.namakaryawan || '';
+  const hintEl = document.getElementById('kontrakKaryawanHint');
+  if (hintEl) hintEl.style.display = 'none';
+  const emailWrap = document.getElementById('kontrakEmailWrap');
+  if (emailWrap) emailWrap.style.display = 'none';
   document.getElementById('kontrakJenis').value = row.jeniskontrak || 'PKWT';
   document.getElementById('kontrakNomor').value = row.nomorkontrak || '';
   document.getElementById('kontrakGaji').value = row.gajipokok || '';
@@ -1257,7 +1361,9 @@ async function deleteKontrak(id) {
 
 async function submitKontrak() {
   const editId = document.getElementById('kontrakEditId')?.value;
-  const karyawanId = document.getElementById('kontrakKaryawan')?.value;
+  let karyawanId = document.getElementById('kontrakKaryawan')?.value;
+  const namaInput = (document.getElementById('kontrakKaryawanInput')?.value || '').trim();
+  const emailBaru = (document.getElementById('kontrakEmail')?.value || '').trim();
   const jenis = document.getElementById('kontrakJenis')?.value;
   const nomor = document.getElementById('kontrakNomor')?.value.trim();
   const gaji = parseFloat(document.getElementById('kontrakGaji')?.value) || null;
@@ -1266,7 +1372,8 @@ async function submitKontrak() {
   const fileEl = document.getElementById('kontrakFile');
   const file = fileEl?.files?.[0];
 
-  if (!karyawanId) { showToast('Pilih dulu karyawannya.', 'error'); return; }
+  if (!editId && !karyawanId && !namaInput) { showToast('Isi dulu nama karyawannya.', 'error'); return; }
+  if (editId && !karyawanId) { showToast('Pilih dulu karyawannya.', 'error'); return; }
   if (!nomor) { showToast('Nomor kontrak wajib diisi.', 'error'); return; }
   if (!mulai || !berakhir) { showToast('Tanggal mulai & berakhir kontrak wajib diisi.', 'error'); return; }
 
@@ -1275,6 +1382,22 @@ async function submitKontrak() {
   if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
 
   try {
+    let karyawanBaruDigitalpin = null;
+
+    // Kalau bukan mode edit dan nama nggak match karyawan yang sudah ada -> quick-create dulu
+    if (!editId && !karyawanId) {
+      const { data: hasilKaryawan, error: errKaryawan } = await supabaseClient.rpc('create_karyawan_full', {
+        p_nama: namaInput,
+        p_email: emailBaru || null,
+      });
+      if (errKaryawan) throw errKaryawan;
+      if (!hasilKaryawan || hasilKaryawan.status !== 'SUCCESS') {
+        throw new Error((hasilKaryawan && hasilKaryawan.message) || 'Gagal membuat data karyawan baru.');
+      }
+      karyawanId = hasilKaryawan.id;
+      karyawanBaruDigitalpin = hasilKaryawan.digitalpin;
+    }
+
     let fileUrl = null;
     let fileId = null;
 
@@ -1287,8 +1410,8 @@ async function submitKontrak() {
 
     if (file) {
       const base64 = await fileToBase64(file);
-      const uploaded = await uploadBase64ToDrive('kontrak-karyawan', `KONTRAK_${nomor.replace(/\//g, '-')}.pdf`, 'application/pdf', base64);
-      fileUrl = uploaded.directUrl;
+      const uploaded = await uploadToDrive('reports', `KONTRAK_${nomor.replace(/\//g, '-')}.pdf`, 'application/pdf', file);
+      fileUrl = uploaded.directUrl || uploaded.viewUrl;
       fileId = uploaded.fileId;
     }
 
@@ -1307,11 +1430,32 @@ async function submitKontrak() {
         p_gajipokok: gaji, p_filekontrakurl: fileUrl, p_filekontrakfileid: fileId,
       });
       if (error) throw error;
-      showToast('Kontrak baru berhasil ditambahkan.', 'success');
+      showToast('Kontrak baru berhasil ditambahkan.' + (karyawanBaruDigitalpin ? ' Data karyawan baru juga otomatis dibuat.' : ''), 'success');
+    }
+
+    if (karyawanBaruDigitalpin && emailBaru) {
+      try {
+        const link = `https://rovansyahriza-crv.github.io/Fusion4/digital-badge.html?pin=${karyawanBaruDigitalpin}`;
+        await fetch(RFQ_EMAIL_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "SEND_SIMPLE_EMAIL",
+            to: emailBaru,
+            subject: `Akses Digital Badge Anda — ${namaInput}`,
+            body: `Halo ${namaInput},\n\nAnda telah terdaftar di Fusion4 SmartGate. Berikut akses Digital Badge Anda:\n\nLink: ${link}\nPIN: ${karyawanBaruDigitalpin}\n\nSimpan PIN ini baik-baik, jangan dibagikan ke orang lain.\n\nTerima kasih.`
+          })
+        });
+        showToast(`Email link Digital Badge & PIN berhasil dikirim ke ${emailBaru}.`, 'success');
+      } catch (emailErr) {
+        console.error('Gagal kirim email badge:', emailErr);
+        showToast('Kontrak & karyawan tersimpan, tapi gagal kirim email: ' + emailErr.message, 'error');
+      }
     }
 
     resetKontrakForm();
     loadKontrakPage();
+    loadKontrakKaryawanDropdown();
   } catch (err) {
     showToast('Gagal menyimpan kontrak: ' + err.message, 'error');
   } finally {
@@ -1323,6 +1467,12 @@ function resetKontrakForm() {
   document.getElementById('kontrakFormTitle').textContent = '+ Tambah Kontrak Baru';
   document.getElementById('kontrakEditId').value = '';
   document.getElementById('kontrakKaryawan').value = '';
+  document.getElementById('kontrakKaryawanInput').value = '';
+  document.getElementById('kontrakEmail').value = '';
+  const hintEl = document.getElementById('kontrakKaryawanHint');
+  if (hintEl) hintEl.style.display = 'none';
+  const emailWrap = document.getElementById('kontrakEmailWrap');
+  if (emailWrap) emailWrap.style.display = 'none';
   document.getElementById('kontrakJenis').value = 'PKWT';
   document.getElementById('kontrakNomor').value = '';
   document.getElementById('kontrakGaji').value = '';
