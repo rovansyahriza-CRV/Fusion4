@@ -157,8 +157,15 @@
   <div class="badge-card">
     <div class="badge-row">
       <div id="qrbox"></div>
-      <img id="badgeFoto" class="badge-foto" style="display:none;" alt="Foto">
-      <div id="badgeFotoFallback" class="badge-foto-fallback" style="display:none;"></div>
+      <div style="position:relative; display:inline-block;">
+        <img id="badgeFoto" class="badge-foto" style="display:none;" alt="Foto">
+        <div id="badgeFotoFallback" class="badge-foto-fallback" style="display:none;"></div>
+        <button id="btnEditFotoPribadi" type="button" title="Ganti foto profil (hanya tersimpan di HP ini)" style="display:none; position:absolute; bottom:-4px; right:-4px; width:26px; height:26px; border-radius:50%; background:var(--orange, #e8562c); border:2px solid #fff; color:#fff; font-size:12px; cursor:pointer; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,0.25);">📷</button>
+      </div>
+      <input type="file" id="fotoPribadiInput" accept="image/*" style="display:none;">
+    </div>
+    <div id="fotoPribadiHint" style="display:none; font-size:10px; color:var(--text-muted); text-align:center; margin-top:-4px; margin-bottom:6px;">
+      📱 Foto pribadi (cuma tersimpan di HP ini) — <a href="javascript:void(0)" id="btnHapusFotoPribadi" style="color:var(--orange);">hapus</a>
     </div>
     <div class="badge-eyebrow">Official Member</div>
     <div class="badge-nama" id="badgeNama">-</div>
@@ -387,6 +394,71 @@ if (pinWrapper) {
   });
 }
 
+let currentBadgeQrId = null;
+
+function fotoPribadiKey(qrId) {
+  return `fusion4_foto_pribadi_${String(qrId || '').trim().toUpperCase()}`;
+}
+
+function applyFotoPribadiLokal(qrId) {
+  const btnEdit = document.getElementById('btnEditFotoPribadi');
+  const hintEl = document.getElementById('fotoPribadiHint');
+  if (btnEdit) btnEdit.style.display = 'flex';
+
+  const saved = localStorage.getItem(fotoPribadiKey(qrId));
+  if (!saved) {
+    if (hintEl) hintEl.style.display = 'none';
+    return;
+  }
+
+  const fotoEl = document.getElementById('badgeFoto');
+  const fallbackEl = document.getElementById('badgeFotoFallback');
+  if (fotoEl) {
+    fotoEl.onerror = null;
+    fotoEl.src = saved;
+    fotoEl.style.display = 'block';
+  }
+  if (fallbackEl) fallbackEl.style.display = 'none';
+  if (hintEl) hintEl.style.display = 'block';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btnEdit = document.getElementById('btnEditFotoPribadi');
+  const fileInput = document.getElementById('fotoPribadiInput');
+  const btnHapus = document.getElementById('btnHapusFotoPribadi');
+
+  if (btnEdit && fileInput) {
+    btnEdit.addEventListener('click', () => fileInput.click());
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file || !currentBadgeQrId) return;
+      try {
+        const compressedBlob = await compressImage(file, 400, 0.75);
+        const dataUrl = await blobToDataUrl(compressedBlob);
+        localStorage.setItem(fotoPribadiKey(currentBadgeQrId), dataUrl);
+        applyFotoPribadiLokal(currentBadgeQrId);
+      } catch (e) {
+        alert('Gagal simpan foto pribadi: ' + e.message);
+      } finally {
+        fileInput.value = '';
+      }
+    });
+  }
+
+  if (btnHapus) {
+    btnHapus.addEventListener('click', () => {
+      if (!currentBadgeQrId) return;
+      if (!confirm('Hapus foto pribadi ini? Badge akan kembali pakai foto resmi.')) return;
+      localStorage.removeItem(fotoPribadiKey(currentBadgeQrId));
+      document.getElementById('fotoPribadiHint').style.display = 'none';
+      location.reload();
+    });
+  }
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
   const urlParams = new URLSearchParams(window.location.search);
   const pinParam = urlParams.get('pin');
@@ -581,6 +653,10 @@ async function submitPin() {
         } catch (ePhoto) {
           console.warn('Direct fetch photo error:', ePhoto);
         }
+
+        // Foto pribadi lokal (kalau ada) menimpa tampilan foto official -- HANYA di HP ini
+        currentBadgeQrId = qrId;
+        applyFotoPribadiLokal(qrId);
       })();
 
       // Load data approval & voucher
