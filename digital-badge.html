@@ -1107,6 +1107,35 @@ async function submitPin() {
       if (hasEmpReq) {
         empReqData.forEach(item => {
           const row = document.createElement('div');
+
+          if (item.stage === 'AER_READONLY') {
+            // Card read-only: request yang pernah di-approve AER ini, tampilkan progress-nya saja
+            const statusLabel = {
+              PROSES_HRD: '🔵 Proses Seleksi HRD',
+              PENDING_APER: '🟣 Menunggu Persetujuan Direksi',
+              REKRUTMEN_AKTIF: `🔎 Proses Rekrutmen — ${item.jumlah_diterima || 0}/${item.jumlahorang || 1} Orang Terisi`
+            };
+            row.style.cssText = "border:1.5px dashed #94a3b8; border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#f8fafc;";
+            row.innerHTML = `
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <div style="font-size:13px; font-weight:700; color:#475569;">👥 Permintaan Karyawan (Riwayat)</div>
+                <span style="font-size:11px; padding:2px 8px; border-radius:999px; background:#e2e8f0; color:#475569; font-weight:700;">${item.requestno}</span>
+              </div>
+              <div style="font-size:13px; font-weight:700; color:var(--charcoal); margin-bottom:2px;">
+                ${item.posisijabatan} <span style="font-size:11px; font-weight:700; color:var(--orange);">(${item.jumlahorang || 1} Orang)</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px; line-height:1.4;">
+                📍 ${item.lokasisite || '-'} • Proyek: ${item.projectcode || '-'}
+              </div>
+              <div style="font-size:12px; font-weight:700; color:#334155; background:#eef2f7; border-radius:8px; padding:6px 10px;">
+                ${statusLabel[item.status] || item.status}
+                ${item.jumlah_kandidat != null && item.jumlah_kandidat > 0 ? ` • ${item.jumlah_kandidat} kandidat disounding` : ''}
+              </div>
+            `;
+            box.appendChild(row);
+            return;
+          }
+
           row.style.cssText = "border:1.5px solid #2563eb; border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#fff;";
           row.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">

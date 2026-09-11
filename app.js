@@ -2820,7 +2820,11 @@ function renderKandidatRekrutmenPanel(reqId, data) {
             Interview: ${k.TglInterview || '-'} • ${interviewLabel[k.InterviewKonfirmasiStatus] || k.InterviewKonfirmasiStatus}
             ${k.CvUrl ? ` • <a href="${k.CvUrl}" target="_blank" rel="noopener" style="color:#0d9488; font-weight:700;">📎 Lihat CV</a>` : ' • <span style="color:#94a3b8;">Belum ada CV</span>'}
           </div>
-          ${k.InterviewHasil ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">Hasil interview: <strong>${k.InterviewHasil}</strong>${k.InterviewCatatan ? ' — ' + escapeHtml(k.InterviewCatatan) : ''}</div>` : ''}
+          ${k.InterviewHasil ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">
+              Hasil interview: <strong>${k.InterviewHasil}</strong>${k.InterviewSkor != null ? ' (Skor: ' + k.InterviewSkor + ')' : ''}${k.InterviewerNama ? ' — oleh ' + escapeHtml(k.InterviewerNama) : ''}
+              ${k.InterviewDokumenUrl ? ` • <a href="${k.InterviewDokumenUrl}" target="_blank" rel="noopener" style="color:#0369a1; font-weight:700;">📄 Dokumen</a>` : ''}
+              ${k.InterviewCatatan ? '<br>💬 ' + escapeHtml(k.InterviewCatatan) : ''}
+            </div>` : ''}
           ${(k.Status === 'LULUS_INTERVIEW' || k.Status === 'DITERIMA') ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">Tawaran kerja: ${tawaranLabel[k.KonfirmasiStatus] || k.KonfirmasiStatus || 'BELUM_DIKIRIM'}</div>` : ''}
         </div>
         ${actionBtn ? `<div style="display:flex; gap:6px;">${actionBtn}</div>` : ''}
@@ -2947,28 +2951,72 @@ async function kirimUndanganInterview(kandidatId, namaKandidat, reqId) {
 }
 
 function bukaFormHasilInterview(kandidatId, namaKandidat, reqId) {
-  const catatan = prompt(`Catatan hasil interview untuk ${namaKandidat}:`, '');
-  if (catatan === null) return; // user cancel
-
-  const lulus = confirm(`Kandidat ${namaKandidat} LULUS interview?\n\nOK = Lulus (lanjut ke tawaran kerja)\nCancel = Tidak Lulus`);
-  submitHasilInterview(kandidatId, catatan, lulus ? 'LULUS' : 'TIDAK_LULUS', reqId);
+  document.getElementById('hiKandidatId').value = kandidatId;
+  document.getElementById('hiReqId').value = reqId;
+  document.getElementById('hasilInterviewSubtitle').textContent = `Kandidat: ${namaKandidat}`;
+  document.getElementById('hiInterviewerNama').value = '';
+  document.getElementById('hiTanggalPelaksanaan').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('hiCatatan').value = '';
+  document.getElementById('hiSkor').value = '';
+  document.getElementById('hiDokumen').value = '';
+  document.getElementById('modalHasilInterview').style.display = 'flex';
 }
 
-async function submitHasilInterview(kandidatId, catatan, hasil, reqId) {
+function closeModalHasilInterview() {
+  document.getElementById('modalHasilInterview').style.display = 'none';
+}
+
+async function konfirmasiHasilInterview(hasil) {
+  const kandidatId = Number(document.getElementById('hiKandidatId').value);
+  const reqId = Number(document.getElementById('hiReqId').value);
+  const interviewerNama = document.getElementById('hiInterviewerNama').value.trim();
+  const tglPelaksanaan = document.getElementById('hiTanggalPelaksanaan').value || null;
+  const catatan = document.getElementById('hiCatatan').value.trim();
+  const skorRaw = document.getElementById('hiSkor').value;
+  const skor = skorRaw ? Number(skorRaw) : null;
+  const dokumenFile = document.getElementById('hiDokumen').files?.[0] || null;
+
+  if (!interviewerNama || !catatan) {
+    showToast('Nama interviewer dan catatan wajib diisi!', 'error');
+    return;
+  }
+
+  if (!confirm(`Simpan hasil interview sebagai ${hasil === 'LULUS' ? 'LULUS' : 'TIDAK LULUS'}?`)) return;
+
   try {
+    let dokUrl = null, dokFileId = null, dokFileName = null;
+
+    if (dokumenFile) {
+      if (typeof uploadToDrive === 'function') {
+        const ext = dokumenFile.name.split('.').pop() || 'pdf';
+        const fileName = `Interview_${interviewerNama.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${ext}`;
+        const uploadRes = await uploadToDrive('reports', fileName, dokumenFile.type || 'application/octet-stream', dokumenFile);
+        dokUrl = uploadRes.directUrl || uploadRes.viewUrl || null;
+        dokFileId = uploadRes.fileId || null;
+        dokFileName = dokumenFile.name;
+      }
+    }
+
     const actor = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'System';
     const { data, error } = await supabaseClient.rpc('submit_hasil_interview', {
       p_kandidat_id: kandidatId,
+      p_interviewer_nama: interviewerNama,
+      p_tanggal_pelaksanaan: tglPelaksanaan,
       p_catatan: catatan,
+      p_skor: skor,
       p_hasil: hasil,
+      p_dokumen_url: dokUrl,
+      p_dokumen_fileid: dokFileId,
+      p_dokumen_filename: dokFileName,
       p_actor_name: actor
     });
     if (error) throw error;
 
     showToast(data?.message || 'Hasil interview tersimpan.', hasil === 'LULUS' ? 'success' : 'error');
+    closeModalHasilInterview();
     await loadKandidatRekrutmen(reqId);
   } catch (err) {
-    console.error('Error submitHasilInterview:', err);
+    console.error('Error konfirmasiHasilInterview:', err);
     showToast('Gagal menyimpan hasil interview: ' + err.message, 'error');
   }
 }
