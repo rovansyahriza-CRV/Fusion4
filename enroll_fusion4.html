@@ -638,13 +638,17 @@
       });
 
       if (error) {
-        console.warn('RPC direct error, fallback to table insert:', error.message);
-        await supabaseClient.from('faceDescriptorTbl').upsert({
+        console.warn('RPC error, fallback to direct table upsert:', error.message);
+        const { error: fallbackError } = await supabaseClient.from('faceData').upsert({
           QrCodeId: kar.QrCodeId.toUpperCase().trim(),
-          NamaPersonnel: kar.NamaPersonnel,
+          Nama: kar.NamaPersonnel,
           Descriptor: avgDescriptor,
           UpdatedAt: new Date().toISOString()
         }, { onConflict: 'QrCodeId' });
+
+        if (fallbackError) {
+          throw new Error('RPC gagal (' + error.message + ') dan fallback juga gagal: ' + fallbackError.message);
+        }
       }
 
       // Refresh data lokal
