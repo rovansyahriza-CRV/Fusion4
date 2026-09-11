@@ -2823,6 +2823,7 @@ function renderKandidatRekrutmenPanel(reqId, data) {
           ${k.InterviewHasil ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">
               Hasil interview: <strong>${k.InterviewHasil}</strong>${k.InterviewSkor != null ? ' (Skor: ' + k.InterviewSkor + ')' : ''}${k.InterviewerNama ? ' — oleh ' + escapeHtml(k.InterviewerNama) : ''}
               ${k.InterviewDokumenUrl ? ` • <a href="${k.InterviewDokumenUrl}" target="_blank" rel="noopener" style="color:#0369a1; font-weight:700;">📄 Dokumen</a>` : ''}
+              • <a href="javascript:void(0)" onclick="cetakLembarInterview(${k.Id})" style="color:#7c3aed; font-weight:700;">🖨️ Cetak Lembar Interview</a>
               ${k.InterviewCatatan ? '<br>💬 ' + escapeHtml(k.InterviewCatatan) : ''}
             </div>` : ''}
           ${(k.Status === 'LULUS_INTERVIEW' || k.Status === 'DITERIMA') ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">Tawaran kerja: ${tawaranLabel[k.KonfirmasiStatus] || k.KonfirmasiStatus || 'BELUM_DIKIRIM'}</div>` : ''}
@@ -2950,6 +2951,17 @@ async function kirimUndanganInterview(kandidatId, namaKandidat, reqId) {
   }
 }
 
+const INTERVIEW_KRITERIA = [
+  { key: 'pendidikan', nama: 'Latar Belakang Pendidikan' },
+  { key: 'pengalaman', nama: 'Pengalaman Kerja' },
+  { key: 'teknis', nama: 'Pengetahuan Teknis (Job Knowledge)' },
+  { key: 'komunikasi', nama: 'Komunikasi' },
+  { key: 'masalah', nama: 'Penyelesaian Masalah' },
+  { key: 'tim', nama: 'Kerja Sama Tim' },
+  { key: 'leadership', nama: 'Leadership & Inisiatif' },
+  { key: 'motivasi', nama: 'Motivasi & Etos Kerja' }
+];
+
 function bukaFormHasilInterview(kandidatId, namaKandidat, reqId) {
   document.getElementById('hiKandidatId').value = kandidatId;
   document.getElementById('hiReqId').value = reqId;
@@ -2957,14 +2969,63 @@ function bukaFormHasilInterview(kandidatId, namaKandidat, reqId) {
   document.getElementById('hiInterviewerNama').value = '';
   document.getElementById('hiTanggalPelaksanaan').value = new Date().toISOString().slice(0, 10);
   document.getElementById('hiCatatan').value = '';
-  document.getElementById('hiSkor').value = '';
+  document.getElementById('hiSkorFinal').value = '';
+  document.getElementById('hiRataRata').textContent = '-';
+  document.getElementById('hiSkorOtomatis').textContent = '-';
   document.getElementById('hiDokumen').value = '';
+
+  const listEl = document.getElementById('hiKriteriaList');
+  listEl.innerHTML = INTERVIEW_KRITERIA.map(k => `
+    <div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px;">
+      <div style="font-weight:700; font-size:12.5px; color:#0f172a; margin-bottom:6px;">${k.nama}</div>
+      <div style="display:flex; gap:6px; margin-bottom:6px;">
+        ${[5,4,3,2,1].map(n => `
+          <label style="flex:1; text-align:center; font-size:11px; cursor:pointer; padding:5px 0; border:1px solid #cbd5e1; border-radius:6px; user-select:none;" class="hi-radio-label" data-key="${k.key}">
+            <input type="radio" name="hiSkor_${k.key}" value="${n}" style="margin-right:3px;" onchange="hitungRataRataInterview()">${n}
+          </label>
+        `).join('')}
+      </div>
+      <input type="text" id="hiKomentar_${k.key}" placeholder="Komentar (opsional)" style="width:100%; padding:5px 7px; font-size:11px; border-radius:5px; border:1px solid #e2e8f0;">
+    </div>
+  `).join('');
+
   document.getElementById('modalHasilInterview').style.display = 'flex';
+}
+
+function hitungRataRataInterview() {
+  const skorList = INTERVIEW_KRITERIA.map(k => {
+    const checked = document.querySelector(`input[name="hiSkor_${k.key}"]:checked`);
+    return checked ? Number(checked.value) : null;
+  }).filter(v => v !== null);
+
+  if (skorList.length === 0) {
+    document.getElementById('hiRataRata').textContent = '-';
+    document.getElementById('hiSkorOtomatis').textContent = '-';
+    return;
+  }
+
+  const rata = skorList.reduce((a, b) => a + b, 0) / skorList.length;
+  const skor100 = Math.round(rata * 20);
+  document.getElementById('hiRataRata').textContent = rata.toFixed(2) + ` (${skorList.length}/8 diisi)`;
+  document.getElementById('hiSkorOtomatis').textContent = skor100;
+
+  // Isi otomatis Skor Final kalau user belum ubah manual
+  const skorFinalEl = document.getElementById('hiSkorFinal');
+  if (!skorFinalEl.dataset.manualEdit) {
+    skorFinalEl.value = skor100;
+  }
 }
 
 function closeModalHasilInterview() {
   document.getElementById('modalHasilInterview').style.display = 'none';
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const skorFinalEl = document.getElementById('hiSkorFinal');
+  if (skorFinalEl) {
+    skorFinalEl.addEventListener('input', () => { skorFinalEl.dataset.manualEdit = '1'; });
+  }
+});
 
 async function konfirmasiHasilInterview(hasil) {
   const kandidatId = Number(document.getElementById('hiKandidatId').value);
@@ -2972,14 +3033,23 @@ async function konfirmasiHasilInterview(hasil) {
   const interviewerNama = document.getElementById('hiInterviewerNama').value.trim();
   const tglPelaksanaan = document.getElementById('hiTanggalPelaksanaan').value || null;
   const catatan = document.getElementById('hiCatatan').value.trim();
-  const skorRaw = document.getElementById('hiSkor').value;
-  const skor = skorRaw ? Number(skorRaw) : null;
+  const skorFinalRaw = document.getElementById('hiSkorFinal').value;
+  const skorFinal = skorFinalRaw ? Number(skorFinalRaw) : null;
   const dokumenFile = document.getElementById('hiDokumen').files?.[0] || null;
 
   if (!interviewerNama || !catatan) {
     showToast('Nama interviewer dan catatan wajib diisi!', 'error');
     return;
   }
+
+  const kriteriaJson = INTERVIEW_KRITERIA.map(k => {
+    const checked = document.querySelector(`input[name="hiSkor_${k.key}"]:checked`);
+    return {
+      nama: k.nama,
+      skor: checked ? Number(checked.value) : null,
+      komentar: document.getElementById(`hiKomentar_${k.key}`)?.value?.trim() || ''
+    };
+  });
 
   if (!confirm(`Simpan hasil interview sebagai ${hasil === 'LULUS' ? 'LULUS' : 'TIDAK LULUS'}?`)) return;
 
@@ -3003,8 +3073,9 @@ async function konfirmasiHasilInterview(hasil) {
       p_interviewer_nama: interviewerNama,
       p_tanggal_pelaksanaan: tglPelaksanaan,
       p_catatan: catatan,
-      p_skor: skor,
+      p_skor: skorFinal,
       p_hasil: hasil,
+      p_kriteria_json: kriteriaJson,
       p_dokumen_url: dokUrl,
       p_dokumen_fileid: dokFileId,
       p_dokumen_filename: dokFileName,
@@ -3060,6 +3131,246 @@ async function kirimLinkKonfirmasi(kandidatId, namaKandidat, reqId) {
   } catch (err) {
     console.error('Error kirimLinkKonfirmasi:', err);
     showToast('Gagal mengirim tawaran kerja: ' + err.message, 'error');
+  }
+}
+
+async function cetakLembarInterview(kandidatId) {
+  try {
+    const { data, error } = await supabaseClient.rpc('get_lembar_interview_data', { p_kandidat_id: kandidatId });
+    if (error) throw error;
+    if (data.status !== 'SUCCESS') {
+      showToast(data.message || 'Gagal mengambil data lembar interview.', 'error');
+      return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210, H = 297, margin = 18;
+    const NAVY = '#1e293b', GREEN = '#16a34a', RED = '#dc2626', GRAY = '#64748b', LIGHT = '#f1f5f9', BORDER = '#cbd5e1';
+
+    const val = (v, fallback = '-') => (v === null || v === undefined || v === '') ? fallback : v;
+
+    function wrapText(text, x, y, maxWidth, size, leading) {
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(String(text || '-'), maxWidth);
+      lines.forEach(line => { doc.text(line, x, y); y += leading; });
+      return y;
+    }
+
+    // ===== PAGE 1: SUMMARY =====
+    doc.setFillColor(NAVY);
+    doc.rect(0, 0, W, 32, 'F');
+    doc.setTextColor('#ffffff');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('PT. BILAL MITRA ARYATAMA', margin, 14);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.text('Fusion4 SmartGate — HRD & Recruitment System', margin, 20);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text('LEMBAR HASIL INTERVIEW', W - margin, 14, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.text('Interview Evaluation Sheet', W - margin, 20, { align: 'right' });
+
+    let y = 42;
+    const contentW = W - 2 * margin;
+    doc.setFillColor(LIGHT); doc.setDrawColor(BORDER);
+    doc.roundedRect(margin, y, contentW, 16, 1, 1, 'FD');
+    doc.setTextColor(GRAY); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    doc.text('NO. HASIL INTERVIEW', margin + 3, y + 6);
+    doc.text('NO. PERMINTAAN KARYAWAN (REQUEST)', margin + contentW / 2 + 3, y + 6);
+    doc.setTextColor(NAVY); doc.setFontSize(13);
+    doc.text(data.no_hasil_interview, margin + 3, y + 13);
+    doc.text(val(data.request_no), margin + contentW / 2 + 3, y + 13);
+    y += 26;
+
+    function sectionTitle(text) {
+      doc.setFillColor(NAVY); doc.rect(margin, y - 3, 1, 4, 'F');
+      doc.setTextColor(NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+      doc.text(text, margin + 3, y);
+      y += 8;
+    }
+    function labelValue(x, yy, label, value, size = 9) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(size); doc.setTextColor(GRAY);
+      doc.text(label, x, yy);
+      const lw = doc.getTextWidth(label);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(NAVY);
+      doc.text(String(value), x + lw + 2, yy);
+    }
+
+    sectionTitle('DATA PERMINTAAN');
+    const col2 = margin + contentW / 2;
+    labelValue(margin, y, 'Posisi', val(data.posisi));
+    labelValue(col2, y, 'Divisi/Dept', `${val(data.divisi)} / ${val(data.departemen)}`);
+    y += 6;
+    labelValue(margin, y, 'Site/Proyek', `${val(data.lokasi_site)} (${val(data.project_code)})`);
+    labelValue(col2, y, 'Jml Kebutuhan', `${val(data.jumlah_orang, 1)} Orang`);
+    y += 10;
+    doc.setDrawColor(BORDER); doc.line(margin, y, W - margin, y);
+    y += 9;
+
+    sectionTitle('DATA KANDIDAT');
+    labelValue(margin, y, 'Nama Kandidat', val(data.nama_kandidat), 10);
+    y += 6;
+    labelValue(margin, y, 'Jadwal Interview', val(data.tgl_interview_jadwal));
+    labelValue(col2, y, 'Tgl Pelaksanaan', val(data.tgl_pelaksanaan));
+    y += 6;
+    labelValue(margin, y, 'Interviewer', val(data.interviewer));
+    y += 10;
+    doc.line(margin, y, W - margin, y);
+    y += 9;
+
+    sectionTitle('HASIL EVALUASI');
+    y += 3;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(GRAY);
+    doc.text('SKOR / NILAI', margin, y);
+    doc.setFontSize(20); doc.setTextColor(NAVY);
+    doc.text(String(val(data.skor)), margin, y + 9);
+
+    const isLulus = data.hasil === 'LULUS';
+    doc.setFillColor(isLulus ? GREEN : RED);
+    doc.roundedRect(margin + 55, y - 8, 45, 11, 1.5, 1.5, 'F');
+    doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.text(isLulus ? 'LULUS' : 'TIDAK LULUS', margin + 55 + 22.5, y - 1.5, { align: 'center' });
+
+    y += 16;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(GRAY);
+    doc.text('CATATAN / FEEDBACK INTERVIEW', margin, y);
+    y += 5;
+    const boxTop = y;
+    doc.setTextColor(NAVY);
+    let ty = wrapText(val(data.catatan), margin + 3, y + 4, contentW - 6, 9, 4.6);
+    const boxBottom = ty - 1.5;
+    doc.setDrawColor(BORDER);
+    doc.rect(margin, boxTop, contentW, boxBottom - boxTop, 'S');
+    y = boxBottom + 14;
+
+    const signW = (contentW - 20) / 3;
+    const signLabels = ['Interviewer', 'HRD (PER)', 'Direksi (APER)'];
+    const signNames = [val(data.interviewer), 'CRV', 'Nila Sari'];
+    signLabels.forEach((lbl, i) => {
+      const sx = margin + i * (signW + 10);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(GRAY);
+      doc.text(lbl, sx, y);
+      doc.setDrawColor(NAVY); doc.line(sx, y + 20, sx + signW, y + 20);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(NAVY);
+      doc.text(`( ${signNames[i]} )`, sx, y + 25);
+    });
+
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(GRAY);
+    doc.text(`Dicetak otomatis dari Fusion4 SmartGate — ${val(data.request_no)} / ${data.no_hasil_interview}`, margin, H - 12);
+    doc.text(new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }), W - margin, H - 12, { align: 'right' });
+
+    // ===== PAGE 2: CHECKLIST =====
+    doc.addPage();
+    y = margin;
+    doc.setTextColor(NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+    doc.text('INTERVIEW EVALUATION FORM', W / 2, y, { align: 'center' });
+    y += 12;
+
+    const rowH = 9;
+    doc.setDrawColor(NAVY); doc.rect(margin, y, contentW, rowH * 2, 'S');
+    doc.line(margin, y + rowH, margin + contentW, y + rowH);
+    const midX = margin + contentW * 0.62;
+    doc.line(midX, y, midX, y + rowH * 2);
+
+    function headerCell(cx, cy, label, value) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(NAVY);
+      doc.text(label, cx + 2, cy + 6);
+      const lw = doc.getTextWidth(label);
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(val(value)), cx + 2 + lw + 2, cy + 6);
+    }
+    headerCell(margin, y, 'Interviewer:', data.interviewer);
+    headerCell(midX, y, 'Tanggal Interview:', data.tgl_pelaksanaan);
+    headerCell(margin, y + rowH, 'Nama Kandidat:', data.nama_kandidat);
+    headerCell(midX, y + rowH, 'Posisi:', data.posisi);
+    y += rowH * 2 + 5;
+
+    const instr = 'Interview Evaluation Form diisi oleh interviewer untuk menentukan tingkatan kualifikasi kandidat atas posisi yang dilamar. Interviewer harus memberi kandidat penilaian dan komentar yang spesifik di tempat yang sudah disediakan. Penilaian dilakukan berdasarkan skala yang sudah disusun dibawah.';
+    const instrH = 16;
+    doc.setFillColor('#e2e8f0'); doc.rect(margin, y, contentW, instrH, 'F');
+    doc.setTextColor(NAVY);
+    wrapText(instr, margin + 2, y + 5, contentW - 4, 8.5, 4);
+    y += instrH + 5;
+
+    const scaleLabels = ['5 – Luar Biasa', '4 – Diatas Rata-Rata', '3 – Rata-Rata', '2 – Memuaskan', '1 – Tidak Memuaskan'];
+    const scaleRowH = 9;
+    const labelColW = contentW * 0.11;
+    const scaleColW = (contentW - labelColW) / scaleLabels.length;
+    doc.setDrawColor(BORDER); doc.rect(margin, y, contentW, scaleRowH, 'S');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(NAVY);
+    doc.text('Scale:', margin + 2, y + 6);
+    scaleLabels.forEach((lbl, i) => {
+      const cx = margin + labelColW + i * scaleColW;
+      if (i > 0) doc.line(cx, y, cx, y + scaleRowH);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+      wrapText(lbl, cx + 2, y + 4.5, scaleColW - 4, 8, 4);
+    });
+    y += scaleRowH;
+
+    const qColW = contentW * 0.62;
+    const rateColW = (contentW - qColW) / 5;
+    const rateHeaderH = 14;
+    doc.rect(margin, y, contentW, rateHeaderH, 'S');
+    doc.line(margin + qColW, y, margin + qColW, y + rateHeaderH);
+    const dividerY = y + 6.5;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(NAVY);
+    doc.text('Rating', margin + qColW + (contentW - qColW) / 2, y + 4.5, { align: 'center' });
+    doc.line(margin + qColW, dividerY, margin + contentW, dividerY);
+    ['5', '4', '3', '2', '1'].forEach((num, i) => {
+      const cx = margin + qColW + i * rateColW;
+      if (i > 0) doc.line(cx, y, cx, dividerY);
+      doc.text(num, cx + rateColW / 2, dividerY + 5.5, { align: 'center' });
+    });
+    y += rateHeaderH;
+
+    const kriteriaList = Array.isArray(data.kriteria) ? data.kriteria : [];
+    const remainingH = H - y - 18;
+    const critRowH = remainingH / Math.max(kriteriaList.length, 1);
+
+    kriteriaList.forEach(crit => {
+      const rowTop = y, rowBottom = y + critRowH;
+      doc.setDrawColor(BORDER); doc.rect(margin, rowTop, contentW, critRowH, 'S');
+      doc.line(margin + qColW, rowTop, margin + qColW, rowBottom);
+      for (let i = 1; i < 5; i++) {
+        const cx = margin + qColW + i * rateColW;
+        doc.line(cx, rowTop, cx, rowBottom);
+      }
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(NAVY);
+      doc.text(crit.nama, margin + 2, rowTop + 5);
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(GRAY);
+      doc.text('Komentar:', margin + 2, rowTop + 10);
+      const komentarW = doc.getTextWidth('Komentar: ');
+      doc.setFont('helvetica', 'italic'); doc.setTextColor(NAVY);
+      wrapText(crit.komentar || '-', margin + 2 + komentarW, rowTop + 10, qColW - 4 - komentarW, 8, 4);
+
+      const boxSize = 4.5;
+      const boxY = rowTop + critRowH / 2 - boxSize / 2;
+      [5, 4, 3, 2, 1].forEach((num, i) => {
+        const cx = margin + qColW + i * rateColW + rateColW / 2 - boxSize / 2;
+        if (num === crit.skor) {
+          doc.setFillColor(GREEN);
+          doc.rect(cx, boxY, boxSize, boxSize, 'F');
+          doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+          doc.text('X', cx + boxSize / 2, boxY + 3.2, { align: 'center' });
+        } else {
+          doc.setDrawColor(NAVY);
+          doc.rect(cx, boxY, boxSize, boxSize, 'S');
+        }
+      });
+
+      y = rowBottom;
+    });
+
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(GRAY);
+    doc.text(`Dicetak otomatis dari Fusion4 SmartGate — ${val(data.request_no)} / ${data.no_hasil_interview}`, margin, H - 12);
+    doc.text('Halaman 2 dari 2', W - margin, H - 12, { align: 'right' });
+
+    doc.save(`Lembar-Interview-${data.no_hasil_interview}-${(data.nama_kandidat || '').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+  } catch (err) {
+    console.error('Error cetakLembarInterview:', err);
+    showToast('Gagal membuat PDF lembar interview: ' + err.message, 'error');
   }
 }
 

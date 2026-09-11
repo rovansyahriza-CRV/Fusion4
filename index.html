@@ -18,6 +18,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="config.js"></script>
   <script src="driveBridge.js"></script>
 </head>
@@ -842,7 +843,7 @@
 
   <!-- Modal Form Hasil Interview -->
   <div id="modalHasilInterview" class="modal-overlay" style="display: none;">
-    <div class="modal-card" style="max-width: 480px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-card" style="max-width: 560px; max-height: 90vh; overflow-y: auto;">
       <div class="modal-header">
         <h3>📋 Form Hasil Interview</h3>
         <p id="hasilInterviewSubtitle">Kandidat: -</p>
@@ -854,15 +855,29 @@
       <input type="text" id="hiInterviewerNama" placeholder="Nama yang mewawancarai" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; font-size:13px; margin-bottom:10px;">
 
       <label style="font-weight:600; font-size:12px; color:#334155; display:block; margin-bottom:4px;">Tanggal Pelaksanaan Interview *</label>
-      <input type="date" id="hiTanggalPelaksanaan" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; font-size:13px; margin-bottom:10px;">
+      <input type="date" id="hiTanggalPelaksanaan" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; font-size:13px; margin-bottom:14px;">
 
-      <label style="font-weight:600; font-size:12px; color:#334155; display:block; margin-bottom:4px;">Catatan / Feedback Interview *</label>
-      <textarea id="hiCatatan" rows="3" placeholder="Ringkasan hasil wawancara, kekuatan, catatan HRD..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; font-family:inherit; font-size:13px; margin-bottom:10px;"></textarea>
+      <div style="border-top:1.5px dashed #cbd5e1; padding-top:10px; margin-bottom:10px;">
+        <strong style="font-size:13px; color:#0369a1;">Checklist Evaluasi (skala 1–5)</strong>
+        <p style="font-size:11px; color:#64748b; margin:2px 0 8px;">5 = Luar Biasa &nbsp;•&nbsp; 4 = Diatas Rata-Rata &nbsp;•&nbsp; 3 = Rata-Rata &nbsp;•&nbsp; 2 = Memuaskan &nbsp;•&nbsp; 1 = Tidak Memuaskan</p>
+      </div>
 
-      <label style="font-weight:600; font-size:12px; color:#334155; display:block; margin-bottom:4px;">Skor / Nilai (opsional, 1-100)</label>
-      <input type="number" id="hiSkor" min="0" max="100" placeholder="Contoh: 85" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; font-size:13px; margin-bottom:10px;">
+      <div id="hiKriteriaList"><!-- 8 blok kriteria digenerate via JS --></div>
 
-      <label style="font-weight:600; font-size:12px; color:#334155; display:block; margin-bottom:4px;">📎 Lampiran Dokumen Interview (opsional — lembar penilaian/berita acara)</label>
+      <div style="background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; padding:10px; margin:12px 0; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div style="font-size:12px; color:#0f766e;">
+          Rata-rata otomatis: <strong id="hiRataRata">-</strong> / 5 &nbsp;→&nbsp; Skor: <strong id="hiSkorOtomatis">-</strong>/100
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <label style="font-size:11px; color:#0f766e; font-weight:700;">Skor Final:</label>
+          <input type="number" id="hiSkorFinal" min="0" max="100" style="width:70px; padding:6px; border-radius:6px; border:1px solid #99f6e4; font-size:13px; text-align:center;">
+        </div>
+      </div>
+
+      <label style="font-weight:600; font-size:12px; color:#334155; display:block; margin-bottom:4px;">Catatan Umum / Kesimpulan Interview *</label>
+      <textarea id="hiCatatan" rows="3" placeholder="Kesimpulan keseluruhan, rekomendasi HRD..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; font-family:inherit; font-size:13px; margin-bottom:10px;"></textarea>
+
+      <label style="font-weight:600; font-size:12px; color:#334155; display:block; margin-bottom:4px;">📎 Lampiran Dokumen Interview (opsional)</label>
       <input type="file" id="hiDokumen" accept=".pdf,.doc,.docx,image/*" style="width:100%; padding:6px; border-radius:6px; border:1px solid #ccc; font-size:12px; margin-bottom:14px; background:#fff;">
 
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
