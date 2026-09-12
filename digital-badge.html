@@ -174,7 +174,9 @@
     <div class="badge-id" id="badgeId">-</div>
     <button id="btnAbsenSekarang" class="btn-block" style="display:block; width:100%; padding:14px; margin-top:16px; font-size:15px; font-weight:700; letter-spacing:0.5px; border:none; border-radius:12px; background:linear-gradient(135deg, var(--orange), var(--orange-dark)); color:#fff; cursor:pointer; box-shadow:0 8px 20px rgba(232,86,44,0.38); position:relative; z-index:1;">ABSEN</button>
   </div>
-  
+
+  <div id="attendanceStatusBox" style="margin:10px 16px 0; display:none;"></div>
+
   <div style="display:flex; gap:8px; margin:10px 16px 0;">
     <button id="btnAjukanIjin" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer; text-align:center;">🏃 IJIN</button>
     <button id="btnAjukanLembur" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer; text-align:center;">⚡ LEMBUR</button>
@@ -958,6 +960,32 @@ async function submitPin() {
     }
   }
 
+  function renderAttendanceStatus(data) {
+    const el = document.getElementById('attendanceStatusBox');
+    if (!el || !data) return;
+
+    if (data.status === 'BELUM_ABSEN') {
+      el.style.display = 'none';
+      return;
+    }
+
+    const isPulang = data.status === 'SUDAH_PULANG';
+    el.style.display = 'block';
+    el.style.cssText += "background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px;";
+    el.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#334155;">
+        <span>🕒</span>
+        <span><strong>Masuk</strong> ${data.jamMasuk} • ${data.lokasiMasuk || '-'}</span>
+      </div>
+      ${isPulang ? `
+      <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#334155; margin-top:4px;">
+        <span>🏁</span>
+        <span><strong>Pulang</strong> ${data.jamPulang} • ${data.lokasiPulang || '-'}</span>
+      </div>` : `
+      <div style="font-size:11px; color:#64748b; margin-top:4px;">🟢 Sedang bekerja, belum absen pulang.</div>`}
+    `;
+  }
+
   async function loadApprovalIssues(qrId) {
     const box = document.getElementById('approvalIssuesBox');
     if (!box || !qrId) return;
@@ -966,14 +994,18 @@ async function submitPin() {
 
     try {
       // Ambil semua data approval dari Supabase secara aman & paralel
-      let [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData] = await Promise.all([
+      let [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData, attendanceData, deliveryTriggerData] = await Promise.all([
         safeRpc('get_pending_employee_requests_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_ijin_lembur_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }),
-        safeRpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId })
+        safeRpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId }),
+        safeRpc('get_today_attendance_status', { p_qrcode: qrId }),
+        safeRpc('get_delivery_trigger_by_qrcode', { p_qrcode: qrId })
       ]);
+
+      renderAttendanceStatus(attendanceData);
 
       // 1. Dapatkan otorisasi user (karyawanTbl & paswordTbl) untuk fallback jika RPC tidak return
       let authorTokens = [];
@@ -1168,8 +1200,9 @@ async function submitPin() {
       const hasVendor = vendorData && vendorData.length > 0;
       const hasRfq = rfqData && rfqData.length > 0;
       const hasPo = poData && poData.length > 0;
+      const hasDeliveryTrigger = deliveryTriggerData && deliveryTriggerData.length > 0;
 
-      if (!hasEmpReq && !hasIjinLembur && !hasRequest && !hasVendor && !hasRfq && !hasPo) {
+      if (!hasEmpReq && !hasIjinLembur && !hasRequest && !hasVendor && !hasRfq && !hasPo && !hasDeliveryTrigger) {
         box.style.display = "flex";
         box.style.flexDirection = "row";
         box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
@@ -1178,6 +1211,30 @@ async function submitPin() {
 
       box.style.display = "block";
       box.innerHTML = "";
+
+      // -1. Render Trigger Delivery to Site (Pengirim/Penerima Barang, SMMS-BIMA)
+      if (hasDeliveryTrigger) {
+        deliveryTriggerData.forEach(item => {
+          const row = document.createElement('div');
+          const isPengirim = item.role === 'PENGIRIM';
+          row.style.cssText = "border:1.5px solid #0d9488; border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#f0fdfa;";
+          row.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <span style="font-size:18px;">🚚</span>
+              <div style="font-size:13px; font-weight:700; color:#0f766e;">
+                ${item.count} ${isPengirim ? 'PO/SO menunggu dikirim' : 'kiriman menunggu diterima'}
+              </div>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+              Proyek ${item.project} • Peran: ${isPengirim ? 'Pengirim Barang' : 'Penerima Barang'}
+            </div>
+            <a href="https://rovansyahriza-crv.github.io/SMMS-BIMA/delivery-to-site.html" target="_blank" style="display:block; text-align:center; padding:9px; font-size:12px; font-weight:700; border-radius:8px; background:#0d9488; color:#fff; text-decoration:none;">
+              Buka Delivery to Site
+            </a>
+          `;
+          box.appendChild(row);
+        });
+      }
 
       // 0. Render Permintaan Karyawan (AER / APER)
       if (hasEmpReq) {
