@@ -1396,16 +1396,22 @@ function cekKaryawanKontrak() {
     }
     if (emailWrap) emailWrap.style.display = 'none';
 
-    // Sinkron otomatis ke Master Gaji & Tunjangan kalau Kualifikasi karyawan ini ada di daftar
+    // Sinkron ke Master Gaji & Tunjangan kalau Kualifikasi karyawan ini ada di daftar.
+    // Gaji Pokok: nggak auto-isi (itu range, HRD yang milih angka pastinya) -- cuma ditampilkan sebagai referensi.
+    // Tunjangan: langsung auto-isi (nominal tetap, gak perlu nego).
     const gajiMatch = (kbState.gaji || []).find(g => (g.Kualifikasi || '').trim().toLowerCase() === (match.kualifikasi || '').trim().toLowerCase());
     if (gajiMatch) {
       const setVal = (elId, num) => { const el = document.getElementById(elId); if (el) el.value = num != null ? Number(num).toLocaleString('id-ID') : ''; };
-      setVal('kontrakGaji', gajiMatch.RangeGajiMin);
       setVal('kontrakTjJabatan', gajiMatch.TunjanganJabatan);
       setVal('kontrakTjTransport', gajiMatch.TunjanganTransport);
       setVal('kontrakTjMakan', gajiMatch.TunjanganMakan);
       setVal('kontrakTjLain', gajiMatch.TunjanganLain);
-      if (hintEl) hintEl.textContent += ` Gaji & Tunjangan auto-isi dari Master Gaji (${gajiMatch.Kualifikasi}).`;
+
+      const gajiEl = document.getElementById('kontrakGaji');
+      if (gajiEl && gajiMatch.RangeGajiMin != null && gajiMatch.RangeGajiMax != null) {
+        gajiEl.placeholder = `Range: Rp ${Number(gajiMatch.RangeGajiMin).toLocaleString('id-ID')} - Rp ${Number(gajiMatch.RangeGajiMax).toLocaleString('id-ID')}`;
+      }
+      if (hintEl) hintEl.textContent += ` Tunjangan auto-isi & range Gaji ditampilkan dari Master Gaji (${gajiMatch.Kualifikasi}).`;
     }
   } else {
     hiddenEl.value = '';
