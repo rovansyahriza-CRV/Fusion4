@@ -3856,6 +3856,10 @@ async function loadKompensasiPage() {
       const { data: karData } = await supabaseClient.rpc('list_karyawan_all');
       karyawanState.rows = karData || [];
     }
+    if (!kontrakState.rows || kontrakState.rows.length === 0) {
+      const { data: kontrakData } = await supabaseClient.rpc('list_kontrak_karyawan_full');
+      kontrakState.rows = kontrakData || [];
+    }
     populateSimulatorDropdowns();
   } catch (err) {
     showToast('Gagal memuat data Kompensasi & Benefit: ' + err.message, 'error');
@@ -3909,11 +3913,38 @@ function handleSimKaryawanChange() {
   if (!row) return;
   if (!row.statuspernikahan) {
     showToast(`Data pernikahan/tanggungan ${row.namapersonnel} belum diisi di Data Karyawan.`, 'error');
+  } else {
+    const ptkp = deriveStatusPTKP(row.statuspernikahan, row.jumlahanak);
+    if (ptkpSel) ptkpSel.value = ptkp;
+  }
+
+  // Cari kontrak aktif/terbaru karyawan ini, auto-isi Gaji Pokok & Tunjangan dari situ (bukan dari Master Gaji generik)
+  const kontrakList = (kontrakState.rows || []).filter(r => String(r.karyawanid) === String(id));
+  if (kontrakList.length === 0) {
+    showToast(`${row.namapersonnel} belum punya data Kontrak Karyawan -- isi Gaji/Tunjangan manual dulu.`, 'error');
     return;
   }
-  const ptkp = deriveStatusPTKP(row.statuspernikahan, row.jumlahanak);
-  if (ptkpSel) ptkpSel.value = ptkp;
-  showToast(`PTKP ${row.namapersonnel} otomatis: ${ptkp} (${row.statuspernikahan}, ${row.jumlahanak || 0} tanggungan)`, 'success');
+  kontrakList.sort((a, b) => new Date(b.tanggalmulai || 0) - new Date(a.tanggalmulai || 0));
+  const kontrak = kontrakList[0];
+
+  const setVal = (elId, num) => { const el = document.getElementById(elId); if (el) el.value = num != null ? Number(num).toLocaleString('id-ID') : ''; };
+  setVal('simGajiPokok', kontrak.gajipokok);
+  setVal('simTjJabatan', kontrak.tunjanganjabatan);
+  setVal('simTjTransport', kontrak.tunjangantransport);
+  setVal('simTjMakan', kontrak.tunjanganmakan);
+  setVal('simTjLain', kontrak.tunjanganlain);
+
+  // Masa kerja dihitung otomatis dari TglMasuk karyawan (bukan tanggal mulai kontrak ini doang --
+  // masa kerja itu akumulasi total sejak awal kerja, bukan sejak kontrak terbaru diteken)
+  const masaKerjaEl = document.getElementById('simMasaKerja');
+  if (masaKerjaEl && row.tglmasuk) {
+    const mulai = new Date(row.tglmasuk);
+    const sekarang = new Date();
+    const tahun = Math.round(((sekarang - mulai) / (1000 * 60 * 60 * 24 * 365.25)) * 2) / 2; // dibulatkan ke 0.5 tahun terdekat
+    masaKerjaEl.value = Math.max(tahun, 0);
+  }
+
+  showToast(`${row.namapersonnel}: Gaji & Tunjangan diambil dari Kontrak ${kontrak.nomorkontrak || ''} (${kontrak.jeniskontrak || ''})${row.statuspernikahan ? ', PTKP ' + deriveStatusPTKP(row.statuspernikahan, row.jumlahanak) : ''}${row.tglmasuk ? ', Masa Kerja dihitung dari TglMasuk ' + row.tglmasuk : ''}.`, 'success');
 }
 
 function handleSimJabatanChange() {
