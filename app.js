@@ -2141,6 +2141,15 @@ async function executeApprovalDecision(isApprove) {
 // ==========================================
 
 const BIMA_ORG_MATRIX = {
+  "Direksi": {
+    "Board of Directors": [
+      "Direktur Utama",
+      "Direktur Operasional",
+      "Direktur Keuangan",
+      "Komisaris Utama",
+      "Komisaris"
+    ]
+  },
   "Finance": {
     "Accounts Receivable (AR)": [
       "Accounts Receivable (AR)",
@@ -2212,6 +2221,7 @@ const BIMA_ORG_MATRIX = {
     ],
     "Project": [
       "Project Manager",
+      "Project Sponsor",
       "Site Manager",
       "Site Engineer",
       "Site Supervisor",
