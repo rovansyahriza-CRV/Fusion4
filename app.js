@@ -2209,7 +2209,8 @@ const BIMA_ORG_MATRIX = {
       "Safety Officer / Inspector",
       "Environmental Officer",
       "Project Paramedic",
-      "HSE Admin & Doc Control"
+      "HSE Admin & Doc Control",
+      "HSE Method"
     ],
     "Project Control": [
       "Project Control Manager",
