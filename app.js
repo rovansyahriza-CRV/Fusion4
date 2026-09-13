@@ -851,6 +851,7 @@ let karyawanState = { rows: [] };
 async function loadKaryawanPage() {
   const tbody = document.getElementById('karyawanTableBody');
   if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#777;">Memuat data...</td></tr>';
+  populateKaryawanDivisiOptions();
 
   try {
     const { data, error } = await supabaseClient.rpc('list_karyawan_all');
@@ -915,6 +916,18 @@ function setKaryawanEditMode(isEdit) {
   if (btnReset) btnReset.textContent = isEdit ? '✕ Batal Edit' : '↺ Kosongkan Form';
 }
 
+function ensureSelectHasValue(selectEl, value) {
+  if (!selectEl || !value) return;
+  const exists = Array.from(selectEl.options).some(o => o.value === value);
+  if (!exists) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value + ' (data lama)';
+    selectEl.appendChild(opt);
+  }
+  selectEl.value = value;
+}
+
 function editKaryawan(id) {
   const row = (karyawanState.rows || []).find(r => r.id === id);
   if (!row) { showToast('Data karyawan tidak ditemukan.', 'error'); return; }
@@ -923,17 +936,106 @@ function editKaryawan(id) {
   document.getElementById('karyawanFormTitle').textContent = `✏️ Edit Karyawan: ${row.namapersonnel || ''}`;
   document.getElementById('karyawanEditId').value = row.id;
   document.getElementById('karyawanNama').value = row.namapersonnel || '';
-  document.getElementById('karyawanDepartemen').value = row.departemen || '';
-  document.getElementById('karyawanDivisi').value = row.divisi || '';
+
+  populateKaryawanDivisiOptions();
+  const divSelect = document.getElementById('karyawanDivisi');
+  ensureSelectHasValue(divSelect, row.divisi);
+  handleKaryawanDivisiChange();
+  const deptSelect = document.getElementById('karyawanDepartemen');
+  ensureSelectHasValue(deptSelect, row.departemen);
+
   document.getElementById('karyawanAuthor').value = row.author || '';
   document.getElementById('karyawanPic').value = row.pic || '';
 
   document.getElementById('karyawanFormTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function populateKaryawanDivisiOptions() {
+  const divSelect = document.getElementById('karyawanDivisi');
+  if (!divSelect || !window.BIMA_ORG_MATRIX) return;
+  divSelect.innerHTML = '<option value="">-- Pilih Divisi --</option>';
+  Object.keys(BIMA_ORG_MATRIX).forEach(div => {
+    const opt = document.createElement('option');
+    opt.value = div;
+    opt.textContent = div;
+    divSelect.appendChild(opt);
+  });
+}
+
+function handleKaryawanDivisiChange() {
+  const divSelect = document.getElementById('karyawanDivisi');
+  const deptSelect = document.getElementById('karyawanDepartemen');
+  const kualSelect = document.getElementById('karyawanKualifikasi');
+  const customGroup = document.getElementById('groupKaryawanKualifikasiCustom');
+  if (!deptSelect || !kualSelect) return;
+
+  const selectedDiv = divSelect ? divSelect.value : '';
+  deptSelect.innerHTML = '<option value="">-- Pilih Departemen --</option>';
+  kualSelect.innerHTML = '<option value="">-- Pilih Departemen Terlebih Dahulu --</option>';
+  if (customGroup) customGroup.style.display = 'none';
+
+  if (!selectedDiv || !BIMA_ORG_MATRIX[selectedDiv]) return;
+
+  Object.keys(BIMA_ORG_MATRIX[selectedDiv]).forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    deptSelect.appendChild(opt);
+  });
+}
+
+function handleKaryawanDepartemenChange() {
+  const divSelect = document.getElementById('karyawanDivisi');
+  const deptSelect = document.getElementById('karyawanDepartemen');
+  const kualSelect = document.getElementById('karyawanKualifikasi');
+  const customGroup = document.getElementById('groupKaryawanKualifikasiCustom');
+  if (!kualSelect) return;
+
+  const selectedDiv = divSelect ? divSelect.value : '';
+  const selectedDept = deptSelect ? deptSelect.value : '';
+
+  kualSelect.innerHTML = '<option value="">-- Pilih Kualifikasi / Jabatan --</option>';
+  if (customGroup) customGroup.style.display = 'none';
+
+  if (!selectedDiv || !selectedDept || !BIMA_ORG_MATRIX[selectedDiv] || !BIMA_ORG_MATRIX[selectedDiv][selectedDept]) return;
+
+  const defaultPositions = BIMA_ORG_MATRIX[selectedDiv][selectedDept] || [];
+  const historicalPositions = (karyawanState.rows || [])
+    .filter(r => r.divisi === selectedDiv && r.departemen === selectedDept && r.kualifikasi)
+    .map(r => String(r.kualifikasi).trim());
+  const combined = [...new Set([...defaultPositions, ...historicalPositions])];
+
+  combined.forEach(p => {
+    if (!p || p === 'CUSTOM') return;
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    kualSelect.appendChild(opt);
+  });
+
+  const customOpt = document.createElement('option');
+  customOpt.value = 'CUSTOM';
+  customOpt.textContent = '➕ Jabatan Lainnya (Ketik Sendiri)...';
+  kualSelect.appendChild(customOpt);
+}
+
+function handleKaryawanKualifikasiChange() {
+  const kualSelect = document.getElementById('karyawanKualifikasi');
+  const customGroup = document.getElementById('groupKaryawanKualifikasiCustom');
+  const customInput = document.getElementById('karyawanKualifikasiCustom');
+  if (!kualSelect || !customGroup) return;
+
+  if (kualSelect.value === 'CUSTOM') {
+    customGroup.style.display = 'block';
+    if (customInput) customInput.focus();
+  } else {
+    customGroup.style.display = 'none';
+    if (customInput) customInput.value = '';
+  }
+}
+
 function resetKaryawanForm() {
-  ['karyawanNama','karyawanType','karyawanKualifikasi','karyawanDepartemen','karyawanDivisi',
-   'karyawanTglMasuk','karyawanAuthor','karyawanPic','karyawanEditId','karyawanEmail']
+  ['karyawanNama','karyawanType','karyawanTglMasuk','karyawanAuthor','karyawanPic','karyawanEditId','karyawanEmail','karyawanKualifikasiCustom']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const passEl = document.getElementById('karyawanPassword');
   if (passEl) passEl.value = '12345';
@@ -941,6 +1043,15 @@ function resetKaryawanForm() {
   if (hintEl) hintEl.style.display = 'none';
   const emailWrap = document.getElementById('karyawanEmailWrap');
   if (emailWrap) emailWrap.style.display = 'none';
+
+  populateKaryawanDivisiOptions();
+  const deptSelect = document.getElementById('karyawanDepartemen');
+  if (deptSelect) deptSelect.innerHTML = '<option value="">-- Pilih Divisi Terlebih Dahulu --</option>';
+  const kualSelect = document.getElementById('karyawanKualifikasi');
+  if (kualSelect) kualSelect.innerHTML = '<option value="">-- Pilih Departemen Terlebih Dahulu --</option>';
+  const customGroup = document.getElementById('groupKaryawanKualifikasiCustom');
+  if (customGroup) customGroup.style.display = 'none';
+
   setKaryawanEditMode(false);
   document.getElementById('karyawanFormTitle').textContent = '+ Tambah Karyawan Baru';
 }
@@ -1019,7 +1130,10 @@ async function submitKaryawanBaru() {
     }
 
     const type = document.getElementById('karyawanType')?.value.trim() || '';
-    const kualifikasi = document.getElementById('karyawanKualifikasi')?.value.trim() || '';
+    let kualifikasi = document.getElementById('karyawanKualifikasi')?.value.trim() || '';
+    if (kualifikasi === 'CUSTOM') {
+      kualifikasi = document.getElementById('karyawanKualifikasiCustom')?.value.trim() || '';
+    }
     const tglMasuk = document.getElementById('karyawanTglMasuk')?.value || null;
     const password = document.getElementById('karyawanPassword')?.value || '';
     const email = document.getElementById('karyawanEmail')?.value.trim() || '';
@@ -2886,9 +3000,11 @@ function prefillKaryawanFromRequest(reqId) {
   const passEl = document.getElementById('karyawanPassword');
   const namaEl = document.getElementById('karyawanNama');
 
-  if (divEl) divEl.value = req.divisi || '';
-  if (deptEl) deptEl.value = req.departemen || '';
-  if (kualEl) kualEl.value = req.posisijabatan || '';
+  ensureSelectHasValue(divEl, req.divisi);
+  handleKaryawanDivisiChange();
+  ensureSelectHasValue(deptEl, req.departemen);
+  handleKaryawanDepartemenChange();
+  ensureSelectHasValue(kualEl, req.posisijabatan);
   if (typeEl) typeEl.value = req.projectcode || req.lokasisite || 'Project';
   if (tglEl) tglEl.value = req.tanggaldibutuhkan || getTodayDateString();
   if (passEl) passEl.value = '12345'; // Password default 12345

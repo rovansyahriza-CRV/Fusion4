@@ -373,17 +373,27 @@
             <input type="text" id="karyawanType" placeholder="Contoh: 014, 015, atau HO (Head Office)">
             <span style="font-size:11px; color:#8a94a3; display:block; margin-top:3px;">Isi manual dulu -- nanti bisa dipilih dari Master Data Proyek (modul Operasional, belum dibuat).</span>
           </div>
-          <div class="input-group karyawan-create-only">
-            <label for="karyawanKualifikasi">Kualifikasi / Jabatan</label>
-            <input type="text" id="karyawanKualifikasi" placeholder="Contoh: Site Supervisor">
+          <div class="input-group">
+            <label for="karyawanDivisi">Divisi</label>
+            <select id="karyawanDivisi" onchange="handleKaryawanDivisiChange()">
+              <option value="">-- Pilih Divisi --</option>
+            </select>
           </div>
           <div class="input-group">
             <label for="karyawanDepartemen">Departemen</label>
-            <input type="text" id="karyawanDepartemen" placeholder="Contoh: HRGA">
+            <select id="karyawanDepartemen" onchange="handleKaryawanDepartemenChange()">
+              <option value="">-- Pilih Divisi Terlebih Dahulu --</option>
+            </select>
           </div>
-          <div class="input-group">
-            <label for="karyawanDivisi">Divisi</label>
-            <input type="text" id="karyawanDivisi" placeholder="Contoh: Operasional">
+          <div class="input-group karyawan-create-only">
+            <label for="karyawanKualifikasi">Kualifikasi / Jabatan</label>
+            <select id="karyawanKualifikasi" onchange="handleKaryawanKualifikasiChange()">
+              <option value="">-- Pilih Departemen Terlebih Dahulu --</option>
+            </select>
+          </div>
+          <div class="input-group" id="groupKaryawanKualifikasiCustom" style="display:none;">
+            <label for="karyawanKualifikasiCustom">Nama Jabatan Kustom (Lainnya)</label>
+            <input type="text" id="karyawanKualifikasiCustom" placeholder="Tuliskan nama jabatan spesifik...">
           </div>
           <div class="input-group karyawan-create-only">
             <label for="karyawanTglMasuk">Tanggal Masuk</label>
