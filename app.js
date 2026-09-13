@@ -2286,7 +2286,8 @@ const BIMA_ORG_MATRIX = {
       "HR Operations Supervisor",
       "HRIS Administrator",
       "Personnel Contract Admin",
-      "Expatriate / Permit Admin"
+      "Expatriate / Permit Admin",
+      "Driver"
     ]
   },
   "Supply Chains": {
