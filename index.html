@@ -593,7 +593,23 @@
           </div>
           <div class="input-group">
             <label for="kontrakGaji">Gaji Pokok (Rp)</label>
-            <input type="number" id="kontrakGaji" placeholder="Contoh: 5000000">
+            <input type="text" inputmode="numeric" id="kontrakGaji" oninput="formatRupiahInput(this)" placeholder="Contoh: 5.000.000">
+          </div>
+          <div class="input-group">
+            <label for="kontrakTjJabatan">Tunjangan Jabatan (Rp)</label>
+            <input type="text" inputmode="numeric" id="kontrakTjJabatan" oninput="formatRupiahInput(this)" placeholder="0">
+          </div>
+          <div class="input-group">
+            <label for="kontrakTjTransport">Tunjangan Transport (Rp)</label>
+            <input type="text" inputmode="numeric" id="kontrakTjTransport" oninput="formatRupiahInput(this)" placeholder="0">
+          </div>
+          <div class="input-group">
+            <label for="kontrakTjMakan">Tunjangan Makan (Rp)</label>
+            <input type="text" inputmode="numeric" id="kontrakTjMakan" oninput="formatRupiahInput(this)" placeholder="0">
+          </div>
+          <div class="input-group">
+            <label for="kontrakTjLain">Tunjangan Lain (Rp)</label>
+            <input type="text" inputmode="numeric" id="kontrakTjLain" oninput="formatRupiahInput(this)" placeholder="0">
           </div>
           <div class="input-group">
             <label for="kontrakMulai">Tanggal Mulai</label>

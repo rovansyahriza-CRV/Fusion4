@@ -1332,6 +1332,13 @@ let kontrakState = { rows: [] };
 async function loadKontrakPage() {
   await loadKontrakKaryawanDropdown();
 
+  if (!kbState.gaji || kbState.gaji.length === 0) {
+    try {
+      const { data: gajiData } = await supabaseClient.rpc('list_master_gaji');
+      kbState.gaji = gajiData || [];
+    } catch (e) { console.warn('Gagal preload Master Gaji untuk sinkron Kontrak:', e); }
+  }
+
   const tbody = document.getElementById('kontrakTableBody');
   if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#777;">Memuat data...</td></tr>';
 
@@ -1388,6 +1395,18 @@ function cekKaryawanKontrak() {
       hintEl.textContent = `✅ Karyawan ditemukan: ${match.nama} (ID: ${match.id}).`;
     }
     if (emailWrap) emailWrap.style.display = 'none';
+
+    // Sinkron otomatis ke Master Gaji & Tunjangan kalau Kualifikasi karyawan ini ada di daftar
+    const gajiMatch = (kbState.gaji || []).find(g => (g.Kualifikasi || '').trim().toLowerCase() === (match.kualifikasi || '').trim().toLowerCase());
+    if (gajiMatch) {
+      const setVal = (elId, num) => { const el = document.getElementById(elId); if (el) el.value = num != null ? Number(num).toLocaleString('id-ID') : ''; };
+      setVal('kontrakGaji', gajiMatch.RangeGajiMin);
+      setVal('kontrakTjJabatan', gajiMatch.TunjanganJabatan);
+      setVal('kontrakTjTransport', gajiMatch.TunjanganTransport);
+      setVal('kontrakTjMakan', gajiMatch.TunjanganMakan);
+      setVal('kontrakTjLain', gajiMatch.TunjanganLain);
+      if (hintEl) hintEl.textContent += ` Gaji & Tunjangan auto-isi dari Master Gaji (${gajiMatch.Kualifikasi}).`;
+    }
   } else {
     hiddenEl.value = '';
     if (hintEl) {
@@ -1466,7 +1485,11 @@ function editKontrak(id) {
   if (emailWrap) emailWrap.style.display = 'none';
   document.getElementById('kontrakJenis').value = row.jeniskontrak || 'PKWT';
   document.getElementById('kontrakNomor').value = row.nomorkontrak || '';
-  document.getElementById('kontrakGaji').value = row.gajipokok || '';
+  document.getElementById('kontrakGaji').value = row.gajipokok != null ? Number(row.gajipokok).toLocaleString('id-ID') : '';
+  document.getElementById('kontrakTjJabatan').value = row.tunjanganjabatan != null ? Number(row.tunjanganjabatan).toLocaleString('id-ID') : '';
+  document.getElementById('kontrakTjTransport').value = row.tunjangantransport != null ? Number(row.tunjangantransport).toLocaleString('id-ID') : '';
+  document.getElementById('kontrakTjMakan').value = row.tunjanganmakan != null ? Number(row.tunjanganmakan).toLocaleString('id-ID') : '';
+  document.getElementById('kontrakTjLain').value = row.tunjanganlain != null ? Number(row.tunjanganlain).toLocaleString('id-ID') : '';
   document.getElementById('kontrakMulai').value = row.tanggalmulai || '';
   document.getElementById('kontrakBerakhir').value = row.tanggalberakhir || '';
   document.getElementById('kontrakFile').value = '';
@@ -1496,7 +1519,11 @@ async function submitKontrak() {
   const emailBaru = (document.getElementById('kontrakEmail')?.value || '').trim();
   const jenis = document.getElementById('kontrakJenis')?.value;
   const nomor = document.getElementById('kontrakNomor')?.value.trim();
-  const gaji = parseFloat(document.getElementById('kontrakGaji')?.value) || null;
+  const gaji = parseRupiahInput(document.getElementById('kontrakGaji'));
+  const tjJabatan = parseRupiahInput(document.getElementById('kontrakTjJabatan'));
+  const tjTransport = parseRupiahInput(document.getElementById('kontrakTjTransport'));
+  const tjMakan = parseRupiahInput(document.getElementById('kontrakTjMakan'));
+  const tjLain = parseRupiahInput(document.getElementById('kontrakTjLain'));
   const mulai = document.getElementById('kontrakMulai')?.value || null;
   const berakhir = document.getElementById('kontrakBerakhir')?.value || null;
   const fileEl = document.getElementById('kontrakFile');
@@ -1541,7 +1568,7 @@ async function submitKontrak() {
     if (file) {
       const base64 = await fileToBase64(file);
       const uploaded = await uploadToDrive('reports', `KONTRAK_${nomor.replace(/\//g, '-')}.pdf`, 'application/pdf', file);
-      fileUrl = uploaded.directUrl || uploaded.viewUrl;
+      fileUrl = uploaded.fileId ? `https://drive.google.com/file/d/${uploaded.fileId}/view` : (uploaded.viewUrl || uploaded.directUrl);
       fileId = uploaded.fileId;
     }
 
@@ -1550,6 +1577,8 @@ async function submitKontrak() {
         p_id: parseInt(editId, 10), p_karyawanid: parseInt(karyawanId, 10), p_jeniskontrak: jenis,
         p_nomorkontrak: nomor, p_tanggalmulai: mulai, p_tanggalberakhir: berakhir,
         p_gajipokok: gaji, p_filekontrakurl: fileUrl, p_filekontrakfileid: fileId,
+        p_tunjangan_jabatan: tjJabatan, p_tunjangan_transport: tjTransport,
+        p_tunjangan_makan: tjMakan, p_tunjangan_lain: tjLain,
       });
       if (error) throw error;
       showToast('Kontrak berhasil diperbarui.', 'success');
@@ -1558,6 +1587,8 @@ async function submitKontrak() {
         p_karyawanid: parseInt(karyawanId, 10), p_jeniskontrak: jenis,
         p_nomorkontrak: nomor, p_tanggalmulai: mulai, p_tanggalberakhir: berakhir,
         p_gajipokok: gaji, p_filekontrakurl: fileUrl, p_filekontrakfileid: fileId,
+        p_tunjangan_jabatan: tjJabatan, p_tunjangan_transport: tjTransport,
+        p_tunjangan_makan: tjMakan, p_tunjangan_lain: tjLain,
       });
       if (error) throw error;
       showToast('Kontrak baru berhasil ditambahkan.' + (karyawanBaruDigitalpin ? ' Data karyawan baru juga otomatis dibuat.' : ''), 'success');
@@ -1606,6 +1637,10 @@ function resetKontrakForm() {
   document.getElementById('kontrakJenis').value = 'PKWT';
   document.getElementById('kontrakNomor').value = '';
   document.getElementById('kontrakGaji').value = '';
+  document.getElementById('kontrakTjJabatan').value = '';
+  document.getElementById('kontrakTjTransport').value = '';
+  document.getElementById('kontrakTjMakan').value = '';
+  document.getElementById('kontrakTjLain').value = '';
   document.getElementById('kontrakMulai').value = '';
   document.getElementById('kontrakBerakhir').value = '';
   document.getElementById('kontrakFile').value = '';
