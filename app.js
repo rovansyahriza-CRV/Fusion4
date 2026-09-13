@@ -3822,6 +3822,16 @@ function handleKbGajiFilterDivisiChange() {
   renderKbGajiTable();
 }
 
+function formatRupiahInput(el) {
+  const raw = el.value.replace(/\D/g, '');
+  el.value = raw === '' ? '' : Number(raw).toLocaleString('id-ID');
+}
+
+function parseRupiahInput(el) {
+  const raw = el.value.replace(/\D/g, '');
+  return raw === '' ? null : Number(raw);
+}
+
 function renderKbGajiTable() {
   const divisi = document.getElementById('kbGajiFilterDivisi')?.value || '';
   const dept = document.getElementById('kbGajiFilterDepartemen')?.value || '';
@@ -3841,12 +3851,12 @@ function renderKbGajiTable() {
       <td>${escapeHtml(r.Divisi || '-')}</td>
       <td>${escapeHtml(r.Departemen || '-')}</td>
       <td>${escapeHtml(r.Kualifikasi || '-')}</td>
-      <td><input type="number" class="kb-gaji-min" value="${r.RangeGajiMin ?? ''}" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="number" class="kb-gaji-max" value="${r.RangeGajiMax ?? ''}" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="number" class="kb-tj-jabatan" value="${r.TunjanganJabatan ?? ''}" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="number" class="kb-tj-transport" value="${r.TunjanganTransport ?? ''}" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="number" class="kb-tj-makan" value="${r.TunjanganMakan ?? ''}" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="number" class="kb-tj-lain" value="${r.TunjanganLain ?? ''}" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-gaji-min" value="${r.RangeGajiMin != null ? Number(r.RangeGajiMin).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:110px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-gaji-max" value="${r.RangeGajiMax != null ? Number(r.RangeGajiMax).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:110px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-tj-jabatan" value="${r.TunjanganJabatan != null ? Number(r.TunjanganJabatan).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-tj-transport" value="${r.TunjanganTransport != null ? Number(r.TunjanganTransport).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-tj-makan" value="${r.TunjanganMakan != null ? Number(r.TunjanganMakan).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-tj-lain" value="${r.TunjanganLain != null ? Number(r.TunjanganLain).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
       <td><input type="text" class="kb-catatan" value="${escapeHtml(r.Catatan || '')}" style="width:140px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
     </tr>
   `).join('');
@@ -3859,11 +3869,7 @@ async function simpanSemuaKbGaji() {
   let success = 0, failed = 0;
   for (const tr of rows) {
     const id = tr.dataset.kbId;
-    const getVal = (cls) => {
-      const el = tr.querySelector('.' + cls);
-      const v = el.value.trim();
-      return v === '' ? null : Number(v);
-    };
+    const getVal = (cls) => parseRupiahInput(tr.querySelector('.' + cls));
     const catatan = tr.querySelector('.kb-catatan').value.trim() || null;
     try {
       const { data, error } = await supabaseClient.rpc('update_master_gaji', {
@@ -3932,14 +3938,14 @@ function renderKbPphTables() {
     ptkpBody.innerHTML = kbState.ptkp.map(r => `
       <tr data-kb-id="${r.Id}">
         <td>${escapeHtml(r.StatusPTKP || '-')}</td>
-        <td><input type="number" class="kb-ptkp-nominal" value="${r.NominalPTKP ?? ''}" style="width:180px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+        <td><input type="text" inputmode="numeric" class="kb-ptkp-nominal" value="${r.NominalPTKP != null ? Number(r.NominalPTKP).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:180px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
       </tr>`).join('');
   }
   if (tarifBody) {
     tarifBody.innerHTML = kbState.pph.map(r => `
       <tr data-kb-id="${r.Id}">
-        <td><input type="number" class="kb-pph-min" value="${r.PenghasilanMin ?? ''}" style="width:150px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-        <td><input type="number" class="kb-pph-max" value="${r.PenghasilanMax ?? ''}" placeholder="tak terbatas" style="width:150px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+        <td><input type="text" inputmode="numeric" class="kb-pph-min" value="${r.PenghasilanMin != null ? Number(r.PenghasilanMin).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:160px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+        <td><input type="text" inputmode="numeric" class="kb-pph-max" value="${r.PenghasilanMax != null ? Number(r.PenghasilanMax).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" placeholder="tak terbatas" style="width:160px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
         <td><input type="number" class="kb-pph-persen" value="${r.TarifPersen ?? ''}" style="width:80px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
       </tr>`).join('');
   }
@@ -3951,22 +3957,22 @@ async function simpanSemuaKbPph() {
   let success = 0, failed = 0;
   for (const tr of ptkpRows) {
     const id = tr.dataset.kbId;
-    const val = tr.querySelector('.kb-ptkp-nominal').value.trim();
+    const val = parseRupiahInput(tr.querySelector('.kb-ptkp-nominal'));
     try {
-      const { data, error } = await supabaseClient.rpc('update_ptkp', { p_id: Number(id), p_nominal: val === '' ? null : Number(val) });
+      const { data, error } = await supabaseClient.rpc('update_ptkp', { p_id: Number(id), p_nominal: val });
       if (error || (data && data.status === 'ERROR')) failed++; else success++;
     } catch (e) { failed++; }
   }
   for (const tr of tarifRows) {
     const id = tr.dataset.kbId;
-    const minV = tr.querySelector('.kb-pph-min').value.trim();
-    const maxV = tr.querySelector('.kb-pph-max').value.trim();
+    const minV = parseRupiahInput(tr.querySelector('.kb-pph-min'));
+    const maxV = parseRupiahInput(tr.querySelector('.kb-pph-max'));
     const persenV = tr.querySelector('.kb-pph-persen').value.trim();
     try {
       const { data, error } = await supabaseClient.rpc('update_tarif_pph', {
         p_id: Number(id),
-        p_penghasilan_min: minV === '' ? null : Number(minV),
-        p_penghasilan_max: maxV === '' ? null : Number(maxV),
+        p_penghasilan_min: minV,
+        p_penghasilan_max: maxV,
         p_tarif_persen: persenV === '' ? null : Number(persenV)
       });
       if (error || (data && data.status === 'ERROR')) failed++; else success++;
@@ -3985,7 +3991,7 @@ function renderKbBpjsTable() {
       <td>${escapeHtml(r.Keterangan || '-')}</td>
       <td><input type="number" step="0.01" class="kb-bpjs-karyawan" value="${r.PersenKaryawan ?? 0}" style="width:70px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
       <td><input type="number" step="0.01" class="kb-bpjs-perusahaan" value="${r.PersenPerusahaan ?? 0}" style="width:70px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="number" class="kb-bpjs-batas" value="${r.BatasUpahMax ?? ''}" placeholder="tak terbatas" style="width:130px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-bpjs-batas" value="${r.BatasUpahMax != null ? Number(r.BatasUpahMax).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" placeholder="tak terbatas" style="width:140px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
       <td style="text-align:center;"><input type="checkbox" class="kb-bpjs-aktif" ${r.IsAktif ? 'checked' : ''} style="width:18px;height:18px;"></td>
       <td><input type="text" class="kb-catatan" value="${escapeHtml(r.Catatan || '')}" style="width:220px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
     </tr>`).join('');
@@ -4000,7 +4006,7 @@ async function simpanSemuaKbBpjs() {
     const id = tr.dataset.kbId;
     const karyawan = Number(tr.querySelector('.kb-bpjs-karyawan').value.trim() || 0);
     const perusahaan = Number(tr.querySelector('.kb-bpjs-perusahaan').value.trim() || 0);
-    const batasV = tr.querySelector('.kb-bpjs-batas').value.trim();
+    const batasV = parseRupiahInput(tr.querySelector('.kb-bpjs-batas'));
     const aktif = tr.querySelector('.kb-bpjs-aktif').checked;
     const catatan = tr.querySelector('.kb-catatan').value.trim() || null;
     try {
@@ -4008,7 +4014,7 @@ async function simpanSemuaKbBpjs() {
         p_id: Number(id),
         p_persen_karyawan: karyawan,
         p_persen_perusahaan: perusahaan,
-        p_batas_upah_max: batasV === '' ? null : Number(batasV),
+        p_batas_upah_max: batasV,
         p_is_aktif: aktif,
         p_catatan: catatan
       });
