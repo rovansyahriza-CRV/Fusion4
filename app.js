@@ -1367,7 +1367,7 @@ async function loadKontrakKaryawanDropdown() {
   if (!datalistEl) return;
 
   try {
-    const { data, error } = await supabaseClient.rpc('get_active_karyawan');
+    const { data, error } = await supabaseClient.rpc('get_all_active_karyawan_for_kontrak');
     if (error) throw error;
     kontrakKaryawanCache = data || [];
     datalistEl.innerHTML = kontrakKaryawanCache.map(k => `<option value="${escapeHtml(k.nama)}">`).join('');
