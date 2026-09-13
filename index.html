@@ -587,6 +587,20 @@
               <option value="PKWTT">PKWTT</option>
             </select>
           </div>
+          <div class="input-group" id="kontrakKategoriWrap">
+            <label for="kontrakKategori">Kategori PKWT</label>
+            <select id="kontrakKategori" onchange="handleKontrakKategoriChange()">
+              <option value="">-- Pilih Kategori --</option>
+              <option value="Staff/PMT">Staff / PMT (Lumpsum)</option>
+              <option value="Pekerja Lapangan">Pekerja Lapangan (Project)</option>
+            </select>
+          </div>
+          <div class="input-group" id="kontrakPolaWrap">
+            <label for="kontrakPolaKerja">Pola Kerja</label>
+            <select id="kontrakPolaKerja">
+              <option value="">-- Pilih Kategori Dahulu --</option>
+            </select>
+          </div>
           <div class="input-group">
             <label for="kontrakNomor">Nomor Kontrak</label>
             <input type="text" id="kontrakNomor" placeholder="Contoh: 001/HR-BIMA/2026">
@@ -647,6 +661,7 @@
         <button type="button" class="tab-btn" data-kbtab="pph" onclick="switchKbTab('pph', this)">🧾 Aturan PPh 21</button>
         <button type="button" class="tab-btn" data-kbtab="bpjs" onclick="switchKbTab('bpjs', this)">🏥 BPJS</button>
         <button type="button" class="tab-btn" data-kbtab="simulator" onclick="switchKbTab('simulator', this)">🧮 Simulator Payroll</button>
+        <button type="button" class="tab-btn" data-kbtab="pola" onclick="switchKbTab('pola', this)">🕐 Pola Kerja &amp; Tarif Lembur</button>
       </div>
 
       <!-- TAB: Master Gaji & Tunjangan -->
@@ -825,6 +840,24 @@
           <div class="card">
             <div class="card-header"><h3>🎁 Estimasi THR &amp; Pesangon (di luar THP bulanan)</h3></div>
             <div id="simThrPesangonBox"></div>
+          </div>
+        </div>
+      </div>
+      <!-- TAB: Pola Kerja & Tarif Lembur -->
+      <div id="kbTabPola" style="display:none;">
+        <div class="card table-card">
+          <div class="card-header"><h3>🕐 Pola Kerja &amp; Tarif Lembur per Jam</h3></div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Tarif Lembur Hari Kerja (Rp/jam)</th><th>Tarif Lembur Hari OFF (Rp/jam)</th></tr>
+              </thead>
+              <tbody id="kbPolaTableBody"></tbody>
+            </table>
+          </div>
+          <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Dipakai di Kontrak Karyawan (khusus PKWT) dan buat hitung nilai Rupiah lembur otomatis (Pekerja Lapangan) maupun manual (Otorisasi Lembur, ditandai Hari Kerja/Hari OFF).</p>
+          <div style="padding:12px 4px 4px;">
+            <button type="button" class="btn-primary" onclick="simpanSemuaKbPola()">💾 Simpan Semua Perubahan</button>
           </div>
         </div>
       </div>
@@ -1180,6 +1213,13 @@
           <div class="input-group" style="margin-top: 12px;">
             <label for="pengajuanDurasi">Estimasi Durasi Lembur (Jam)</label>
             <input type="number" id="pengajuanDurasi" min="0.5" max="24" step="0.5" placeholder="Contoh: 3" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+          </div>
+          <div class="input-group" style="margin-top: 12px;">
+            <label for="pengajuanJenisHari">Jenis Hari (nentuin tarif lembur)</label>
+            <select id="pengajuanJenisHari" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+              <option value="HARI_KERJA">Hari Kerja Normal</option>
+              <option value="HARI_OFF">Hari OFF / Istirahat (misal piket weekend)</option>
+            </select>
           </div>
         </div>
         <div class="input-group" style="margin-top: 12px;">

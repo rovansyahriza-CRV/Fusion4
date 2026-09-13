@@ -1332,6 +1332,14 @@ let kontrakState = { rows: [] };
 async function loadKontrakPage() {
   await loadKontrakKaryawanDropdown();
 
+  if (!polaKerjaState || polaKerjaState.length === 0) {
+    try {
+      const { data: polaData } = await supabaseClient.rpc('list_pola_kerja');
+      polaKerjaState = polaData || [];
+    } catch (e) { console.warn('Gagal memuat Pola Kerja:', e); }
+  }
+  handleKontrakJenisChange();
+
   if (!kbState.gaji || kbState.gaji.length === 0) {
     try {
       const { data: gajiData } = await supabaseClient.rpc('list_master_gaji');
@@ -1368,21 +1376,54 @@ async function loadKontrakKaryawanDropdown() {
   }
 }
 
+let polaKerjaState = [];
+
 function handleKontrakJenisChange() {
   const jenis = document.getElementById('kontrakJenis')?.value;
   const berakhirInput = document.getElementById('kontrakBerakhir');
   const hintEl = document.getElementById('kontrakBerakhirHint');
-  if (!berakhirInput) return;
-  if (jenis === 'PKWTT') {
-    berakhirInput.value = '';
-    berakhirInput.disabled = true;
-    berakhirInput.style.background = '#f5f2ee';
-    if (hintEl) hintEl.style.display = 'block';
-  } else {
-    berakhirInput.disabled = false;
-    berakhirInput.style.background = '';
-    if (hintEl) hintEl.style.display = 'none';
+  const kategoriWrap = document.getElementById('kontrakKategoriWrap');
+  const polaWrap = document.getElementById('kontrakPolaWrap');
+
+  if (berakhirInput) {
+    if (jenis === 'PKWTT') {
+      berakhirInput.value = '';
+      berakhirInput.disabled = true;
+      berakhirInput.style.background = '#f5f2ee';
+      if (hintEl) hintEl.style.display = 'block';
+    } else {
+      berakhirInput.disabled = false;
+      berakhirInput.style.background = '';
+      if (hintEl) hintEl.style.display = 'none';
+    }
   }
+
+  // Kategori & Pola Kerja cuma relevan buat PKWT
+  if (kategoriWrap) kategoriWrap.style.display = jenis === 'PKWT' ? 'block' : 'none';
+  if (polaWrap) polaWrap.style.display = jenis === 'PKWT' ? 'block' : 'none';
+  if (jenis !== 'PKWT') {
+    const kategoriSel = document.getElementById('kontrakKategori');
+    if (kategoriSel) kategoriSel.value = '';
+    const polaSel = document.getElementById('kontrakPolaKerja');
+    if (polaSel) polaSel.innerHTML = '<option value="">-- Pilih Kategori Dahulu --</option>';
+  }
+}
+
+function handleKontrakKategoriChange() {
+  const kategori = document.getElementById('kontrakKategori')?.value;
+  const polaSel = document.getElementById('kontrakPolaKerja');
+  if (!polaSel) return;
+  polaSel.innerHTML = '<option value="">-- Pilih Pola Kerja --</option>';
+  if (!kategori) {
+    polaSel.innerHTML = '<option value="">-- Pilih Kategori Dahulu --</option>';
+    return;
+  }
+  polaKerjaState.filter(p => p.Kategori === kategori).forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.Id;
+    opt.textContent = p.NamaPola;
+    polaSel.appendChild(opt);
+  });
 }
 
 function cekKaryawanKontrak() {
@@ -1508,6 +1549,11 @@ function editKontrak(id) {
   if (emailWrap) emailWrap.style.display = 'none';
   document.getElementById('kontrakJenis').value = row.jeniskontrak || 'PKWT';
   handleKontrakJenisChange();
+  const kategoriSel = document.getElementById('kontrakKategori');
+  if (kategoriSel) kategoriSel.value = row.polakerjakategori || '';
+  handleKontrakKategoriChange();
+  const polaSel = document.getElementById('kontrakPolaKerja');
+  if (polaSel && row.polakerjaid) polaSel.value = row.polakerjaid;
   document.getElementById('kontrakNomor').value = row.nomorkontrak || '';
   document.getElementById('kontrakGaji').value = row.gajipokok != null ? Number(row.gajipokok).toLocaleString('id-ID') : '';
   document.getElementById('kontrakTjJabatan').value = row.tunjanganjabatan != null ? Number(row.tunjanganjabatan).toLocaleString('id-ID') : '';
@@ -1548,6 +1594,7 @@ async function submitKontrak() {
   const tjTransport = parseRupiahInput(document.getElementById('kontrakTjTransport'));
   const tjMakan = parseRupiahInput(document.getElementById('kontrakTjMakan'));
   const tjLain = parseRupiahInput(document.getElementById('kontrakTjLain'));
+  const polaKerjaId = document.getElementById('kontrakPolaKerja')?.value || null;
   const mulai = document.getElementById('kontrakMulai')?.value || null;
   const berakhir = document.getElementById('kontrakBerakhir')?.value || null;
   const fileEl = document.getElementById('kontrakFile');
@@ -1604,6 +1651,7 @@ async function submitKontrak() {
         p_gajipokok: gaji, p_filekontrakurl: fileUrl, p_filekontrakfileid: fileId,
         p_tunjangan_jabatan: tjJabatan, p_tunjangan_transport: tjTransport,
         p_tunjangan_makan: tjMakan, p_tunjangan_lain: tjLain,
+        p_pola_kerja_id: polaKerjaId ? parseInt(polaKerjaId, 10) : null,
       });
       if (error) throw error;
       showToast('Kontrak berhasil diperbarui.', 'success');
@@ -1614,6 +1662,7 @@ async function submitKontrak() {
         p_gajipokok: gaji, p_filekontrakurl: fileUrl, p_filekontrakfileid: fileId,
         p_tunjangan_jabatan: tjJabatan, p_tunjangan_transport: tjTransport,
         p_tunjangan_makan: tjMakan, p_tunjangan_lain: tjLain,
+        p_pola_kerja_id: polaKerjaId ? parseInt(polaKerjaId, 10) : null,
       });
       if (error) throw error;
       showToast('Kontrak baru berhasil ditambahkan.' + (karyawanBaruDigitalpin ? ' Data karyawan baru juga otomatis dibuat.' : ''), 'success');
@@ -1661,6 +1710,10 @@ function resetKontrakForm() {
   if (emailWrap) emailWrap.style.display = 'none';
   document.getElementById('kontrakJenis').value = 'PKWT';
   handleKontrakJenisChange();
+  const kategoriSel = document.getElementById('kontrakKategori');
+  if (kategoriSel) kategoriSel.value = '';
+  const polaSel = document.getElementById('kontrakPolaKerja');
+  if (polaSel) polaSel.innerHTML = '<option value="">-- Pilih Kategori Dahulu --</option>';
   document.getElementById('kontrakNomor').value = '';
   document.getElementById('kontrakGaji').value = '';
   document.getElementById('kontrakTjJabatan').value = '';
@@ -2050,6 +2103,7 @@ async function submitFormPengajuanBaru() {
   const alasan = document.getElementById('pengajuanAlasan')?.value.trim();
   const lokasi = document.getElementById('pengajuanLokasi')?.value || '';
   const durasi = parseFloat(document.getElementById('pengajuanDurasi')?.value || '0') || 0;
+  const jenisHari = document.getElementById('pengajuanJenisHari')?.value || 'HARI_KERJA';
 
   if (!qrcode || !tipe || !tanggal || !alasan) {
     showToast('Harap lengkapi semua field yang wajib diisi.', 'error');
@@ -2066,7 +2120,8 @@ async function submitFormPengajuanBaru() {
       p_tanggal: tanggal,
       p_alasan: alasan,
       p_durasi_jam: durasi,
-      p_lokasi: lokasi
+      p_lokasi: lokasi,
+      p_jenis_hari: jenisHari
     });
 
     if (error) throw error;
@@ -3860,6 +3915,9 @@ async function loadKompensasiPage() {
       const { data: kontrakData } = await supabaseClient.rpc('list_kontrak_karyawan_full');
       kontrakState.rows = kontrakData || [];
     }
+    const { data: polaData } = await supabaseClient.rpc('list_pola_kerja');
+    polaKerjaState = polaData || [];
+    renderKbPolaTable();
     populateSimulatorDropdowns();
   } catch (err) {
     showToast('Gagal memuat data Kompensasi & Benefit: ' + err.message, 'error');
@@ -4067,6 +4125,7 @@ function switchKbTab(tab, btn) {
   document.getElementById('kbTabPph').style.display = tab === 'pph' ? 'block' : 'none';
   document.getElementById('kbTabBpjs').style.display = tab === 'bpjs' ? 'block' : 'none';
   document.getElementById('kbTabSimulator').style.display = tab === 'simulator' ? 'block' : 'none';
+  document.getElementById('kbTabPola').style.display = tab === 'pola' ? 'block' : 'none';
 }
 
 function populateKbGajiDivisiFilter() {
@@ -4310,6 +4369,42 @@ async function simpanSemuaKbBpjs() {
         p_batas_upah_max: batasV,
         p_is_aktif: aktif,
         p_catatan: catatan
+      });
+      if (error || (data && data.status === 'ERROR')) failed++; else success++;
+    } catch (e) { failed++; }
+  }
+  showToast(`Selesai. ${success} baris tersimpan${failed > 0 ? `, ${failed} gagal` : ''}.`, failed > 0 ? 'error' : 'success');
+  loadKompensasiPage();
+}
+
+function renderKbPolaTable() {
+  const tbody = document.getElementById('kbPolaTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = polaKerjaState.map(p => `
+    <tr data-kb-id="${p.Id}">
+      <td>${escapeHtml(p.Kategori || '-')}</td>
+      <td><strong>${escapeHtml(p.NamaPola || '-')}</strong><br><span style="font-size:10px;color:#8a94a3;">${escapeHtml(p.Keterangan || '')}</span></td>
+      <td>${p.JamNormalPerHari != null ? p.JamNormalPerHari + ' jam' : '-'}</td>
+      <td>${p.JamLemburOtomatisPerHari > 0 ? '+' + p.JamLemburOtomatisPerHari + ' jam' : '-'}</td>
+      <td><input type="text" inputmode="numeric" class="kb-pola-tarif-kerja" value="${p.TarifLemburHariKerja != null ? Number(p.TarifLemburHariKerja).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" placeholder="0" style="width:120px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-pola-tarif-off" value="${p.TarifLemburHariOff != null ? Number(p.TarifLemburHariOff).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" placeholder="0" style="width:120px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+    </tr>`).join('');
+}
+
+async function simpanSemuaKbPola() {
+  const rows = document.querySelectorAll('#kbPolaTableBody tr[data-kb-id]');
+  if (rows.length === 0) return;
+  showToast(`Menyimpan ${rows.length} baris...`, 'info');
+  let success = 0, failed = 0;
+  for (const tr of rows) {
+    const id = tr.dataset.kbId;
+    const tarifKerja = parseRupiahInput(tr.querySelector('.kb-pola-tarif-kerja'));
+    const tarifOff = parseRupiahInput(tr.querySelector('.kb-pola-tarif-off'));
+    try {
+      const { data, error } = await supabaseClient.rpc('update_pola_kerja', {
+        p_id: Number(id),
+        p_tarif_hari_kerja: tarifKerja,
+        p_tarif_hari_off: tarifOff
       });
       if (error || (data && data.status === 'ERROR')) failed++; else success++;
     } catch (e) { failed++; }
