@@ -406,6 +406,18 @@
             <label for="karyawanTglMasuk">Tanggal Masuk</label>
             <input type="date" id="karyawanTglMasuk">
           </div>
+          <div class="input-group">
+            <label for="karyawanStatusNikah">Status Pernikahan (buat basis PTKP)</label>
+            <select id="karyawanStatusNikah">
+              <option value="">-- Belum diisi --</option>
+              <option value="Belum Kawin">Belum Kawin</option>
+              <option value="Kawin">Kawin</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="karyawanJumlahAnak">Jumlah Tanggungan (anak/keluarga, maks dihitung 3)</label>
+            <input type="number" id="karyawanJumlahAnak" min="0" placeholder="0">
+          </div>
           <div class="input-group karyawan-create-only">
             <label for="karyawanPassword">Password Login Absen</label>
             <input type="password" id="karyawanPassword" placeholder="Default: 12345" value="12345">
@@ -735,6 +747,12 @@
         <div class="card form-card">
           <div class="card-header"><h3>🧮 Simulator Payroll Bulanan</h3></div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div class="input-group">
+              <label>Pilih Karyawan (opsional, auto-isi PTKP)</label>
+              <select id="simKaryawan" onchange="handleSimKaryawanChange()">
+                <option value="">-- Isi manual --</option>
+              </select>
+            </div>
             <div class="input-group">
               <label>Pilih Jabatan (opsional, auto-isi gaji &amp; tunjangan)</label>
               <select id="simJabatan" onchange="handleSimJabatanChange()">

@@ -950,6 +950,8 @@ function editKaryawan(id) {
   handleKaryawanKualifikasiChange();
 
   document.getElementById('karyawanType').value = row.type || '';
+  document.getElementById('karyawanStatusNikah').value = row.statuspernikahan || '';
+  document.getElementById('karyawanJumlahAnak').value = row.jumlahanak || '';
   document.getElementById('karyawanAuthor').value = row.author || '';
   document.getElementById('karyawanPic').value = row.pic || '';
 
@@ -1041,7 +1043,7 @@ function handleKaryawanKualifikasiChange() {
 }
 
 function resetKaryawanForm() {
-  ['karyawanNama','karyawanType','karyawanTglMasuk','karyawanAuthor','karyawanPic','karyawanEditId','karyawanEmail','karyawanKualifikasiCustom']
+  ['karyawanNama','karyawanType','karyawanTglMasuk','karyawanAuthor','karyawanPic','karyawanEditId','karyawanEmail','karyawanKualifikasiCustom','karyawanStatusNikah','karyawanJumlahAnak']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const passEl = document.getElementById('karyawanPassword');
   if (passEl) passEl.value = '12345';
@@ -1112,6 +1114,8 @@ async function submitKaryawanBaru() {
   if (kualifikasi === 'CUSTOM') {
     kualifikasi = document.getElementById('karyawanKualifikasiCustom')?.value.trim() || '';
   }
+  const statusNikah = document.getElementById('karyawanStatusNikah')?.value.trim() || '';
+  const jumlahAnak = document.getElementById('karyawanJumlahAnak')?.value.trim() || '';
 
   if (!nama) { showToast('Nama karyawan wajib diisi.', 'error'); return; }
 
@@ -1129,6 +1133,8 @@ async function submitKaryawanBaru() {
         p_pic: pic || null,
         p_kualifikasi: kualifikasi || null,
         p_type: type || null,
+        p_status_nikah: statusNikah || null,
+        p_jumlah_anak: jumlahAnak || null,
       });
       if (error) throw error;
 
@@ -1159,6 +1165,8 @@ async function submitKaryawanBaru() {
       p_author: author || null,
       p_pic: pic || null,
       p_email: email || null,
+      p_status_nikah: statusNikah || null,
+      p_jumlah_anak: jumlahAnak || null,
     });
     if (error) throw error;
 
@@ -3782,6 +3790,11 @@ async function loadKompensasiPage() {
     renderKbPesangonTables();
     renderKbPphTables();
     renderKbBpjsTable();
+
+    if (!karyawanState.rows || karyawanState.rows.length === 0) {
+      const { data: karData } = await supabaseClient.rpc('list_karyawan_all');
+      karyawanState.rows = karData || [];
+    }
     populateSimulatorDropdowns();
   } catch (err) {
     showToast('Gagal memuat data Kompensasi & Benefit: ' + err.message, 'error');
@@ -3789,6 +3802,16 @@ async function loadKompensasiPage() {
 }
 
 function populateSimulatorDropdowns() {
+  const karyawanSel = document.getElementById('simKaryawan');
+  if (karyawanSel) {
+    karyawanSel.innerHTML = '<option value="">-- Isi manual --</option>';
+    (karyawanState.rows || []).forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.namapersonnel;
+      karyawanSel.appendChild(opt);
+    });
+  }
   const jabatanSel = document.getElementById('simJabatan');
   if (jabatanSel) {
     jabatanSel.innerHTML = '<option value="">-- Isi manual --</option>';
@@ -3809,6 +3832,27 @@ function populateSimulatorDropdowns() {
       ptkpSel.appendChild(opt);
     });
   }
+}
+
+function deriveStatusPTKP(statusNikah, jumlahAnak) {
+  const kawin = (statusNikah || '').trim().toLowerCase() === 'kawin' ? 'K' : 'TK';
+  const anak = Math.min(Math.max(parseInt(jumlahAnak, 10) || 0, 0), 3);
+  return `${kawin}/${anak}`;
+}
+
+function handleSimKaryawanChange() {
+  const id = document.getElementById('simKaryawan').value;
+  const ptkpSel = document.getElementById('simPtkp');
+  if (!id) return;
+  const row = (karyawanState.rows || []).find(r => String(r.id) === String(id));
+  if (!row) return;
+  if (!row.statuspernikahan) {
+    showToast(`Data pernikahan/tanggungan ${row.namapersonnel} belum diisi di Data Karyawan.`, 'error');
+    return;
+  }
+  const ptkp = deriveStatusPTKP(row.statuspernikahan, row.jumlahanak);
+  if (ptkpSel) ptkpSel.value = ptkp;
+  showToast(`PTKP ${row.namapersonnel} otomatis: ${ptkp} (${row.statuspernikahan}, ${row.jumlahanak || 0} tanggungan)`, 'success');
 }
 
 function handleSimJabatanChange() {
