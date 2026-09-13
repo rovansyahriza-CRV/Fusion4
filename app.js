@@ -952,7 +952,7 @@ function editKaryawan(id) {
 
 function populateKaryawanDivisiOptions() {
   const divSelect = document.getElementById('karyawanDivisi');
-  if (!divSelect || !window.BIMA_ORG_MATRIX) return;
+  if (!divSelect || typeof BIMA_ORG_MATRIX === 'undefined') return;
   divSelect.innerHTML = '<option value="">-- Pilih Divisi --</option>';
   Object.keys(BIMA_ORG_MATRIX).forEach(div => {
     const opt = document.createElement('option');
