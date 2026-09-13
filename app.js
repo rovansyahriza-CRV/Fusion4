@@ -78,6 +78,7 @@ const SIDEBAR_ACCESS_MAP = [
   { key: 'ER', label: 'Permintaan Karyawan', sectionId: 'sec-employee-request', btnId: 'btnNavEmployeeRequest' },
   { key: 'KK', label: 'Kontrak Karyawan', sectionId: 'sec-kontrak', btnId: 'btnNavKontrak' },
   { key: 'DK', label: 'Data Karyawan', sectionId: 'sec-karyawan', btnId: 'btnNavKaryawan' },
+  { key: 'KB', label: 'Kompensasi & Benefit', sectionId: 'sec-kompensasi', btnId: 'btnNavKompensasi' },
   { key: 'KDB', label: 'Kelola Digital Badge', sectionId: 'sec-badge', btnId: 'btnNavBadge' },
   { key: 'MAE', label: 'Monitoring Attendance & Enroll', sectionId: 'sec-monitoring', btnId: 'btnNavMonitoring' },
   { key: 'OIL', label: 'Otorisasi Ijin & Lembur', sectionId: 'sec-otorisasi', btnId: 'btnNavOtorisasi' },
@@ -3744,3 +3745,228 @@ async function deleteEmployeeRequest(id) {
 
 
 
+
+// ==========================================
+// KOMPENSASI & BENEFIT (Master Gaji, Aturan Pesangon, Aturan PPh 21)
+// Author: "Kompensasi & Benefit" -- basis perhitungan payroll, terpisah dari BIMA_ORG_MATRIX
+// ==========================================
+
+let kbState = { gaji: [], pesangon: [], ptkp: [], pph: [] };
+
+async function loadKompensasiPage() {
+  try {
+    const [gajiRes, pesangonRes, ptkpRes, pphRes] = await Promise.all([
+      supabaseClient.rpc('list_master_gaji'),
+      supabaseClient.rpc('list_aturan_pesangon'),
+      supabaseClient.rpc('list_ptkp'),
+      supabaseClient.rpc('list_tarif_pph')
+    ]);
+    if (gajiRes.error) throw gajiRes.error;
+    if (pesangonRes.error) throw pesangonRes.error;
+    if (ptkpRes.error) throw ptkpRes.error;
+    if (pphRes.error) throw pphRes.error;
+
+    kbState.gaji = gajiRes.data || [];
+    kbState.pesangon = pesangonRes.data || [];
+    kbState.ptkp = ptkpRes.data || [];
+    kbState.pph = pphRes.data || [];
+
+    populateKbGajiDivisiFilter();
+    renderKbGajiTable();
+    renderKbPesangonTables();
+    renderKbPphTables();
+  } catch (err) {
+    showToast('Gagal memuat data Kompensasi & Benefit: ' + err.message, 'error');
+  }
+}
+
+function switchKbTab(tab, btn) {
+  document.querySelectorAll('#kbTabs .tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('kbTabGaji').style.display = tab === 'gaji' ? 'block' : 'none';
+  document.getElementById('kbTabPesangon').style.display = tab === 'pesangon' ? 'block' : 'none';
+  document.getElementById('kbTabPph').style.display = tab === 'pph' ? 'block' : 'none';
+}
+
+function populateKbGajiDivisiFilter() {
+  const sel = document.getElementById('kbGajiFilterDivisi');
+  if (!sel) return;
+  const currentVal = sel.value;
+  const divisiList = [...new Set(kbState.gaji.map(r => r.Divisi))].sort();
+  sel.innerHTML = '<option value="">Semua Divisi</option>';
+  divisiList.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d; opt.textContent = d;
+    sel.appendChild(opt);
+  });
+  sel.value = currentVal;
+}
+
+function handleKbGajiFilterDivisiChange() {
+  const divisi = document.getElementById('kbGajiFilterDivisi').value;
+  const deptSel = document.getElementById('kbGajiFilterDepartemen');
+  deptSel.innerHTML = '<option value="">Semua Departemen</option>';
+  if (divisi) {
+    const depts = [...new Set(kbState.gaji.filter(r => r.Divisi === divisi).map(r => r.Departemen))].sort();
+    depts.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d; opt.textContent = d;
+      deptSel.appendChild(opt);
+    });
+  }
+  renderKbGajiTable();
+}
+
+function renderKbGajiTable() {
+  const divisi = document.getElementById('kbGajiFilterDivisi')?.value || '';
+  const dept = document.getElementById('kbGajiFilterDepartemen')?.value || '';
+  const q = (document.getElementById('kbGajiSearch')?.value || '').trim().toLowerCase();
+  let rows = kbState.gaji;
+  if (divisi) rows = rows.filter(r => r.Divisi === divisi);
+  if (dept) rows = rows.filter(r => r.Departemen === dept);
+  if (q) rows = rows.filter(r => (r.Kualifikasi || '').toLowerCase().includes(q));
+
+  const countEl = document.getElementById('kbGajiCount');
+  if (countEl) countEl.textContent = rows.length + ' baris';
+
+  const tbody = document.getElementById('kbGajiTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = rows.map(r => `
+    <tr data-kb-id="${r.Id}">
+      <td>${escapeHtml(r.Divisi || '-')}</td>
+      <td>${escapeHtml(r.Departemen || '-')}</td>
+      <td>${escapeHtml(r.Kualifikasi || '-')}</td>
+      <td><input type="number" class="kb-gaji-min" value="${r.RangeGajiMin ?? ''}" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" class="kb-gaji-max" value="${r.RangeGajiMax ?? ''}" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" class="kb-tj-jabatan" value="${r.TunjanganJabatan ?? ''}" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" class="kb-tj-transport" value="${r.TunjanganTransport ?? ''}" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" class="kb-tj-makan" value="${r.TunjanganMakan ?? ''}" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" class="kb-tj-lain" value="${r.TunjanganLain ?? ''}" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" class="kb-catatan" value="${escapeHtml(r.Catatan || '')}" style="width:140px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+    </tr>
+  `).join('');
+}
+
+async function simpanSemuaKbGaji() {
+  const rows = document.querySelectorAll('#kbGajiTableBody tr[data-kb-id]');
+  if (rows.length === 0) { showToast('Tidak ada baris untuk disimpan (cek filter yang aktif).', 'error'); return; }
+  showToast(`Menyimpan ${rows.length} baris...`, 'info');
+  let success = 0, failed = 0;
+  for (const tr of rows) {
+    const id = tr.dataset.kbId;
+    const getVal = (cls) => {
+      const el = tr.querySelector('.' + cls);
+      const v = el.value.trim();
+      return v === '' ? null : Number(v);
+    };
+    const catatan = tr.querySelector('.kb-catatan').value.trim() || null;
+    try {
+      const { data, error } = await supabaseClient.rpc('update_master_gaji', {
+        p_id: Number(id),
+        p_range_gaji_min: getVal('kb-gaji-min'),
+        p_range_gaji_max: getVal('kb-gaji-max'),
+        p_tunjangan_jabatan: getVal('kb-tj-jabatan'),
+        p_tunjangan_transport: getVal('kb-tj-transport'),
+        p_tunjangan_makan: getVal('kb-tj-makan'),
+        p_tunjangan_lain: getVal('kb-tj-lain'),
+        p_catatan: catatan
+      });
+      if (error || (data && data.status === 'ERROR')) failed++; else success++;
+    } catch (e) { failed++; }
+  }
+  showToast(`Selesai. ${success} baris tersimpan${failed > 0 ? `, ${failed} gagal` : ''}.`, failed > 0 ? 'error' : 'success');
+  loadKompensasiPage();
+}
+
+function renderKbPesangonTables() {
+  const up = kbState.pesangon.filter(r => r.JenisKompensasi === 'Uang Pesangon');
+  const upmk = kbState.pesangon.filter(r => r.JenisKompensasi === 'Uang Penghargaan Masa Kerja');
+  const rowHtml = (r) => `
+    <tr data-kb-id="${r.Id}">
+      <td><input type="number" class="kb-masa-min" value="${r.MasaKerjaMinTahun ?? ''}" style="width:80px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" class="kb-masa-max" value="${r.MasaKerjaMaxTahun ?? ''}" placeholder="tak terbatas" style="width:110px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" class="kb-jumlah-bulan" value="${r.JumlahBulanUpah ?? ''}" style="width:80px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" class="kb-catatan" value="${escapeHtml(r.Catatan || '')}" style="width:220px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+    </tr>`;
+  const upBody = document.getElementById('kbPesangonUPBody');
+  const upmkBody = document.getElementById('kbPesangonUPMKBody');
+  if (upBody) upBody.innerHTML = up.map(rowHtml).join('');
+  if (upmkBody) upmkBody.innerHTML = upmk.map(rowHtml).join('');
+}
+
+async function simpanSemuaKbPesangon() {
+  const rows = document.querySelectorAll('#kbPesangonUPBody tr[data-kb-id], #kbPesangonUPMKBody tr[data-kb-id]');
+  if (rows.length === 0) return;
+  showToast(`Menyimpan ${rows.length} baris...`, 'info');
+  let success = 0, failed = 0;
+  for (const tr of rows) {
+    const id = tr.dataset.kbId;
+    const minV = tr.querySelector('.kb-masa-min').value.trim();
+    const maxV = tr.querySelector('.kb-masa-max').value.trim();
+    const bulanV = tr.querySelector('.kb-jumlah-bulan').value.trim();
+    const catatan = tr.querySelector('.kb-catatan').value.trim() || null;
+    try {
+      const { data, error } = await supabaseClient.rpc('update_aturan_pesangon', {
+        p_id: Number(id),
+        p_masa_kerja_min: minV === '' ? null : Number(minV),
+        p_masa_kerja_max: maxV === '' ? null : Number(maxV),
+        p_jumlah_bulan: bulanV === '' ? null : Number(bulanV),
+        p_catatan: catatan
+      });
+      if (error || (data && data.status === 'ERROR')) failed++; else success++;
+    } catch (e) { failed++; }
+  }
+  showToast(`Selesai. ${success} baris tersimpan${failed > 0 ? `, ${failed} gagal` : ''}.`, failed > 0 ? 'error' : 'success');
+  loadKompensasiPage();
+}
+
+function renderKbPphTables() {
+  const ptkpBody = document.getElementById('kbPtkpBody');
+  const tarifBody = document.getElementById('kbTarifPphBody');
+  if (ptkpBody) {
+    ptkpBody.innerHTML = kbState.ptkp.map(r => `
+      <tr data-kb-id="${r.Id}">
+        <td>${escapeHtml(r.StatusPTKP || '-')}</td>
+        <td><input type="number" class="kb-ptkp-nominal" value="${r.NominalPTKP ?? ''}" style="width:180px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      </tr>`).join('');
+  }
+  if (tarifBody) {
+    tarifBody.innerHTML = kbState.pph.map(r => `
+      <tr data-kb-id="${r.Id}">
+        <td><input type="number" class="kb-pph-min" value="${r.PenghasilanMin ?? ''}" style="width:150px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+        <td><input type="number" class="kb-pph-max" value="${r.PenghasilanMax ?? ''}" placeholder="tak terbatas" style="width:150px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+        <td><input type="number" class="kb-pph-persen" value="${r.TarifPersen ?? ''}" style="width:80px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      </tr>`).join('');
+  }
+}
+
+async function simpanSemuaKbPph() {
+  const ptkpRows = document.querySelectorAll('#kbPtkpBody tr[data-kb-id]');
+  const tarifRows = document.querySelectorAll('#kbTarifPphBody tr[data-kb-id]');
+  let success = 0, failed = 0;
+  for (const tr of ptkpRows) {
+    const id = tr.dataset.kbId;
+    const val = tr.querySelector('.kb-ptkp-nominal').value.trim();
+    try {
+      const { data, error } = await supabaseClient.rpc('update_ptkp', { p_id: Number(id), p_nominal: val === '' ? null : Number(val) });
+      if (error || (data && data.status === 'ERROR')) failed++; else success++;
+    } catch (e) { failed++; }
+  }
+  for (const tr of tarifRows) {
+    const id = tr.dataset.kbId;
+    const minV = tr.querySelector('.kb-pph-min').value.trim();
+    const maxV = tr.querySelector('.kb-pph-max').value.trim();
+    const persenV = tr.querySelector('.kb-pph-persen').value.trim();
+    try {
+      const { data, error } = await supabaseClient.rpc('update_tarif_pph', {
+        p_id: Number(id),
+        p_penghasilan_min: minV === '' ? null : Number(minV),
+        p_penghasilan_max: maxV === '' ? null : Number(maxV),
+        p_tarif_persen: persenV === '' ? null : Number(persenV)
+      });
+      if (error || (data && data.status === 'ERROR')) failed++; else success++;
+    } catch (e) { failed++; }
+  }
+  showToast(`Selesai. ${success} baris tersimpan${failed > 0 ? `, ${failed} gagal` : ''}.`, failed > 0 ? 'error' : 'success');
+  loadKompensasiPage();
+}

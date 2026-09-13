@@ -70,6 +70,13 @@
         <span>Data Karyawan</span>
       </button>
 
+      <button type="button" class="sidebar-nav-btn" id="btnNavKompensasi" onclick="attemptNav('KB', 'sec-kompensasi', this, () => loadKompensasiPage());">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/><path d="M12 7v10"/><path d="M9.5 9.5a2.5 2.5 0 0 1 2.5-1.5h.5a2.5 2.5 0 0 1 0 5h-1a2.5 2.5 0 0 0 0 5h.5a2.5 2.5 0 0 0 2.5-1.5"/>
+        </svg>
+        <span>Kompensasi &amp; Benefit</span>
+      </button>
+
       <button type="button" class="sidebar-nav-btn" id="btnNavBadge" onclick="attemptNav('KDB', 'sec-badge', this, () => loadBadgePage());">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="9" r="2.5"/><path d="M8 17c0-2 2-3 4-3s4 1 4 3"/>
@@ -593,6 +600,109 @@
         <div class="form-action flex-action" style="margin-top:16px;">
           <button type="button" id="btnSubmitKontrak" class="btn-primary" onclick="submitKontrak()">💾 Simpan Kontrak</button>
           <button type="button" class="btn-logout-card" onclick="resetKontrakForm()">↺ Batal / Form Baru</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SECTION: KOMPENSASI & BENEFIT ============ -->
+    <section id="sec-kompensasi" class="app-section" style="display:none;">
+      <div class="page-title-section">
+        <span class="category-tag">HR MASTER DATA</span>
+        <h2>Kompensasi &amp; Benefit</h2>
+        <p>Master Range Gaji &amp; Tunjangan per Jabatan, Aturan Pesangon, dan Aturan PPh 21 -- basis perhitungan payroll.</p>
+      </div>
+
+      <div class="category-tabs" id="kbTabs">
+        <button type="button" class="tab-btn active" data-kbtab="gaji" onclick="switchKbTab('gaji', this)">💰 Master Gaji &amp; Tunjangan</button>
+        <button type="button" class="tab-btn" data-kbtab="pesangon" onclick="switchKbTab('pesangon', this)">📋 Aturan Pesangon</button>
+        <button type="button" class="tab-btn" data-kbtab="pph" onclick="switchKbTab('pph', this)">🧾 Aturan PPh 21</button>
+      </div>
+
+      <!-- TAB: Master Gaji & Tunjangan -->
+      <div id="kbTabGaji">
+        <div class="card table-card">
+          <div class="card-header space-between">
+            <div>
+              <h3>💰 Master Gaji &amp; Tunjangan per Jabatan</h3>
+              <p class="card-subtitle">197 kualifikasi dari Matrix Organisasi. Kolom angka kosong = belum diisi.</p>
+            </div>
+            <span class="badge-count" id="kbGajiCount">0 baris</span>
+          </div>
+          <div style="padding:0 4px 12px; display:flex; gap:10px; flex-wrap:wrap;">
+            <select id="kbGajiFilterDivisi" onchange="handleKbGajiFilterDivisiChange()" style="flex:1; min-width:160px;">
+              <option value="">Semua Divisi</option>
+            </select>
+            <select id="kbGajiFilterDepartemen" onchange="renderKbGajiTable()" style="flex:1; min-width:160px;">
+              <option value="">Semua Departemen</option>
+            </select>
+            <input type="text" id="kbGajiSearch" placeholder="Cari kualifikasi/jabatan..." oninput="renderKbGajiTable()" style="flex:1; min-width:180px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Divisi</th><th>Departemen</th><th>Kualifikasi/Jabatan</th>
+                  <th>Gaji Min (Rp)</th><th>Gaji Max (Rp)</th>
+                  <th>Tj. Jabatan</th><th>Tj. Transport</th><th>Tj. Makan</th><th>Tj. Lain</th><th>Catatan</th>
+                </tr>
+              </thead>
+              <tbody id="kbGajiTableBody"></tbody>
+            </table>
+          </div>
+          <div style="padding:12px 4px 4px;">
+            <button type="button" class="btn-primary" onclick="simpanSemuaKbGaji()">💾 Simpan Semua Perubahan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Aturan Pesangon -->
+      <div id="kbTabPesangon" style="display:none;">
+        <div class="card table-card">
+          <div class="card-header"><h3>📋 Uang Pesangon (Pasal 156 ayat 2 UU Ketenagakerjaan)</h3></div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Masa Kerja Min (thn)</th><th>Masa Kerja Max (thn)</th><th>Jumlah Bulan Upah</th><th>Catatan</th></tr></thead>
+              <tbody id="kbPesangonUPBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card table-card" style="margin-top:16px;">
+          <div class="card-header"><h3>📋 Uang Penghargaan Masa Kerja (Pasal 156 ayat 3, min. masa kerja 3 tahun)</h3></div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Masa Kerja Min (thn)</th><th>Masa Kerja Max (thn)</th><th>Jumlah Bulan Upah</th><th>Catatan</th></tr></thead>
+              <tbody id="kbPesangonUPMKBody"></tbody>
+            </table>
+          </div>
+          <p style="font-size:11px; color:#8a94a3; padding:0 4px;">Catatan: nominal aktual = Jumlah Bulan Upah × Upah × Faktor Pengali (tergantung alasan PHK, diatur terpisah di PP 35/2021).</p>
+          <div style="padding:12px 4px 4px;">
+            <button type="button" class="btn-primary" onclick="simpanSemuaKbPesangon()">💾 Simpan Semua Perubahan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Aturan PPh 21 -->
+      <div id="kbTabPph" style="display:none;">
+        <div class="card table-card">
+          <div class="card-header"><h3>🧾 PTKP (Penghasilan Tidak Kena Pajak / tahun)</h3></div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Status PTKP</th><th>Nominal PTKP (Rp/tahun)</th></tr></thead>
+              <tbody id="kbPtkpBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card table-card" style="margin-top:16px;">
+          <div class="card-header"><h3>🧾 Tarif Progresif PPh 21 (Pasal 17 UU PPh)</h3></div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Penghasilan Min (Rp/thn)</th><th>Penghasilan Max (Rp/thn)</th><th>Tarif (%)</th></tr></thead>
+              <tbody id="kbTarifPphBody"></tbody>
+            </table>
+          </div>
+          <div style="padding:12px 4px 4px;">
+            <button type="button" class="btn-primary" onclick="simpanSemuaKbPph()">💾 Simpan Semua Perubahan</button>
+          </div>
         </div>
       </div>
     </section>
