@@ -908,7 +908,7 @@ function setKaryawanEditMode(isEdit) {
   if (namaEl) namaEl.disabled = isEdit;
   const hint = document.getElementById('karyawanFormHint');
   if (hint) hint.textContent = isEdit
-    ? 'Mode edit cuma update Departemen, Divisi, Author, dan PIC. Field lain gak berubah.'
+    ? 'Mode edit update Departemen, Divisi, Kualifikasi/Jabatan, Kode Proyek, Author, dan PIC. Field lain (Nama, Password, dll) gak berubah.'
     : 'QrCodeId & Digital PIN di-generate otomatis. Field detail lain (KTP, alamat, dll) bisa dilengkapi belakangan.';
   const btnSubmit = document.getElementById('btnSubmitKaryawan');
   if (btnSubmit) btnSubmit.textContent = isEdit ? '💾 Simpan Perubahan' : '💾 Simpan Karyawan Baru';
@@ -943,7 +943,12 @@ function editKaryawan(id) {
   handleKaryawanDivisiChange();
   const deptSelect = document.getElementById('karyawanDepartemen');
   ensureSelectHasValue(deptSelect, row.departemen);
+  handleKaryawanDepartemenChange();
+  const kualSelect = document.getElementById('karyawanKualifikasi');
+  ensureSelectHasValue(kualSelect, row.kualifikasi);
+  handleKaryawanKualifikasiChange();
 
+  document.getElementById('karyawanType').value = row.type || '';
   document.getElementById('karyawanAuthor').value = row.author || '';
   document.getElementById('karyawanPic').value = row.pic || '';
 
@@ -1101,6 +1106,11 @@ async function submitKaryawanBaru() {
   const divisi = document.getElementById('karyawanDivisi')?.value.trim() || '';
   const author = document.getElementById('karyawanAuthor')?.value.trim() || '';
   const pic = document.getElementById('karyawanPic')?.value.trim() || '';
+  const type = document.getElementById('karyawanType')?.value.trim() || '';
+  let kualifikasi = document.getElementById('karyawanKualifikasi')?.value.trim() || '';
+  if (kualifikasi === 'CUSTOM') {
+    kualifikasi = document.getElementById('karyawanKualifikasiCustom')?.value.trim() || '';
+  }
 
   if (!nama) { showToast('Nama karyawan wajib diisi.', 'error'); return; }
 
@@ -1116,6 +1126,8 @@ async function submitKaryawanBaru() {
         p_divisi: divisi || null,
         p_author: author || null,
         p_pic: pic || null,
+        p_kualifikasi: kualifikasi || null,
+        p_type: type || null,
       });
       if (error) throw error;
 
@@ -1129,11 +1141,6 @@ async function submitKaryawanBaru() {
       return;
     }
 
-    const type = document.getElementById('karyawanType')?.value.trim() || '';
-    let kualifikasi = document.getElementById('karyawanKualifikasi')?.value.trim() || '';
-    if (kualifikasi === 'CUSTOM') {
-      kualifikasi = document.getElementById('karyawanKualifikasiCustom')?.value.trim() || '';
-    }
     const tglMasuk = document.getElementById('karyawanTglMasuk')?.value || null;
     const password = document.getElementById('karyawanPassword')?.value || '';
     const email = document.getElementById('karyawanEmail')?.value.trim() || '';
