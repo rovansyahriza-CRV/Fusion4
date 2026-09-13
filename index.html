@@ -582,7 +582,7 @@
           </div>
           <div class="input-group">
             <label for="kontrakJenis">Jenis Kontrak</label>
-            <select id="kontrakJenis">
+            <select id="kontrakJenis" onchange="handleKontrakJenisChange()">
               <option value="PKWT">PKWT</option>
               <option value="PKWTT">PKWTT</option>
             </select>
@@ -615,9 +615,10 @@
             <label for="kontrakMulai">Tanggal Mulai</label>
             <input type="date" id="kontrakMulai">
           </div>
-          <div class="input-group">
+          <div class="input-group" id="kontrakBerakhirWrap">
             <label for="kontrakBerakhir">Tanggal Berakhir</label>
             <input type="date" id="kontrakBerakhir">
+            <span id="kontrakBerakhirHint" style="font-size:11px; color:#8a94a3; display:none;">PKWTT bersifat permanen, tidak ada tanggal berakhir.</span>
           </div>
           <div class="input-group">
             <label for="kontrakFile">Upload File Kontrak (PDF)</label>

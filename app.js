@@ -1368,6 +1368,23 @@ async function loadKontrakKaryawanDropdown() {
   }
 }
 
+function handleKontrakJenisChange() {
+  const jenis = document.getElementById('kontrakJenis')?.value;
+  const berakhirInput = document.getElementById('kontrakBerakhir');
+  const hintEl = document.getElementById('kontrakBerakhirHint');
+  if (!berakhirInput) return;
+  if (jenis === 'PKWTT') {
+    berakhirInput.value = '';
+    berakhirInput.disabled = true;
+    berakhirInput.style.background = '#f5f2ee';
+    if (hintEl) hintEl.style.display = 'block';
+  } else {
+    berakhirInput.disabled = false;
+    berakhirInput.style.background = '';
+    if (hintEl) hintEl.style.display = 'none';
+  }
+}
+
 function cekKaryawanKontrak() {
   const inputEl = document.getElementById('kontrakKaryawanInput');
   const hiddenEl = document.getElementById('kontrakKaryawan');
@@ -1490,6 +1507,7 @@ function editKontrak(id) {
   const emailWrap = document.getElementById('kontrakEmailWrap');
   if (emailWrap) emailWrap.style.display = 'none';
   document.getElementById('kontrakJenis').value = row.jeniskontrak || 'PKWT';
+  handleKontrakJenisChange();
   document.getElementById('kontrakNomor').value = row.nomorkontrak || '';
   document.getElementById('kontrakGaji').value = row.gajipokok != null ? Number(row.gajipokok).toLocaleString('id-ID') : '';
   document.getElementById('kontrakTjJabatan').value = row.tunjanganjabatan != null ? Number(row.tunjanganjabatan).toLocaleString('id-ID') : '';
@@ -1538,7 +1556,8 @@ async function submitKontrak() {
   if (!editId && !karyawanId && !namaInput) { showToast('Isi dulu nama karyawannya.', 'error'); return; }
   if (editId && !karyawanId) { showToast('Pilih dulu karyawannya.', 'error'); return; }
   if (!nomor) { showToast('Nomor kontrak wajib diisi.', 'error'); return; }
-  if (!mulai || !berakhir) { showToast('Tanggal mulai & berakhir kontrak wajib diisi.', 'error'); return; }
+  if (!mulai) { showToast('Tanggal mulai kontrak wajib diisi.', 'error'); return; }
+  if (jenis === 'PKWT' && !berakhir) { showToast('Tanggal berakhir wajib diisi untuk PKWT.', 'error'); return; }
 
   const btn = document.getElementById('btnSubmitKontrak');
   const originalLabel = btn ? btn.textContent : '';
@@ -1641,6 +1660,7 @@ function resetKontrakForm() {
   const emailWrap = document.getElementById('kontrakEmailWrap');
   if (emailWrap) emailWrap.style.display = 'none';
   document.getElementById('kontrakJenis').value = 'PKWT';
+  handleKontrakJenisChange();
   document.getElementById('kontrakNomor').value = '';
   document.getElementById('kontrakGaji').value = '';
   document.getElementById('kontrakTjJabatan').value = '';
