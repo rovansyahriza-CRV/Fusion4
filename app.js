@@ -75,14 +75,14 @@ async function loginUser(idKaryawan, password) {
 // ==========================================
 
 const SIDEBAR_ACCESS_MAP = [
-  { key: 'MAE', label: 'Monitoring Attendance & Enroll', sectionId: 'sec-monitoring', btnId: 'btnNavMonitoring' },
-  { key: 'KL', label: 'Kelola Lokasi', sectionId: 'sec-lokasi', btnId: 'btnNavLokasi' },
-  { key: 'GP', label: 'Ganti Password (Admin)', sectionId: 'sec-password-admin', btnId: 'btnNavPasswordAdmin' },
+  { key: 'ER', label: 'Permintaan Karyawan', sectionId: 'sec-employee-request', btnId: 'btnNavEmployeeRequest' },
+  { key: 'KK', label: 'Kontrak Karyawan', sectionId: 'sec-kontrak', btnId: 'btnNavKontrak' },
   { key: 'DK', label: 'Data Karyawan', sectionId: 'sec-karyawan', btnId: 'btnNavKaryawan' },
   { key: 'KDB', label: 'Kelola Digital Badge', sectionId: 'sec-badge', btnId: 'btnNavBadge' },
-  { key: 'KK', label: 'Kontrak Karyawan', sectionId: 'sec-kontrak', btnId: 'btnNavKontrak' },
-  { key: 'ER', label: 'Permintaan Karyawan', sectionId: 'sec-employee-request', btnId: 'btnNavEmployeeRequest' },
+  { key: 'MAE', label: 'Monitoring Attendance & Enroll', sectionId: 'sec-monitoring', btnId: 'btnNavMonitoring' },
   { key: 'OIL', label: 'Otorisasi Ijin & Lembur', sectionId: 'sec-otorisasi', btnId: 'btnNavOtorisasi' },
+  { key: 'KL', label: 'Kelola Lokasi', sectionId: 'sec-lokasi', btnId: 'btnNavLokasi' },
+  { key: 'GP', label: 'Ganti Password (Admin)', sectionId: 'sec-password-admin', btnId: 'btnNavPasswordAdmin' },
 ];
 
 async function fetchKaryawanPic(id) {
