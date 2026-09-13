@@ -3751,30 +3751,34 @@ async function deleteEmployeeRequest(id) {
 // Author: "Kompensasi & Benefit" -- basis perhitungan payroll, terpisah dari BIMA_ORG_MATRIX
 // ==========================================
 
-let kbState = { gaji: [], pesangon: [], ptkp: [], pph: [] };
+let kbState = { gaji: [], pesangon: [], ptkp: [], pph: [], bpjs: [] };
 
 async function loadKompensasiPage() {
   try {
-    const [gajiRes, pesangonRes, ptkpRes, pphRes] = await Promise.all([
+    const [gajiRes, pesangonRes, ptkpRes, pphRes, bpjsRes] = await Promise.all([
       supabaseClient.rpc('list_master_gaji'),
       supabaseClient.rpc('list_aturan_pesangon'),
       supabaseClient.rpc('list_ptkp'),
-      supabaseClient.rpc('list_tarif_pph')
+      supabaseClient.rpc('list_tarif_pph'),
+      supabaseClient.rpc('list_bpjs')
     ]);
     if (gajiRes.error) throw gajiRes.error;
     if (pesangonRes.error) throw pesangonRes.error;
     if (ptkpRes.error) throw ptkpRes.error;
     if (pphRes.error) throw pphRes.error;
+    if (bpjsRes.error) throw bpjsRes.error;
 
     kbState.gaji = gajiRes.data || [];
     kbState.pesangon = pesangonRes.data || [];
     kbState.ptkp = ptkpRes.data || [];
     kbState.pph = pphRes.data || [];
+    kbState.bpjs = bpjsRes.data || [];
 
     populateKbGajiDivisiFilter();
     renderKbGajiTable();
     renderKbPesangonTables();
     renderKbPphTables();
+    renderKbBpjsTable();
   } catch (err) {
     showToast('Gagal memuat data Kompensasi & Benefit: ' + err.message, 'error');
   }
@@ -3786,6 +3790,7 @@ function switchKbTab(tab, btn) {
   document.getElementById('kbTabGaji').style.display = tab === 'gaji' ? 'block' : 'none';
   document.getElementById('kbTabPesangon').style.display = tab === 'pesangon' ? 'block' : 'none';
   document.getElementById('kbTabPph').style.display = tab === 'pph' ? 'block' : 'none';
+  document.getElementById('kbTabBpjs').style.display = tab === 'bpjs' ? 'block' : 'none';
 }
 
 function populateKbGajiDivisiFilter() {
@@ -3963,6 +3968,49 @@ async function simpanSemuaKbPph() {
         p_penghasilan_min: minV === '' ? null : Number(minV),
         p_penghasilan_max: maxV === '' ? null : Number(maxV),
         p_tarif_persen: persenV === '' ? null : Number(persenV)
+      });
+      if (error || (data && data.status === 'ERROR')) failed++; else success++;
+    } catch (e) { failed++; }
+  }
+  showToast(`Selesai. ${success} baris tersimpan${failed > 0 ? `, ${failed} gagal` : ''}.`, failed > 0 ? 'error' : 'success');
+  loadKompensasiPage();
+}
+
+function renderKbBpjsTable() {
+  const tbody = document.getElementById('kbBpjsTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = kbState.bpjs.map(r => `
+    <tr data-kb-id="${r.Id}">
+      <td><strong>${escapeHtml(r.Program || '-')}</strong></td>
+      <td>${escapeHtml(r.Keterangan || '-')}</td>
+      <td><input type="number" step="0.01" class="kb-bpjs-karyawan" value="${r.PersenKaryawan ?? 0}" style="width:70px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" step="0.01" class="kb-bpjs-perusahaan" value="${r.PersenPerusahaan ?? 0}" style="width:70px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" class="kb-bpjs-batas" value="${r.BatasUpahMax ?? ''}" placeholder="tak terbatas" style="width:130px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td style="text-align:center;"><input type="checkbox" class="kb-bpjs-aktif" ${r.IsAktif ? 'checked' : ''} style="width:18px;height:18px;"></td>
+      <td><input type="text" class="kb-catatan" value="${escapeHtml(r.Catatan || '')}" style="width:220px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+    </tr>`).join('');
+}
+
+async function simpanSemuaKbBpjs() {
+  const rows = document.querySelectorAll('#kbBpjsTableBody tr[data-kb-id]');
+  if (rows.length === 0) return;
+  showToast(`Menyimpan ${rows.length} baris...`, 'info');
+  let success = 0, failed = 0;
+  for (const tr of rows) {
+    const id = tr.dataset.kbId;
+    const karyawan = Number(tr.querySelector('.kb-bpjs-karyawan').value.trim() || 0);
+    const perusahaan = Number(tr.querySelector('.kb-bpjs-perusahaan').value.trim() || 0);
+    const batasV = tr.querySelector('.kb-bpjs-batas').value.trim();
+    const aktif = tr.querySelector('.kb-bpjs-aktif').checked;
+    const catatan = tr.querySelector('.kb-catatan').value.trim() || null;
+    try {
+      const { data, error } = await supabaseClient.rpc('update_bpjs', {
+        p_id: Number(id),
+        p_persen_karyawan: karyawan,
+        p_persen_perusahaan: perusahaan,
+        p_batas_upah_max: batasV === '' ? null : Number(batasV),
+        p_is_aktif: aktif,
+        p_catatan: catatan
       });
       if (error || (data && data.status === 'ERROR')) failed++; else success++;
     } catch (e) { failed++; }

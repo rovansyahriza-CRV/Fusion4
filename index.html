@@ -616,6 +616,7 @@
         <button type="button" class="tab-btn active" data-kbtab="gaji" onclick="switchKbTab('gaji', this)">💰 Master Gaji &amp; Tunjangan</button>
         <button type="button" class="tab-btn" data-kbtab="pesangon" onclick="switchKbTab('pesangon', this)">📋 Aturan Pesangon</button>
         <button type="button" class="tab-btn" data-kbtab="pph" onclick="switchKbTab('pph', this)">🧾 Aturan PPh 21</button>
+        <button type="button" class="tab-btn" data-kbtab="bpjs" onclick="switchKbTab('bpjs', this)">🏥 BPJS</button>
       </div>
 
       <!-- TAB: Master Gaji & Tunjangan -->
@@ -702,6 +703,27 @@
           </div>
           <div style="padding:12px 4px 4px;">
             <button type="button" class="btn-primary" onclick="simpanSemuaKbPph()">💾 Simpan Semua Perubahan</button>
+          </div>
+        </div>
+      </div>
+      <!-- TAB: BPJS -->
+      <div id="kbTabBpjs" style="display:none;">
+        <div class="card table-card">
+          <div class="card-header"><h3>🏥 BPJS Kesehatan &amp; Ketenagakerjaan (Tanggungan Karyawan vs Perusahaan)</h3></div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Program</th><th>Keterangan</th><th>% Karyawan</th><th>% Perusahaan</th>
+                  <th>Batas Upah (Rp)</th><th>Aktif</th><th>Catatan</th>
+                </tr>
+              </thead>
+              <tbody id="kbBpjsTableBody"></tbody>
+            </table>
+          </div>
+          <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Untuk JKK, pilih 1 tingkat risiko yang sesuai klasifikasi usaha (centang "Aktif"), sisanya sebagai referensi.</p>
+          <div style="padding:12px 4px 4px;">
+            <button type="button" class="btn-primary" onclick="simpanSemuaKbBpjs()">💾 Simpan Semua Perubahan</button>
           </div>
         </div>
       </div>
