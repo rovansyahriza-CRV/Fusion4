@@ -617,6 +617,7 @@
         <button type="button" class="tab-btn" data-kbtab="pesangon" onclick="switchKbTab('pesangon', this)">📋 Aturan Pesangon</button>
         <button type="button" class="tab-btn" data-kbtab="pph" onclick="switchKbTab('pph', this)">🧾 Aturan PPh 21</button>
         <button type="button" class="tab-btn" data-kbtab="bpjs" onclick="switchKbTab('bpjs', this)">🏥 BPJS</button>
+        <button type="button" class="tab-btn" data-kbtab="simulator" onclick="switchKbTab('simulator', this)">🧮 Simulator Payroll</button>
       </div>
 
       <!-- TAB: Master Gaji & Tunjangan -->
@@ -726,6 +727,69 @@
           <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Untuk JKK, pilih 1 tingkat risiko yang sesuai klasifikasi usaha (centang "Aktif"), sisanya sebagai referensi.</p>
           <div style="padding:12px 4px 4px;">
             <button type="button" class="btn-primary" onclick="simpanSemuaKbBpjs()">💾 Simpan Semua Perubahan</button>
+          </div>
+        </div>
+      </div>
+      <!-- TAB: Simulator Payroll -->
+      <div id="kbTabSimulator" style="display:none;">
+        <div class="card form-card">
+          <div class="card-header"><h3>🧮 Simulator Payroll Bulanan</h3></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div class="input-group">
+              <label>Pilih Jabatan (opsional, auto-isi gaji &amp; tunjangan)</label>
+              <select id="simJabatan" onchange="handleSimJabatanChange()">
+                <option value="">-- Isi manual --</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Status PTKP</label>
+              <select id="simPtkp"></select>
+            </div>
+            <div class="input-group">
+              <label>Gaji Pokok (Rp)</label>
+              <input type="text" inputmode="numeric" id="simGajiPokok" oninput="formatRupiahInput(this)" placeholder="0">
+            </div>
+            <div class="input-group">
+              <label>Masa Kerja (tahun)</label>
+              <input type="number" id="simMasaKerja" min="0" step="0.5" value="1">
+            </div>
+            <div class="input-group">
+              <label>Tunjangan Jabatan (Rp)</label>
+              <input type="text" inputmode="numeric" id="simTjJabatan" oninput="formatRupiahInput(this)" placeholder="0">
+            </div>
+            <div class="input-group">
+              <label>Tunjangan Transport (Rp)</label>
+              <input type="text" inputmode="numeric" id="simTjTransport" oninput="formatRupiahInput(this)" placeholder="0">
+            </div>
+            <div class="input-group">
+              <label>Tunjangan Makan (Rp)</label>
+              <input type="text" inputmode="numeric" id="simTjMakan" oninput="formatRupiahInput(this)" placeholder="0">
+            </div>
+            <div class="input-group">
+              <label>Tunjangan Lain (Rp)</label>
+              <input type="text" inputmode="numeric" id="simTjLain" oninput="formatRupiahInput(this)" placeholder="0">
+            </div>
+          </div>
+          <button type="button" class="btn-primary" style="margin-top:14px;" onclick="hitungSimulatorPayroll()">🧮 Hitung Payroll</button>
+        </div>
+
+        <div id="simResultWrap" style="display:none;">
+          <div class="card">
+            <div class="card-header"><h3>💵 Penghasilan &amp; Take Home Pay</h3></div>
+            <div id="simThpBox"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>📤 Rincian yang Dibayarkan ke Pihak ke-3 (BPJS &amp; Pajak)</h3></div>
+            <div class="table-responsive">
+              <table>
+                <thead><tr><th>Komponen</th><th>Ditanggung Karyawan (Rp)</th><th>Ditanggung Perusahaan (Rp)</th></tr></thead>
+                <tbody id="simPihak3Body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>🎁 Estimasi THR &amp; Pesangon (di luar THP bulanan)</h3></div>
+            <div id="simThrPesangonBox"></div>
           </div>
         </div>
       </div>

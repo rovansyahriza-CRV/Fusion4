@@ -3751,37 +3751,176 @@ async function deleteEmployeeRequest(id) {
 // Author: "Kompensasi & Benefit" -- basis perhitungan payroll, terpisah dari BIMA_ORG_MATRIX
 // ==========================================
 
-let kbState = { gaji: [], pesangon: [], ptkp: [], pph: [], bpjs: [] };
+let kbState = { gaji: [], pesangon: [], ptkp: [], pph: [], bpjs: [], ter: [] };
 
 async function loadKompensasiPage() {
   try {
-    const [gajiRes, pesangonRes, ptkpRes, pphRes, bpjsRes] = await Promise.all([
+    const [gajiRes, pesangonRes, ptkpRes, pphRes, bpjsRes, terRes] = await Promise.all([
       supabaseClient.rpc('list_master_gaji'),
       supabaseClient.rpc('list_aturan_pesangon'),
       supabaseClient.rpc('list_ptkp'),
       supabaseClient.rpc('list_tarif_pph'),
-      supabaseClient.rpc('list_bpjs')
+      supabaseClient.rpc('list_bpjs'),
+      supabaseClient.rpc('list_ter')
     ]);
     if (gajiRes.error) throw gajiRes.error;
     if (pesangonRes.error) throw pesangonRes.error;
     if (ptkpRes.error) throw ptkpRes.error;
     if (pphRes.error) throw pphRes.error;
     if (bpjsRes.error) throw bpjsRes.error;
+    if (terRes.error) throw terRes.error;
 
     kbState.gaji = gajiRes.data || [];
     kbState.pesangon = pesangonRes.data || [];
     kbState.ptkp = ptkpRes.data || [];
     kbState.pph = pphRes.data || [];
     kbState.bpjs = bpjsRes.data || [];
+    kbState.ter = terRes.data || [];
 
     populateKbGajiDivisiFilter();
     renderKbGajiTable();
     renderKbPesangonTables();
     renderKbPphTables();
     renderKbBpjsTable();
+    populateSimulatorDropdowns();
   } catch (err) {
     showToast('Gagal memuat data Kompensasi & Benefit: ' + err.message, 'error');
   }
+}
+
+function populateSimulatorDropdowns() {
+  const jabatanSel = document.getElementById('simJabatan');
+  if (jabatanSel) {
+    jabatanSel.innerHTML = '<option value="">-- Isi manual --</option>';
+    kbState.gaji.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.Id;
+      opt.textContent = `${r.Kualifikasi} (${r.Divisi})`;
+      jabatanSel.appendChild(opt);
+    });
+  }
+  const ptkpSel = document.getElementById('simPtkp');
+  if (ptkpSel) {
+    ptkpSel.innerHTML = '';
+    kbState.ptkp.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.StatusPTKP;
+      opt.textContent = r.StatusPTKP;
+      ptkpSel.appendChild(opt);
+    });
+  }
+}
+
+function handleSimJabatanChange() {
+  const id = document.getElementById('simJabatan').value;
+  if (!id) return;
+  const row = kbState.gaji.find(r => String(r.Id) === String(id));
+  if (!row) return;
+  const setVal = (elId, num) => { const el = document.getElementById(elId); if (el) el.value = num != null ? Number(num).toLocaleString('id-ID') : ''; };
+  setVal('simGajiPokok', row.RangeGajiMin);
+  setVal('simTjJabatan', row.TunjanganJabatan);
+  setVal('simTjTransport', row.TunjanganTransport);
+  setVal('simTjMakan', row.TunjanganMakan);
+  setVal('simTjLain', row.TunjanganLain);
+}
+
+function getTerKategoriFromPtkp(status) {
+  if (['TK/0', 'TK/1', 'K/0'].includes(status)) return 'A';
+  if (['TK/2', 'TK/3', 'K/1', 'K/2'].includes(status)) return 'B';
+  if (status === 'K/3') return 'C';
+  return 'A';
+}
+
+function cariTarifTer(kategori, bruto) {
+  const row = kbState.ter.find(r => r.Kategori === kategori && Number(bruto) >= Number(r.PenghasilanBrutoMin) && (r.PenghasilanBrutoMax == null || Number(bruto) <= Number(r.PenghasilanBrutoMax)));
+  return row ? Number(row.TarifPersen) : 0;
+}
+
+function cariAturanPesangon(jenis, masaKerjaTahun) {
+  const row = kbState.pesangon.find(r => r.JenisKompensasi === jenis && Number(masaKerjaTahun) >= Number(r.MasaKerjaMinTahun) && (r.MasaKerjaMaxTahun == null || Number(masaKerjaTahun) < Number(r.MasaKerjaMaxTahun)));
+  return row ? Number(row.JumlahBulanUpah) : 0;
+}
+
+function fmtRp(n) {
+  return 'Rp ' + Math.round(n).toLocaleString('id-ID');
+}
+
+function hitungSimulatorPayroll() {
+  const gajiPokok = parseRupiahInput(document.getElementById('simGajiPokok')) || 0;
+  const tjJabatan = parseRupiahInput(document.getElementById('simTjJabatan')) || 0;
+  const tjTransport = parseRupiahInput(document.getElementById('simTjTransport')) || 0;
+  const tjMakan = parseRupiahInput(document.getElementById('simTjMakan')) || 0;
+  const tjLain = parseRupiahInput(document.getElementById('simTjLain')) || 0;
+  const ptkpStatus = document.getElementById('simPtkp').value;
+  const masaKerja = Number(document.getElementById('simMasaKerja').value) || 0;
+
+  const bruto = gajiPokok + tjJabatan + tjTransport + tjMakan + tjLain;
+
+  if (bruto <= 0) { showToast('Isi Gaji Pokok atau pilih Jabatan dulu.', 'error'); return; }
+
+  // -- BPJS: generalisasi dari baris yang "Aktif" di bpjsTbl --
+  const aktifRows = kbState.bpjs.filter(r => r.IsAktif);
+  let totalBpjsKaryawan = 0, totalBpjsPerusahaan = 0;
+  const bpjsDetailRows = aktifRows.map(r => {
+    const base = r.BatasUpahMax != null ? Math.min(bruto, Number(r.BatasUpahMax)) : bruto;
+    const karyawan = base * (Number(r.PersenKaryawan) / 100);
+    const perusahaan = base * (Number(r.PersenPerusahaan) / 100);
+    totalBpjsKaryawan += karyawan;
+    totalBpjsPerusahaan += perusahaan;
+    return { nama: r.Program + (r.Keterangan ? ' (' + r.Keterangan + ')' : ''), karyawan, perusahaan };
+  });
+
+  // -- PPh 21 (TER Bulanan) --
+  const kategori = getTerKategoriFromPtkp(ptkpStatus);
+  const tarifTer = cariTarifTer(kategori, bruto);
+  const pph21 = bruto * (tarifTer / 100);
+
+  const totalPotonganKaryawan = totalBpjsKaryawan + pph21;
+  const thp = bruto - totalPotonganKaryawan;
+  const totalBiayaPerusahaan = bruto + totalBpjsPerusahaan;
+
+  // -- THR (prorata kalau masa kerja < 1 tahun) --
+  const masaKerjaBulan = masaKerja * 12;
+  const thr = masaKerjaBulan >= 12 ? bruto : (masaKerjaBulan / 12) * bruto;
+
+  // -- Estimasi Pesangon (kalau PHK hari ini) --
+  const bulanUP = cariAturanPesangon('Uang Pesangon', masaKerja);
+  const bulanUPMK = cariAturanPesangon('Uang Penghargaan Masa Kerja', masaKerja);
+  const estimasiUP = bulanUP * bruto;
+  const estimasiUPMK = bulanUPMK * bruto;
+
+  // ---- Render ----
+  document.getElementById('simResultWrap').style.display = 'block';
+
+  document.getElementById('simThpBox').innerHTML = `
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <div class="summary-tile"><div class="num" style="font-size:16px;">${fmtRp(bruto)}</div><div class="lbl">Penghasilan Bruto</div></div>
+      <div class="summary-tile"><div class="num" style="font-size:16px; color:#c0392b;">- ${fmtRp(totalPotonganKaryawan)}</div><div class="lbl">Total Potongan Karyawan</div></div>
+      <div class="summary-tile"><div class="num" style="font-size:18px; color:#178a4c;">${fmtRp(thp)}</div><div class="lbl">Take Home Pay (THP)</div></div>
+    </div>
+    <p style="font-size:11px; color:#8a94a3; margin-top:8px;">PPh 21 dihitung pakai Tarif Efektif Rata-rata (TER) Kategori ${kategori} (${tarifTer}%) sesuai status PTKP ${ptkpStatus}. Rekonsiliasi tarif progresif tahunan dilakukan di masa pajak Desember.</p>
+  `;
+
+  const pihak3Rows = bpjsDetailRows.map(b => `
+    <tr><td>${escapeHtml(b.nama)}</td><td>${fmtRp(b.karyawan)}</td><td>${fmtRp(b.perusahaan)}</td></tr>
+  `).join('') + `
+    <tr style="font-weight:700; background:#f7f4f1;"><td>Subtotal BPJS</td><td>${fmtRp(totalBpjsKaryawan)}</td><td>${fmtRp(totalBpjsPerusahaan)}</td></tr>
+    <tr><td>PPh 21 (TER ${kategori})</td><td>${fmtRp(pph21)}</td><td>-</td></tr>
+    <tr style="font-weight:700; background:#e8f4ee;"><td>TOTAL DIBAYAR KE PIHAK KE-3</td><td>${fmtRp(totalPotonganKaryawan)}</td><td>${fmtRp(totalBpjsPerusahaan)}</td></tr>
+    <tr><td colspan="3" style="font-size:11px; color:#8a94a3;">Total Biaya Perusahaan per bulan (Bruto + BPJS Perusahaan) = ${fmtRp(totalBiayaPerusahaan)}</td></tr>
+  `;
+  document.getElementById('simPihak3Body').innerHTML = pihak3Rows;
+
+  document.getElementById('simThrPesangonBox').innerHTML = `
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <div class="summary-tile"><div class="num" style="font-size:16px;">${fmtRp(thr)}</div><div class="lbl">Estimasi THR (${masaKerjaBulan >= 12 ? '1x gaji, masa kerja cukup' : 'prorata ' + masaKerjaBulan.toFixed(0) + ' bulan'})</div></div>
+      <div class="summary-tile"><div class="num" style="font-size:16px;">${fmtRp(estimasiUP + estimasiUPMK)}</div><div class="lbl">Estimasi Pesangon jika PHK hari ini</div></div>
+    </div>
+    <p style="font-size:11px; color:#8a94a3; margin-top:8px;">
+      Pesangon = Uang Pesangon (${bulanUP} bulan upah = ${fmtRp(estimasiUP)}) + Uang Penghargaan Masa Kerja (${bulanUPMK} bulan upah = ${fmtRp(estimasiUPMK)}), berdasarkan masa kerja ${masaKerja} tahun.
+      Belum termasuk faktor pengali sesuai alasan PHK (PP 35/2021) dan Uang Penggantian Hak (sisa cuti, dll). THR &amp; Pesangon nilainya tetap/independen, bukan potongan dari THP bulanan.
+    </p>
+  `;
 }
 
 function switchKbTab(tab, btn) {
@@ -3791,6 +3930,7 @@ function switchKbTab(tab, btn) {
   document.getElementById('kbTabPesangon').style.display = tab === 'pesangon' ? 'block' : 'none';
   document.getElementById('kbTabPph').style.display = tab === 'pph' ? 'block' : 'none';
   document.getElementById('kbTabBpjs').style.display = tab === 'bpjs' ? 'block' : 'none';
+  document.getElementById('kbTabSimulator').style.display = tab === 'simulator' ? 'block' : 'none';
 }
 
 function populateKbGajiDivisiFilter() {
