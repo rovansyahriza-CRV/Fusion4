@@ -2244,6 +2244,49 @@ const BIMA_ORG_MATRIX = {
       "Equipment Mechanic",
       "Auto Electrician",
       "Dispatcher / Fleet Admin"
+    ],
+    "Mechanical Construction": [
+      "Mechanical Supervisor",
+      "Mechanical Foreman",
+      "Pipe Fitter",
+      "Welder Class-1",
+      "Welder Class-2",
+      "Welder Class-3",
+      "Rigger",
+      "Scaffolder",
+      "Millwright / Equipment Installer",
+      "Mechanical Helper"
+    ],
+    "Civil Construction": [
+      "Civil Supervisor",
+      "Civil Foreman",
+      "Surveyor",
+      "Formwork Carpenter (Tukang Bekisting)",
+      "Steel Bender/Fixer (Tukang Besi)",
+      "Concrete Worker/Mason (Tukang Cor/Batu)",
+      "Heavy Equipment Operator (Excavator/Loader)",
+      "Civil Helper"
+    ],
+    "Electrical Construction": [
+      "Electrical Supervisor",
+      "Electrical Foreman",
+      "Electrician",
+      "Cable Puller / Installer",
+      "Panel Installer / Wireman",
+      "Testing & Commissioning Technician (Electrical)",
+      "Electrical Helper"
+    ],
+    "Instrumentation Construction": [
+      "Instrument Supervisor",
+      "Instrument Foreman",
+      "Instrument Technician",
+      "Calibration Technician",
+      "Loop Checker",
+      "Testing & Commissioning Technician (Instrument)",
+      "Instrument Helper"
+    ],
+    "Direct Project (Umum)": [
+      "Driver Operation"
     ]
   },
   "Human Resources": {
