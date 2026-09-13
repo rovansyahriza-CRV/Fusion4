@@ -3851,15 +3851,32 @@ function renderKbGajiTable() {
       <td>${escapeHtml(r.Divisi || '-')}</td>
       <td>${escapeHtml(r.Departemen || '-')}</td>
       <td>${escapeHtml(r.Kualifikasi || '-')}</td>
-      <td><input type="text" inputmode="numeric" class="kb-gaji-min" value="${r.RangeGajiMin != null ? Number(r.RangeGajiMin).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:110px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="text" inputmode="numeric" class="kb-gaji-max" value="${r.RangeGajiMax != null ? Number(r.RangeGajiMax).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:110px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="text" inputmode="numeric" class="kb-tj-jabatan" value="${r.TunjanganJabatan != null ? Number(r.TunjanganJabatan).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="text" inputmode="numeric" class="kb-tj-transport" value="${r.TunjanganTransport != null ? Number(r.TunjanganTransport).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="text" inputmode="numeric" class="kb-tj-makan" value="${r.TunjanganMakan != null ? Number(r.TunjanganMakan).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="text" inputmode="numeric" class="kb-tj-lain" value="${r.TunjanganLain != null ? Number(r.TunjanganLain).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-gaji-min" value="${r.RangeGajiMin != null ? Number(r.RangeGajiMin).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this); calcKbGajiRowTotal(this.closest('tr'))" style="width:110px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-gaji-max" value="${r.RangeGajiMax != null ? Number(r.RangeGajiMax).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this); calcKbGajiRowTotal(this.closest('tr'))" style="width:110px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-tj-jabatan" value="${r.TunjanganJabatan != null ? Number(r.TunjanganJabatan).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this); calcKbGajiRowTotal(this.closest('tr'))" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-tj-transport" value="${r.TunjanganTransport != null ? Number(r.TunjanganTransport).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this); calcKbGajiRowTotal(this.closest('tr'))" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-tj-makan" value="${r.TunjanganMakan != null ? Number(r.TunjanganMakan).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this); calcKbGajiRowTotal(this.closest('tr'))" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="text" inputmode="numeric" class="kb-tj-lain" value="${r.TunjanganLain != null ? Number(r.TunjanganLain).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this); calcKbGajiRowTotal(this.closest('tr'))" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><strong class="kb-total-min" style="white-space:nowrap;">Rp 0</strong></td>
+      <td><strong class="kb-total-max" style="white-space:nowrap;">Rp 0</strong></td>
       <td><input type="text" class="kb-catatan" value="${escapeHtml(r.Catatan || '')}" style="width:140px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
     </tr>
   `).join('');
+
+  // Hitung total awal buat semua baris berdasarkan data yang udah di-load
+  tbody.querySelectorAll('tr[data-kb-id]').forEach(tr => calcKbGajiRowTotal(tr));
+}
+
+function calcKbGajiRowTotal(tr) {
+  if (!tr) return;
+  const val = (cls) => parseRupiahInput(tr.querySelector('.' + cls)) || 0;
+  const tunjanganTotal = val('kb-tj-jabatan') + val('kb-tj-transport') + val('kb-tj-makan') + val('kb-tj-lain');
+  const totalMin = val('kb-gaji-min') + tunjanganTotal;
+  const totalMax = val('kb-gaji-max') + tunjanganTotal;
+  const minEl = tr.querySelector('.kb-total-min');
+  const maxEl = tr.querySelector('.kb-total-max');
+  if (minEl) minEl.textContent = 'Rp ' + totalMin.toLocaleString('id-ID');
+  if (maxEl) maxEl.textContent = 'Rp ' + totalMax.toLocaleString('id-ID');
 }
 
 async function simpanSemuaKbGaji() {
