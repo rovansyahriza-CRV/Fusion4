@@ -3835,7 +3835,7 @@ function populateSimulatorDropdowns() {
 }
 
 function deriveStatusPTKP(statusNikah, jumlahAnak) {
-  const kawin = (statusNikah || '').trim().toLowerCase() === 'kawin' ? 'K' : 'TK';
+  const kawin = (statusNikah || '').trim().toLowerCase() === 'menikah' ? 'K' : 'TK';
   const anak = Math.min(Math.max(parseInt(jumlahAnak, 10) || 0, 0), 3);
   return `${kawin}/${anak}`;
 }
