@@ -4835,12 +4835,35 @@ async function generateSlipPdf(payrollId) {
   }
 }
 
+function setSlipGenProgress(shown, { current, total, label } = {}) {
+  const box = document.getElementById('slipGenProgress');
+  const bar = document.getElementById('slipGenProgressBar');
+  const lbl = document.getElementById('slipGenProgressLabel');
+  const cnt = document.getElementById('slipGenProgressCount');
+  const btn = document.getElementById('btnGenerateSemuaSlip');
+  if (!box || !bar || !lbl || !cnt) return;
+  box.style.display = shown ? 'block' : 'none';
+  if (btn) btn.disabled = shown;
+  if (shown) {
+    const pct = total ? Math.round((current / total) * 100) : 0;
+    bar.style.width = pct + '%';
+    cnt.textContent = `${current}/${total}`;
+    if (label) lbl.textContent = label;
+  }
+}
+
 async function generateSemuaSlip() {
   const belumAdaSlip = payrollHasilState.filter(r => !r.ReportURL);
   if (belumAdaSlip.length === 0) { showToast('Semua slip sudah dibuat.', 'info'); return; }
-  showToast(`Membuat ${belumAdaSlip.length} slip gaji...`, 'info');
-  for (const row of belumAdaSlip) {
+  const total = belumAdaSlip.length;
+  setSlipGenProgress(true, { current: 0, total, label: 'Menyiapkan...' });
+  for (let i = 0; i < total; i++) {
+    if (i > 0) await new Promise(resolve => setTimeout(resolve, 1500)); // jeda dikit biar ga kena rate limit Apps Script kalau digenerate beruntun
+    const row = belumAdaSlip[i];
+    setSlipGenProgress(true, { current: i, total, label: `Membuat slip ${row.NamaKaryawan}...` });
     await generateSlipPdf(row.Id);
+    setSlipGenProgress(true, { current: i + 1, total, label: `Selesai: ${row.NamaKaryawan}` });
   }
+  setSlipGenProgress(false);
   showToast('Semua slip gaji selesai dibuat.', 'success');
 }

@@ -58,6 +58,46 @@ function compressImage(file, maxDimension = 1280, quality = 0.7) {
 // browser mengirimnya sebagai "text/plain" request -- ini bikin fetch() TIDAK memicu
 // CORS preflight (OPTIONS), yang mana Apps Script Web App tidak bisa menjawabnya.
 // Apps Script tetap bisa JSON.parse(e.postData.contents) dengan normal.
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Apps Script Web App kadang kena limit (concurrent execution / rate limit) kalau dipanggil
+// beruntun cepat (misal generate semua slip sekaligus), dan balikin halaman error HTML dari
+// Google -- bukan JSON -- yang bikin res.json() meledak dengan "Unexpected token '<'...".
+// Makanya di sini responsenya dibaca sebagai text dulu baru di-parse manual, dan kalau gagal
+// (bukan JSON valid) dianggap error transient lalu di-retry beberapa kali dengan jeda.
+async function postToDriveBridgeWithRetry(payload, { retries = 3, baseDelayMs = 1500 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt > 0) await sleep(baseDelayMs * attempt); // backoff: 1.5s, 3s, 4.5s, ...
+    try {
+      const res = await fetch(DRIVE_BRIDGE_URL, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        // sengaja TIDAK set headers: {"Content-Type": "application/json"} -- lihat catatan di atas
+      });
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseErr) {
+        throw new Error(
+          `Server Drive bridge kirim balasan tidak valid (kemungkinan kena limit Apps Script, HTTP ${res.status}). Coba lagi sebentar.`
+        );
+      }
+      if (data.error) throw new Error(data.error);
+      return data;
+    } catch (err) {
+      lastErr = err;
+      // Ga usah retry kalau errornya emang dari Apps Script sendiri (bukan masalah transient
+      // kayak response HTML/limit) -- itu udah pasti bakal gagal lagi meski di-retry.
+      if (err.message && !err.message.includes("balasan tidak valid")) break;
+    }
+  }
+  throw lastErr;
+}
+
 async function uploadToDrive(category, fileName, mimeType, blobOrFile) {
   const base64Data = await fileToBase64(blobOrFile);
   const payload = {
@@ -68,15 +108,7 @@ async function uploadToDrive(category, fileName, mimeType, blobOrFile) {
     mimeType,
     base64Data,
   };
-
-  const res = await fetch(DRIVE_BRIDGE_URL, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    // sengaja TIDAK set headers: {"Content-Type": "application/json"} -- lihat catatan di atas
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data; // { fileId, viewUrl, directUrl }
+  return postToDriveBridgeWithRetry(payload); // { fileId, viewUrl, directUrl }
 }
 
 // Baca balik file dari Drive sebagai base64 (dipakai buat nempel ulang foto ke PDF yang
