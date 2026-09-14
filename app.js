@@ -4818,6 +4818,137 @@ const SLIP_GRAY = [120, 120, 120];
 const SLIP_LINE = [222, 222, 222];
 const SLIP_GREEN = [15, 122, 69];
 const SLIP_GREEN_BG = [232, 244, 238];
+const SLIP_RED = [196, 60, 60];
+const SLIP_BLUE = [40, 100, 180];
+
+const TIMESHEET_STATUS_STYLE = {
+  HADIR_LENGKAP: { color: SLIP_GREEN, label: 'Hadir Lengkap' },
+  PARSIAL: { color: SLIP_ORANGE, label: 'Parsial' },
+  CUTI: { color: SLIP_BLUE, label: 'Cuti' },
+  IJIN: { color: SLIP_BLUE, label: 'Ijin' },
+  LIBUR: { color: SLIP_GRAY, label: 'Libur' },
+  TIDAK_HADIR: { color: SLIP_RED, label: 'Tidak Hadir' },
+};
+
+// Potong teks supaya muat di lebar kolom PDF tanpa numpuk ke baris berikutnya (dipakai di tabel timesheet).
+function truncateJsPdfText(doc, text, maxWidth) {
+  text = String(text == null ? '' : text);
+  if (doc.getTextWidth(text) <= maxWidth) return text;
+  let t = text;
+  while (t.length > 1 && doc.getTextWidth(t + '…') > maxWidth) {
+    t = t.slice(0, -1);
+  }
+  return t + '…';
+}
+
+// ---- Halaman 2 Slip Gaji: Timesheet Bulanan (pendukung payroll) ----
+// timesheetData: array hasil RPC get_timesheet_bulanan (satu objek per tanggal dalam periode).
+function renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW, logoDataUrl }) {
+  doc.addPage();
+  let y = 14;
+
+  doc.setFillColor(...SLIP_ORANGE);
+  doc.rect(0, 0, pageW, 3, 'F');
+  y += 10;
+
+  const textX = logoDataUrl ? marginX + 20 : marginX;
+  if (logoDataUrl) {
+    doc.addImage(logoDataUrl, 'PNG', marginX, y - 11, 16, 16);
+  }
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...SLIP_DARK);
+  doc.text('PT BILAL MITRA ARYATAMA (BIMA)', textX, y - 4);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...SLIP_ORANGE);
+  doc.text('TIMESHEET BULANAN (PENDUKUNG PAYROLL)', textX, y + 1.5);
+  y += 8;
+  doc.setDrawColor(...SLIP_ORANGE); doc.setLineWidth(0.6);
+  doc.line(marginX, y, pageW - marginX, y);
+  y += 9;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_GRAY); doc.text('Nama Karyawan', marginX, y);
+  doc.setFont('helvetica', 'bold'); doc.setTextColor(...SLIP_DARK); doc.text(String(row.NamaKaryawan || '-'), marginX + 35, y);
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_GRAY); doc.text('Periode', marginX + 95, y);
+  doc.setFont('helvetica', 'bold'); doc.setTextColor(...SLIP_DARK); doc.text(`${NAMA_BULAN[row.Bulan]} ${row.Tahun}`, marginX + 130, y);
+  y += 9;
+
+  const cols = [
+    { key: 'tanggalDisplay', label: 'Tgl', w: 8, align: 'center' },
+    { key: 'hari', label: 'Hari', w: 14, align: 'left' },
+    { key: 'jamMasuk1', label: 'Masuk', w: 15, align: 'center' },
+    { key: 'jamIstirahat', label: 'Istirahat', w: 15, align: 'center' },
+    { key: 'jamMasuk2', label: 'Masuk Lagi', w: 16, align: 'center' },
+    { key: 'jamPulang', label: 'Pulang', w: 15, align: 'center' },
+    { key: 'status', label: 'Status', w: 21, align: 'center' },
+  ];
+  const ketW = contentW - cols.reduce((s, c) => s + c.w, 0);
+  cols.push({ key: 'keterangan', label: 'Keterangan', w: ketW, align: 'left' });
+
+  let cx = marginX;
+  const colX = cols.map(c => { const startX = cx; cx += c.w; return startX; });
+
+  const drawTableHeader = () => {
+    doc.setFillColor(...SLIP_DARK);
+    doc.rect(marginX, y - 4, contentW, 6, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(255, 255, 255);
+    cols.forEach((c, i) => {
+      const tx = c.align === 'center' ? colX[i] + c.w / 2 : colX[i] + 1;
+      doc.text(c.label, tx, y, { align: c.align === 'center' ? 'center' : 'left' });
+    });
+    y += 5;
+  };
+  drawTableHeader();
+
+  const pageH = doc.internal.pageSize.getHeight();
+  const rowH = 5.6;
+  const bottomLimit = pageH - 16;
+
+  timesheetData.forEach((d, idx) => {
+    if (y > bottomLimit) {
+      doc.addPage();
+      y = 16;
+      drawTableHeader();
+    }
+
+    if (idx % 2 === 1) {
+      doc.setFillColor(247, 247, 247);
+      doc.rect(marginX, y - 3.8, contentW, rowH, 'F');
+    }
+
+    const style = TIMESHEET_STATUS_STYLE[d.status] || { color: SLIP_DARK, label: d.status || '-' };
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); doc.setTextColor(...SLIP_DARK);
+
+    doc.text(String(d.tanggalDisplay || ''), colX[0] + cols[0].w / 2, y, { align: 'center' });
+    doc.text(String(d.hari || ''), colX[1] + 1, y);
+    doc.text((d.jamMasuk1 || '-').trim() || '-', colX[2] + cols[2].w / 2, y, { align: 'center' });
+    doc.text((d.jamIstirahat || '-').trim() || '-', colX[3] + cols[3].w / 2, y, { align: 'center' });
+    doc.text((d.jamMasuk2 || '-').trim() || '-', colX[4] + cols[4].w / 2, y, { align: 'center' });
+    doc.text((d.jamPulang || '-').trim() || '-', colX[5] + cols[5].w / 2, y, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(...style.color);
+    doc.text(style.label, colX[6] + cols[6].w / 2, y, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_GRAY); doc.setFontSize(6.5);
+    doc.text(truncateJsPdfText(doc, d.keterangan || '-', cols[7].w - 2), colX[7] + 1, y);
+
+    y += rowH;
+  });
+
+  y += 5;
+  doc.setDrawColor(...SLIP_LINE); doc.setLineWidth(0.3);
+  doc.line(marginX, y, pageW - marginX, y);
+  y += 5;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...SLIP_GRAY);
+  doc.text('Keterangan dihitung otomatis dari data scan absensi, jadwal TimeLimit lokasi kerja, dan pengajuan Ijin/Cuti berstatus APPROVED.', marginX, y, { maxWidth: contentW });
+  y += 4;
+  doc.text('Timesheet ini adalah dokumen pendukung payroll dan digenerate otomatis oleh sistem Fusion4 SmartGate.', marginX, y, { maxWidth: contentW });
+
+  const finalPageH = doc.internal.pageSize.getHeight();
+  doc.setDrawColor(...SLIP_LINE); doc.setLineWidth(0.2);
+  doc.line(marginX, finalPageH - 14, pageW - marginX, finalPageH - 14);
+  doc.setTextColor(...SLIP_GRAY); doc.setFontSize(7);
+  doc.text('Fusion4 SmartGate - PT Bilal Mitra Aryatama (BIMA)', marginX, finalPageH - 10);
+  doc.text('Dokumen ini digenerate otomatis dan sah tanpa tanda tangan basah.', marginX, finalPageH - 6.5);
+}
 
 async function generateSlipPdf(payrollId) {
   const row = payrollHasilState.find(r => r.Id === payrollId);
@@ -4934,6 +5065,20 @@ async function generateSlipPdf(payrollId) {
     doc.setTextColor(...SLIP_GRAY); doc.setFontSize(7);
     doc.text('Fusion4 SmartGate - PT Bilal Mitra Aryatama (BIMA)', marginX, pageH - 10);
     doc.text('Dokumen ini digenerate otomatis dan sah tanpa tanda tangan basah.', marginX, pageH - 6.5);
+
+    // ---- Halaman 2: Timesheet Bulanan (pendukung payroll), refer TimeLimit + data scan absensi real ----
+    try {
+      const { data: timesheetData, error: timesheetErr } = await supabaseClient.rpc('get_timesheet_bulanan', {
+        p_karyawan_id: row.KaryawanId, p_bulan: row.Bulan, p_tahun: row.Tahun
+      });
+      if (timesheetErr) throw timesheetErr;
+      if (Array.isArray(timesheetData) && timesheetData.length) {
+        renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW, logoDataUrl });
+      }
+    } catch (tsErr) {
+      console.warn('Gagal memuat timesheet bulanan untuk slip', row.NamaKaryawan, tsErr);
+      // Tetap lanjut generate slip halaman 1 walau timesheet gagal dimuat, biar proses payroll ga keblok.
+    }
 
     const pdfBlob = doc.output('blob');
     const uploaded = await uploadToDrive('reports', `SLIP_${(row.NamaKaryawan || 'karyawan').replace(/\s+/g, '_')}_${row.Bulan}_${row.Tahun}.pdf`, 'application/pdf', pdfBlob);
