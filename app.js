@@ -3926,6 +3926,9 @@ async function loadKompensasiPage() {
     const { data: polaData } = await supabaseClient.rpc('list_pola_kerja');
     polaKerjaState = polaData || [];
     renderKbPolaTable();
+
+    const { data: liburData } = await supabaseClient.rpc('list_hari_libur');
+    renderKbLiburTable(liburData || []);
     populateSimulatorDropdowns();
   } catch (err) {
     showToast('Gagal memuat data Kompensasi & Benefit: ' + err.message, 'error');
@@ -4437,5 +4440,61 @@ async function syncCustomKualifikasiToMasterGaji(divisi, departemen, kualifikasi
     }
   } catch (e) {
     console.warn('Gagal sinkron Kualifikasi custom ke Master Gaji:', e);
+  }
+}
+
+async function autoDeteksiJenisHari() {
+  const tanggal = document.getElementById('pengajuanTanggal')?.value;
+  const jenisHariSel = document.getElementById('pengajuanJenisHari');
+  const hintEl = document.getElementById('pengajuanJenisHariHint');
+  if (!tanggal || !jenisHariSel) return;
+
+  try {
+    const { data, error } = await supabaseClient.rpc('cek_jenis_hari', { p_tanggal: tanggal });
+    if (error) throw error;
+    if (data && data.jenis_hari) {
+      jenisHariSel.value = data.jenis_hari;
+      if (hintEl) {
+        hintEl.style.display = 'block';
+        hintEl.style.color = data.jenis_hari === 'HARI_OFF' ? '#c0392b' : '#178a4c';
+        hintEl.textContent = `🔍 Auto-terdeteksi: ${data.jenis_hari === 'HARI_OFF' ? 'Hari OFF' : 'Hari Kerja'} (${data.alasan}). Bisa diubah manual kalau perlu.`;
+      }
+    }
+  } catch (e) {
+    console.warn('Gagal auto-deteksi jenis hari:', e);
+  }
+}
+
+function renderKbLiburTable(rows) {
+  const tbody = document.getElementById('kbLiburTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${new Date(r.Tanggal).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</td>
+      <td>${escapeHtml(r.Keterangan || '-')}</td>
+      <td>${escapeHtml(r.Jenis || '-')}</td>
+    </tr>`).join('');
+}
+
+async function tambahKbLibur() {
+  const tanggal = document.getElementById('kbLiburTanggalBaru')?.value;
+  const keterangan = document.getElementById('kbLiburKeteranganBaru')?.value.trim();
+  const jenis = document.getElementById('kbLiburJenisBaru')?.value;
+  if (!tanggal || !keterangan) { showToast('Isi tanggal dan keterangan dulu.', 'error'); return; }
+
+  try {
+    const { data, error } = await supabaseClient.rpc('add_hari_libur', { p_tanggal: tanggal, p_keterangan: keterangan, p_jenis: jenis });
+    if (error) throw error;
+    if (data && data.status === 'SUCCESS') {
+      showToast('Hari libur berhasil ditambahkan.', 'success');
+      document.getElementById('kbLiburTanggalBaru').value = '';
+      document.getElementById('kbLiburKeteranganBaru').value = '';
+      const { data: liburData } = await supabaseClient.rpc('list_hari_libur');
+      renderKbLiburTable(liburData || []);
+    } else {
+      showToast((data && data.message) || 'Gagal menambahkan.', 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
   }
 }

@@ -860,6 +860,26 @@
             <button type="button" class="btn-primary" onclick="simpanSemuaKbPola()">💾 Simpan Semua Perubahan</button>
           </div>
         </div>
+
+        <div class="card table-card" style="margin-top:16px;">
+          <div class="card-header"><h3>📅 Hari Libur Nasional &amp; Cuti Bersama</h3></div>
+          <p style="font-size:11px; color:#8a94a3; padding:0 4px 8px;">Sumber: SKB 3 Menteri. Sabtu &amp; Minggu otomatis kedeteksi tanpa perlu didaftar di sini. Tambah tanggal baru tiap tahun di bawah.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; padding:0 4px 12px;">
+            <input type="date" id="kbLiburTanggalBaru" style="flex:1; min-width:140px;">
+            <input type="text" id="kbLiburKeteranganBaru" placeholder="Keterangan (misal: Idulfitri 1448 H)" style="flex:2; min-width:180px;">
+            <select id="kbLiburJenisBaru" style="flex:1; min-width:140px;">
+              <option value="Libur Nasional">Libur Nasional</option>
+              <option value="Cuti Bersama">Cuti Bersama</option>
+            </select>
+            <button type="button" class="btn-secondary" onclick="tambahKbLibur()">+ Tambah</button>
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th></tr></thead>
+              <tbody id="kbLiburTableBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1201,7 +1221,7 @@
         </div>
         <div class="input-group" style="margin-top: 12px;">
           <label for="pengajuanTanggal">Tanggal Pelaksanaan</label>
-          <input type="date" id="pengajuanTanggal" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+          <input type="date" id="pengajuanTanggal" required onchange="autoDeteksiJenisHari()" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
         </div>
         <div id="groupPengajuanLemburExtra" style="display: none; margin-top: 12px;">
           <div class="input-group">
@@ -1220,6 +1240,7 @@
               <option value="HARI_KERJA">Hari Kerja Normal</option>
               <option value="HARI_OFF">Hari OFF / Istirahat (misal piket weekend)</option>
             </select>
+            <span id="pengajuanJenisHariHint" style="font-size: 11px; color: #8a94a3; display: none;"></span>
           </div>
         </div>
         <div class="input-group" style="margin-top: 12px;">
