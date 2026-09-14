@@ -4842,6 +4842,26 @@ function truncateJsPdfText(doc, text, maxWidth) {
   return t + '…';
 }
 
+// Format total menit jadi "J:MM" (contoh 363 menit -> "6:03"). Dipakai buat kolom Jam Kerja timesheet
+// dan ringkasan jam di halaman 1.
+function formatJamMenit(totalMenit) {
+  const m = Math.max(0, Math.round(Number(totalMenit) || 0));
+  const j = Math.floor(m / 60);
+  const sisa = m % 60;
+  return j + ':' + String(sisa).padStart(2, '0');
+}
+
+// Jumlahkan field jam (dalam menit) dari seluruh hari di timesheetData satu bulan.
+function sumTimesheetJam(timesheetData) {
+  const out = { regularMenit: 0, lemburRegulerMenit: 0, lemburOffMenit: 0 };
+  (timesheetData || []).forEach(d => {
+    out.regularMenit += Number(d.jamRegularMenit || 0);
+    out.lemburRegulerMenit += Number(d.jamLemburRegulerMenit || 0);
+    out.lemburOffMenit += Number(d.jamLemburOffMenit || 0);
+  });
+  return out;
+}
+
 // ---- Halaman 2 Slip Gaji: Timesheet Bulanan (pendukung payroll) ----
 // timesheetData: array hasil RPC get_timesheet_bulanan (satu objek per tanggal dalam periode).
 function renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW, logoDataUrl }) {
@@ -4875,10 +4895,11 @@ function renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW
   const cols = [
     { key: 'tanggalDisplay', label: 'Tgl', w: 6, align: 'center' },
     { key: 'hari', label: 'Hari', w: 10, align: 'left' },
-    { key: 'jamMasuk1', label: 'Masuk', w: 13, align: 'center' },
+    { key: 'jamMasuk1', label: 'Masuk', w: 11, align: 'center' },
     { key: 'jamIstirahat', label: 'Istirahat', w: 13, align: 'center' },
     { key: 'jamMasuk2', label: 'Masuk Lagi', w: 15, align: 'center' },
-    { key: 'jamPulang', label: 'Pulang', w: 13, align: 'center' },
+    { key: 'jamPulang', label: 'Pulang', w: 11, align: 'center' },
+    { key: 'jamKerja', label: 'Jam', w: 12, align: 'center' },
     { key: 'status', label: 'Status', w: 21, align: 'center' },
   ];
   const ketW = contentW - cols.reduce((s, c) => s + c.w, 0);
@@ -4925,21 +4946,58 @@ function renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW
     doc.text((d.jamMasuk2 || '-').trim() || '-', colX[4] + cols[4].w / 2, y, { align: 'center' });
     doc.text((d.jamPulang || '-').trim() || '-', colX[5] + cols[5].w / 2, y, { align: 'center' });
 
-    doc.setFont('helvetica', 'bold'); doc.setTextColor(...style.color);
-    doc.text(style.label, colX[6] + cols[6].w / 2, y, { align: 'center' });
+    // Jam kerja aktual hari itu (Jam Regular + Jam Lembur Reguler/Off) -- dari get_timesheet_bulanan.
+    // Dikasih warna oranye kalau ada komponen lembur di dalamnya, biar kelihatan beda dari jam biasa.
+    const jamAktual = Number(d.jamAktualMenit || 0);
+    const adaLembur = Number(d.jamLemburRegulerMenit || 0) > 0 || Number(d.jamLemburOffMenit || 0) > 0;
+    doc.setFont('helvetica', adaLembur ? 'bold' : 'normal'); doc.setFontSize(6.8);
+    doc.setTextColor(...(adaLembur ? SLIP_ORANGE : SLIP_DARK));
+    doc.text(jamAktual > 0 ? formatJamMenit(jamAktual) : '-', colX[6] + cols[6].w / 2, y, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(...style.color); doc.setFontSize(6.8);
+    doc.text(style.label, colX[7] + cols[7].w / 2, y, { align: 'center' });
 
     doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_GRAY); doc.setFontSize(6.2);
-    doc.text(truncateJsPdfText(doc, d.keterangan || '-', cols[7].w - 2), colX[7] + 1, y);
+    doc.text(truncateJsPdfText(doc, d.keterangan || '-', cols[8].w - 2), colX[8] + 1, y);
 
     y += rowH;
   });
 
   y += 5;
+  // Total jam + catatan penutup butuh ~40mm; kalau tabel udah mepet ke bawah, pindah ke halaman baru
+  // dulu biar gak numpuk/kepotong sama footer.
+  if (y > pageH - 40) {
+    doc.addPage();
+    y = 16;
+  }
   doc.setDrawColor(...SLIP_LINE); doc.setLineWidth(0.3);
   doc.line(marginX, y, pageW - marginX, y);
-  y += 5;
+  y += 6;
+
+  // ---- Total jam sebulan (detail perhitungan Rupiah-nya ada di ringkasan halaman 1) ----
+  const totalJam = sumTimesheetJam(timesheetData);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...SLIP_DARK);
+  doc.text('Total Jam Kerja Bulan Ini', marginX, y);
+  y += 6;
+  const jamStats = [
+    ['Jam Regular', formatJamMenit(totalJam.regularMenit), SLIP_DARK],
+    ['Jam Lembur Reguler', formatJamMenit(totalJam.lemburRegulerMenit), SLIP_ORANGE],
+    ['Jam Lembur Hari Off/Libur', formatJamMenit(totalJam.lemburOffMenit), SLIP_ORANGE],
+  ];
+  const statW = contentW / 3;
+  jamStats.forEach((s, i) => {
+    const sx = marginX + i * statW;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...SLIP_GRAY);
+    doc.text(s[0], sx, y);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...s[2]);
+    doc.text(s[1] + ' jam', sx, y + 6);
+  });
+  y += 12;
+
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...SLIP_GRAY);
   doc.text('Keterangan dihitung otomatis dari data scan absensi, jadwal TimeLimit lokasi kerja, dan pengajuan Ijin/Cuti berstatus APPROVED.', marginX, y, { maxWidth: contentW });
+  y += 4;
+  doc.text('Kolom Jam menunjukkan jam kerja aktual per hari (oranye = mengandung komponen lembur). Rincian nilai Rupiah lembur ada di halaman 1.', marginX, y, { maxWidth: contentW });
   y += 4;
   doc.text('Timesheet ini adalah dokumen pendukung payroll dan digenerate otomatis oleh sistem Fusion4 SmartGate.', marginX, y, { maxWidth: contentW });
 
@@ -5052,6 +5110,55 @@ async function generateSlipPdf(payrollId) {
     doc.text(rp(row.TakeHomePay), pageW - marginX - 4, y + 2.5, { align: 'right' });
     y += 18;
 
+    // ---- Ambil timesheet bulanan lebih awal (dipakai buat Ringkasan Jam Kerja di halaman 1 ini
+    // DAN buat render tabel lengkap di halaman 2 -- jadi cuma fetch sekali). ----
+    let timesheetData = null;
+    try {
+      const { data: tsData, error: timesheetErr } = await supabaseClient.rpc('get_timesheet_bulanan', {
+        p_karyawan_id: row.KaryawanId, p_bulan: row.Bulan, p_tahun: row.Tahun
+      });
+      if (timesheetErr) throw timesheetErr;
+      if (Array.isArray(tsData) && tsData.length) timesheetData = tsData;
+    } catch (tsErr) {
+      console.warn('Gagal memuat timesheet bulanan untuk slip', row.NamaKaryawan, tsErr);
+      // Tetap lanjut generate slip walau timesheet gagal dimuat, biar proses payroll ga keblok.
+    }
+
+    // ---- Ringkasan Jam Kerja (dari timesheet, referensi Pola Kerja karyawan) ----
+    if (timesheetData) {
+      const totalJam = sumTimesheetJam(timesheetData);
+      const polaRef = (timesheetData[0] && timesheetData[0].polaKerjaRef) || {};
+      const pembagi = Number(polaRef.pembagiJamKerja) || 173;
+      const multKerja = Number(polaRef.multiplierHariKerja) || 1.5;
+      const multOff = Number(polaRef.multiplierHariOff) || 2;
+      const tarifPerJam = Number(row.GajiPokok || 0) / pembagi;
+      const rpLemburReguler = tarifPerJam * (totalJam.lemburRegulerMenit / 60) * multKerja;
+      const rpLemburOff = tarifPerJam * (totalJam.lemburOffMenit / 60) * multOff;
+
+      doc.setDrawColor(...SLIP_ORANGE); doc.setFillColor(...SLIP_ORANGE);
+      doc.rect(marginX, y - 3.5, 1.2, 4.5, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...SLIP_DARK);
+      doc.text('RINGKASAN JAM KERJA (LAMPIRAN TIMESHEET HAL. 2)', marginX + 4, y);
+      y += 7;
+
+      const jamRows = [
+        ['Jam Regular', formatJamMenit(totalJam.regularMenit) + ' jam', null],
+        ['Jam Lembur Reguler (otomatis, x' + multKerja + ')', formatJamMenit(totalJam.lemburRegulerMenit) + ' jam', rp(rpLemburReguler)],
+        ['Jam Lembur Hari Off/Libur (x' + multOff + ')', formatJamMenit(totalJam.lemburOffMenit) + ' jam', rp(rpLemburOff)],
+      ];
+      doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_DARK);
+      jamRows.forEach(r => {
+        doc.text(r[0], marginX, y);
+        doc.text(r[1], marginX + 110, y, { align: 'right' });
+        if (r[2]) doc.text('~ ' + r[2], pageW - marginX, y, { align: 'right' });
+        y += 5.5;
+      });
+      y += 1;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...SLIP_GRAY);
+      doc.text('Estimasi Rupiah lembur di atas dihitung dari Gaji Pokok / Pembagi Jam Kerja x jam x multiplier Pola Kerja, buat cross-check HR -- bukan pengganti field Nilai Lembur di atas.', marginX, y, { maxWidth: contentW });
+      y += 9;
+    }
+
     doc.setTextColor(...SLIP_GRAY); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
     doc.text('Catatan: Potongan BPJS hanya porsi karyawan. Perusahaan menanggung tambahan BPJS Kesehatan, JHT, JP, JKK, dan JKM.', marginX, y, { maxWidth: contentW });
     y += 4;
@@ -5068,17 +5175,8 @@ async function generateSlipPdf(payrollId) {
     doc.text('Dokumen ini digenerate otomatis dan sah tanpa tanda tangan basah.', marginX, pageH - 6.5);
 
     // ---- Halaman 2: Timesheet Bulanan (pendukung payroll), refer TimeLimit + data scan absensi real ----
-    try {
-      const { data: timesheetData, error: timesheetErr } = await supabaseClient.rpc('get_timesheet_bulanan', {
-        p_karyawan_id: row.KaryawanId, p_bulan: row.Bulan, p_tahun: row.Tahun
-      });
-      if (timesheetErr) throw timesheetErr;
-      if (Array.isArray(timesheetData) && timesheetData.length) {
-        renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW, logoDataUrl });
-      }
-    } catch (tsErr) {
-      console.warn('Gagal memuat timesheet bulanan untuk slip', row.NamaKaryawan, tsErr);
-      // Tetap lanjut generate slip halaman 1 walau timesheet gagal dimuat, biar proses payroll ga keblok.
+    if (timesheetData) {
+      renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW, logoDataUrl });
     }
 
     const pdfBlob = doc.output('blob');
