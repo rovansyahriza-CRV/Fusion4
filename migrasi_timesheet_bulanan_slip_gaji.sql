@@ -7,11 +7,16 @@
 --    udah ngunci window jam pulang duluan (gak bisa pulang sebelum waktunya kecuali pakai
 --    Voucher Ijin yang APPROVED), jadi begitu ada record Pulang berarti udah sah.
 -- 3. Cek Ijin/Cuti APPROVED dari pengajuan_ijin_lembur_tbl buat keterangan CUTI/IJIN.
+-- 4. Status "HADIR_LENGKAP" cuma buat hari yang beneran bersih (semua slot keisi, gak ada
+--    telat di atas toleransi). Kalau ada slot kosong atau telat -> status jadi
+--    "KURANG_LENGKAP" (walau sesi absennya udah CLOSED), biar HR gak ketutup status hijau
+--    seolah beres padahal ada yang perlu diperhatikan.
 -- Sudah diverifikasi ke data real:
---   - Anelka Bugihadinata Hariyono (KaryawanId 14) 31 Agustus 2026 ->
+--   - Anelka Bugihadinata Hariyono (KaryawanId 14) 31 Agustus 2026 -> status KURANG_LENGKAP,
 --     "Tidak absen: Masuk, Istirahat; Masuk Lagi telat 207 menit (limit 13:00)"
 --   - Noor Arifin (KaryawanId 19) September 2026 -> telat Masuk 1-13 menit gak kena catatan
---     (masih toleransi), telat Masuk Lagi 22/47/55 menit tetap kena catatan.
+--     (masih toleransi, tetap HADIR_LENGKAP), telat Masuk Lagi 22/47/55 menit tetap kena
+--     catatan dan jadi KURANG_LENGKAP.
 -- =====================================================================================
 
 CREATE OR REPLACE FUNCTION public.get_timesheet_bulanan(p_karyawan_id bigint, p_bulan integer, p_tahun integer)
@@ -118,7 +123,6 @@ BEGIN
         END IF;
 
         IF v_absen."Id" IS NOT NULL AND v_absen."Status" = 'CLOSED' THEN
-            v_status := 'HADIR_LENGKAP';
             v_parts := ARRAY[]::TEXT[];
             IF (v_jenis->>'jenis_hari') = 'HARI_OFF' THEN
                 v_parts := array_append(v_parts, 'Masuk di hari libur/off');
@@ -129,6 +133,16 @@ BEGIN
             IF array_length(v_telat, 1) IS NOT NULL THEN
                 v_parts := v_parts || v_telat;
             END IF;
+
+            -- Ada slot yang gak keisi (misal gak absen Masuk pagi/Istirahat/Masuk Lagi) atau telat
+            -- di atas toleransi -> statusnya "Kurang Lengkap", bukan "Hadir Lengkap", biar HR langsung
+            -- kelihatan ada yang perlu diperhatikan, bukan ketutup status hijau seolah-olah beres.
+            IF array_length(v_missing, 1) IS NOT NULL OR array_length(v_telat, 1) IS NOT NULL THEN
+                v_status := 'KURANG_LENGKAP';
+            ELSE
+                v_status := 'HADIR_LENGKAP';
+            END IF;
+
             v_keterangan := CASE WHEN array_length(v_parts, 1) IS NULL THEN '-' ELSE array_to_string(v_parts, '; ') END;
         ELSIF v_absen."Id" IS NOT NULL THEN
             v_status := 'PARSIAL';

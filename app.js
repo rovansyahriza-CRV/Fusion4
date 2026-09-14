@@ -4823,6 +4823,7 @@ const SLIP_BLUE = [40, 100, 180];
 
 const TIMESHEET_STATUS_STYLE = {
   HADIR_LENGKAP: { color: SLIP_GREEN, label: 'Hadir Lengkap' },
+  KURANG_LENGKAP: { color: SLIP_ORANGE, label: 'Kurang Lengkap' },
   PARSIAL: { color: SLIP_ORANGE, label: 'Parsial' },
   CUTI: { color: SLIP_BLUE, label: 'Cuti' },
   IJIN: { color: SLIP_BLUE, label: 'Ijin' },
@@ -4878,7 +4879,7 @@ function renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW
     { key: 'jamIstirahat', label: 'Istirahat', w: 13, align: 'center' },
     { key: 'jamMasuk2', label: 'Masuk Lagi', w: 15, align: 'center' },
     { key: 'jamPulang', label: 'Pulang', w: 13, align: 'center' },
-    { key: 'status', label: 'Status', w: 19, align: 'center' },
+    { key: 'status', label: 'Status', w: 21, align: 'center' },
   ];
   const ketW = contentW - cols.reduce((s, c) => s + c.w, 0);
   cols.push({ key: 'keterangan', label: 'Keterangan', w: ketW, align: 'left' });
@@ -4927,7 +4928,7 @@ function renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW
     doc.setFont('helvetica', 'bold'); doc.setTextColor(...style.color);
     doc.text(style.label, colX[6] + cols[6].w / 2, y, { align: 'center' });
 
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_GRAY); doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_GRAY); doc.setFontSize(6.2);
     doc.text(truncateJsPdfText(doc, d.keterangan || '-', cols[7].w - 2), colX[7] + 1, y);
 
     y += rowH;
