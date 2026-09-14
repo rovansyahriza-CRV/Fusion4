@@ -4472,34 +4472,99 @@ async function autoDeteksiJenisHari() {
   }
 }
 
+let kbLiburState = [];
+
 function renderKbLiburTable(rows) {
+  if (rows) kbLiburState = rows;
   const tbody = document.getElementById('kbLiburTableBody');
+  const tahunSel = document.getElementById('kbLiburFilterTahun');
   if (!tbody) return;
-  tbody.innerHTML = rows.map(r => `
+
+  // Populate filter tahun (sekali per data baru, tapi aman dipanggil berulang)
+  if (tahunSel) {
+    const currentVal = tahunSel.value;
+    const tahunList = [...new Set(kbLiburState.map(r => new Date(r.Tanggal).getFullYear()))].sort((a, b) => b - a);
+    tahunSel.innerHTML = '<option value="">Semua Tahun</option>' + tahunList.map(t => `<option value="${t}">${t}</option>`).join('');
+    tahunSel.value = currentVal;
+  }
+
+  const filterTahun = tahunSel?.value || '';
+  const filtered = filterTahun
+    ? kbLiburState.filter(r => new Date(r.Tanggal).getFullYear() === Number(filterTahun))
+    : kbLiburState;
+
+  tbody.innerHTML = filtered.map(r => `
     <tr>
       <td>${new Date(r.Tanggal).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</td>
       <td>${escapeHtml(r.Keterangan || '-')}</td>
       <td>${escapeHtml(r.Jenis || '-')}</td>
+      <td style="white-space:nowrap;">
+        <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="editKbLibur(${r.Id})">✏️</button>
+        <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px; color:#c0392b;" onclick="deleteKbLibur(${r.Id})">🗑️</button>
+      </td>
     </tr>`).join('');
 }
 
+function editKbLibur(id) {
+  const row = kbLiburState.find(r => r.Id === id);
+  if (!row) return;
+  document.getElementById('kbLiburEditId').value = row.Id;
+  document.getElementById('kbLiburTanggalBaru').value = row.Tanggal;
+  document.getElementById('kbLiburKeteranganBaru').value = row.Keterangan || '';
+  document.getElementById('kbLiburJenisBaru').value = row.Jenis || 'Libur Nasional';
+  document.getElementById('kbLiburSubmitBtn').textContent = '💾 Simpan Perubahan';
+  document.getElementById('kbLiburBatalBtn').style.display = 'inline-block';
+}
+
+function batalEditKbLibur() {
+  document.getElementById('kbLiburEditId').value = '';
+  document.getElementById('kbLiburTanggalBaru').value = '';
+  document.getElementById('kbLiburKeteranganBaru').value = '';
+  document.getElementById('kbLiburJenisBaru').value = 'Libur Nasional';
+  document.getElementById('kbLiburSubmitBtn').textContent = '+ Tambah';
+  document.getElementById('kbLiburBatalBtn').style.display = 'none';
+}
+
 async function tambahKbLibur() {
+  const editId = document.getElementById('kbLiburEditId')?.value;
   const tanggal = document.getElementById('kbLiburTanggalBaru')?.value;
   const keterangan = document.getElementById('kbLiburKeteranganBaru')?.value.trim();
   const jenis = document.getElementById('kbLiburJenisBaru')?.value;
   if (!tanggal || !keterangan) { showToast('Isi tanggal dan keterangan dulu.', 'error'); return; }
 
   try {
-    const { data, error } = await supabaseClient.rpc('add_hari_libur', { p_tanggal: tanggal, p_keterangan: keterangan, p_jenis: jenis });
+    const rpcName = editId ? 'update_hari_libur' : 'add_hari_libur';
+    const params = editId
+      ? { p_id: Number(editId), p_tanggal: tanggal, p_keterangan: keterangan, p_jenis: jenis }
+      : { p_tanggal: tanggal, p_keterangan: keterangan, p_jenis: jenis };
+    const { data, error } = await supabaseClient.rpc(rpcName, params);
     if (error) throw error;
     if (data && data.status === 'SUCCESS') {
-      showToast('Hari libur berhasil ditambahkan.', 'success');
-      document.getElementById('kbLiburTanggalBaru').value = '';
-      document.getElementById('kbLiburKeteranganBaru').value = '';
+      showToast(editId ? 'Hari libur berhasil diperbarui.' : 'Hari libur berhasil ditambahkan.', 'success');
+      batalEditKbLibur();
       const { data: liburData } = await supabaseClient.rpc('list_hari_libur');
       renderKbLiburTable(liburData || []);
     } else {
-      showToast((data && data.message) || 'Gagal menambahkan.', 'error');
+      showToast((data && data.message) || 'Gagal menyimpan.', 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function deleteKbLibur(id) {
+  const row = kbLiburState.find(r => r.Id === id);
+  if (!row) return;
+  if (!confirm(`Hapus "${row.Keterangan}" (${row.Tanggal})?`)) return;
+  try {
+    const { data, error } = await supabaseClient.rpc('delete_hari_libur', { p_id: id });
+    if (error) throw error;
+    if (data && data.status === 'SUCCESS') {
+      showToast('Hari libur berhasil dihapus.', 'success');
+      const { data: liburData } = await supabaseClient.rpc('list_hari_libur');
+      renderKbLiburTable(liburData || []);
+    } else {
+      showToast((data && data.message) || 'Gagal menghapus.', 'error');
     }
   } catch (e) {
     showToast('Error: ' + e.message, 'error');

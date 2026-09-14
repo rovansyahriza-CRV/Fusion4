@@ -864,6 +864,7 @@
         <div class="card table-card" style="margin-top:16px;">
           <div class="card-header"><h3>📅 Hari Libur Nasional &amp; Cuti Bersama</h3></div>
           <p style="font-size:11px; color:#8a94a3; padding:0 4px 8px;">Sumber: SKB 3 Menteri. Sabtu &amp; Minggu otomatis kedeteksi tanpa perlu didaftar di sini. Tambah tanggal baru tiap tahun di bawah.</p>
+          <input type="hidden" id="kbLiburEditId" value="">
           <div style="display:flex; gap:8px; flex-wrap:wrap; padding:0 4px 12px;">
             <input type="date" id="kbLiburTanggalBaru" style="flex:1; min-width:140px;">
             <input type="text" id="kbLiburKeteranganBaru" placeholder="Keterangan (misal: Idulfitri 1448 H)" style="flex:2; min-width:180px;">
@@ -871,11 +872,18 @@
               <option value="Libur Nasional">Libur Nasional</option>
               <option value="Cuti Bersama">Cuti Bersama</option>
             </select>
-            <button type="button" class="btn-secondary" onclick="tambahKbLibur()">+ Tambah</button>
+            <button type="button" class="btn-primary" id="kbLiburSubmitBtn" onclick="tambahKbLibur()">+ Tambah</button>
+            <button type="button" class="btn-secondary" id="kbLiburBatalBtn" onclick="batalEditKbLibur()" style="display:none;">Batal</button>
+          </div>
+          <div style="padding:0 4px 10px;">
+            <label for="kbLiburFilterTahun" style="font-size:12px; margin-right:8px;">Tahun:</label>
+            <select id="kbLiburFilterTahun" onchange="renderKbLiburTable()" style="padding:6px 10px; border-radius:6px; border:1px solid #e6ded9;">
+              <option value="">Semua Tahun</option>
+            </select>
           </div>
           <div class="table-responsive">
             <table>
-              <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th></tr></thead>
+              <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Aksi</th></tr></thead>
               <tbody id="kbLiburTableBody"></tbody>
             </table>
           </div>
