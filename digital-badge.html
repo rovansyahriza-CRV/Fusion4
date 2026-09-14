@@ -966,7 +966,7 @@ async function submitPin() {
 
   function renderPayrollSlip(data) {
     const el = document.getElementById('payrollSlipBox');
-    if (!el || !data) return;
+    if (!el || !data || Array.isArray(data) || !data.report_url) return;
     el.style.display = 'block';
     el.style.cssText += "background:#fffbeb; border:1.5px solid #f59e0b; border-radius:12px; padding:12px 14px;";
     const thpFormatted = 'Rp ' + Math.round(Number(data.thp || 0)).toLocaleString('id-ID');
@@ -984,7 +984,7 @@ async function submitPin() {
 
   function renderAttendanceStatus(data) {
     const el = document.getElementById('attendanceStatusBox');
-    if (!el || !data) return;
+    if (!el || !data || Array.isArray(data)) return;
 
     if (data.status === 'BELUM_ABSEN') {
       el.style.display = 'none';
