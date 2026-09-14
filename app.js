@@ -4758,8 +4758,8 @@ function renderPayrollHasilTable() {
       <td>
         ${r.ReportURL
           ? `<a href="${r.ReportURL}" target="_blank" class="report-link">📄 Lihat</a>
-             <button type="button" class="btn-secondary" style="padding:4px 6px; font-size:11px; margin-left:4px;" onclick="generateSlipPdf(${r.Id})" title="Generate ulang slip (misal habis update format PDF)">🔄</button>`
-          : `<button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="generateSlipPdf(${r.Id})">Generate</button>`}
+             <button type="button" class="btn-secondary" style="padding:4px 6px; font-size:11px; margin-left:4px;" onclick="generateSlipPdfSingle(${r.Id})" title="Generate ulang slip (misal habis update format PDF)">🔄</button>`
+          : `<button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="generateSlipPdfSingle(${r.Id})">Generate</button>`}
       </td>
     </tr>`;
   }).join('');
@@ -5106,6 +5106,19 @@ function setSlipGenProgress(shown, { current, total, label } = {}) {
     bar.style.width = pct + '%';
     cnt.textContent = `${current}/${total}`;
     if (label) lbl.textContent = label;
+  }
+}
+
+// Dipakai tombol "Generate"/"🔄 Generate Ulang" per-baris di tabel, biar tetep kelihatan progress-nya
+// (sekarang generateSlipPdf lebih lama karena juga narik timesheet bulanan buat halaman 2).
+async function generateSlipPdfSingle(payrollId) {
+  const row = payrollHasilState.find(r => r.Id === payrollId);
+  setSlipGenProgress(true, { current: 0, total: 1, label: `Membuat slip ${row ? row.NamaKaryawan : ''}...` });
+  try {
+    await generateSlipPdf(payrollId);
+  } finally {
+    setSlipGenProgress(true, { current: 1, total: 1, label: 'Selesai' });
+    setTimeout(() => setSlipGenProgress(false), 700);
   }
 }
 
