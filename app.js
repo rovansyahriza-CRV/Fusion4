@@ -4862,6 +4862,67 @@ function sumTimesheetJam(timesheetData) {
   return out;
 }
 
+// ---- Estimasi Potongan Jam Kurang (khusus Pekerja Lapangan 8/10/12 Jam) ----
+// Kebijakan (dikonfirmasi bareng CRV):
+// 1. Target Jam Wajib Bulanan = PembagiJamKerja pola kerja (173, sesuai 40 jam/minggu dirata-ratain
+//    setahun -- angka yang sama dipakai buat tarif per jam, biar satu sumber angka) -- TAPI
+//    DIPRORATA sesuai porsi hari kerja (jenisHari=HARI_KERJA) yang jadwalnya udah lewat s/d hari
+//    ini (dibanding total hari kerja terjadwal sebulan penuh). Ini buat nyegah kasus slip yang
+//    digenerate di tengah periode berjalan (misal tanggal 14) nunjukin "kekurangan" jam kayak
+//    karyawan gagal penuhin target SEBULAN PENUH, padahal sisa harinya emang belum kejalanin.
+//    Kalau periode udah closed (semua hari kerja di bulan itu udah lewat tanggalnya), rasionya
+//    otomatis 1 alias balik ke target penuh kayak biasa.
+// 2. Jam Aktual Bulanan = total (Jam Regular + Jam Lembur Reguler) sebulan, DITAMBAH kredit hari
+//    Cuti/Ijin APPROVED (dianggap "lunas" senilai jam normal pola hari itu -- JamNormalPerHari +
+//    JamLemburOtomatisPerHari -- karena cuti/ijin resmi gak boleh dipotong gajinya).
+// 3. Kekurangan Kasar = MAX(0, Jam Wajib Bulanan (prorata) - Jam Aktual Bulanan).
+// 4. Surplus Jam Off = total Jam Lembur Hari Off sebulan (masuk pas hari libur/off) -- dipakai
+//    buat NUTUP kekurangan dulu (netting) sebelum dipotong, biar karyawan yang udah masuk pas
+//    hari off-nya gak double rugi. Surplus ini TETAP dibayar penuh sebagai lembur hari off,
+//    cuma pengaruh ke ada/nggaknya potongan, bukan ke nilai lemburnya.
+// 5. Kekurangan Bersih = MAX(0, Kekurangan Kasar - Surplus Jam Off) -- ini yang dipotong, pakai
+//    tarif flat (Gaji Pokok / PembagiJamKerja), TANPA multiplier (bukan lembur, jadi gak dikali).
+// Cuma berlaku buat Pola Kerja Kategori "Pekerja Lapangan" (8/10/12 Jam) -- Staff/PMT (Reguler
+// lumpsum, Rotasi 3 Bulan "gaji penuh tanpa potongan") di luar cakupan ini.
+// Estimasi doang buat cross-check HR -- BELUM otomatis motong TotalPotongan/TakeHomePay di slip
+// (itu masih hasil RPC payroll utama yang terpisah).
+function hitungPotonganJamKurang(timesheetData, row) {
+  const polaRef = (timesheetData[0] && timesheetData[0].polaKerjaRef) || {};
+  if (polaRef.kategori !== 'Pekerja Lapangan') return null;
+
+  const pembagi = Number(polaRef.pembagiJamKerja) || 173;
+  const jamNormalMenit = Math.round((Number(polaRef.jamNormalPerHari) || 8) * 60);
+  const jamLemburOtomatisMenit = Math.round((Number(polaRef.jamLemburOtomatisPerHari) || 0) * 60);
+  const kreditCutiIjinMenit = jamNormalMenit + jamLemburOtomatisMenit;
+
+  const hariIni = getTodayDateString();
+  let jamAktualBulananMenit = 0;
+  let surplusOffMenit = 0;
+  let totalHariKerjaSebulan = 0;
+  let hariKerjaTerlewati = 0;
+  (timesheetData || []).forEach(d => {
+    if (d.status === 'CUTI' || d.status === 'IJIN') {
+      jamAktualBulananMenit += kreditCutiIjinMenit;
+    } else {
+      jamAktualBulananMenit += Number(d.jamRegularMenit || 0) + Number(d.jamLemburRegulerMenit || 0);
+    }
+    surplusOffMenit += Number(d.jamLemburOffMenit || 0);
+    if (d.jenisHari === 'HARI_KERJA') {
+      totalHariKerjaSebulan++;
+      if (d.tanggal && d.tanggal <= hariIni) hariKerjaTerlewati++;
+    }
+  });
+
+  const rasioTerlewati = totalHariKerjaSebulan > 0 ? Math.min(1, hariKerjaTerlewati / totalHariKerjaSebulan) : 0;
+  const jamWajibMenit = Math.round(pembagi * 60 * rasioTerlewati);
+  const kekuranganKasarMenit = Math.max(0, jamWajibMenit - jamAktualBulananMenit);
+  const kekuranganBersihMenit = Math.max(0, kekuranganKasarMenit - surplusOffMenit);
+  const tarifPerJam = Number(row.GajiPokok || 0) / pembagi;
+  const potonganRp = tarifPerJam * (kekuranganBersihMenit / 60);
+
+  return { jamWajibMenit, jamAktualBulananMenit, kekuranganKasarMenit, surplusOffMenit, kekuranganBersihMenit, potonganRp, rasioTerlewati };
+}
+
 // ---- Halaman 2 Slip Gaji: Timesheet Bulanan (pendukung payroll) ----
 // timesheetData: array hasil RPC get_timesheet_bulanan (satu objek per tanggal dalam periode).
 function renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW, logoDataUrl }) {
@@ -5142,12 +5203,28 @@ async function generateSlipPdf(payrollId) {
       y += 7;
 
       const jamRows = [
-        ['Jam Regular', formatJamMenit(totalJam.regularMenit) + ' jam', null],
-        ['Jam Lembur Reguler (otomatis, x' + multKerja + ')', formatJamMenit(totalJam.lemburRegulerMenit) + ' jam', rp(rpLemburReguler)],
-        ['Jam Lembur Hari Off/Libur (x' + multOff + ')', formatJamMenit(totalJam.lemburOffMenit) + ' jam', rp(rpLemburOff)],
+        ['Jam Regular', formatJamMenit(totalJam.regularMenit) + ' jam', null, null],
+        ['Jam Lembur Reguler (otomatis, x' + multKerja + ')', formatJamMenit(totalJam.lemburRegulerMenit) + ' jam', rp(rpLemburReguler), null],
+        ['Jam Lembur Hari Off/Libur (x' + multOff + ')', formatJamMenit(totalJam.lemburOffMenit) + ' jam', rp(rpLemburOff), null],
       ];
+
+      // ---- Estimasi Potongan Jam Kurang (cuma Pekerja Lapangan 8/10/12 Jam) ----
+      const potonganJamKurang = hitungPotonganJamKurang(timesheetData, row);
+      if (potonganJamKurang) {
+        const targetLabel = potonganJamKurang.rasioTerlewati < 1
+          ? 'target prorata ' + formatJamMenit(potonganJamKurang.jamWajibMenit) + ' jam s/d hari ini'
+          : 'target ' + pembagi + ' jam/bln';
+        jamRows.push([
+          'Kekurangan Jam (net. surplus off, ' + targetLabel + ')',
+          formatJamMenit(potonganJamKurang.kekuranganBersihMenit) + ' jam',
+          (potonganJamKurang.kekuranganBersihMenit > 0 ? '- ' + rp(potonganJamKurang.potonganRp) : rp(0)),
+          SLIP_RED,
+        ]);
+      }
+
       doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_DARK);
       jamRows.forEach(r => {
+        doc.setTextColor(...(r[3] || SLIP_DARK));
         doc.text(r[0], marginX, y);
         doc.text(r[1], marginX + 110, y, { align: 'right' });
         if (r[2]) doc.text('~ ' + r[2], pageW - marginX, y, { align: 'right' });
@@ -5155,8 +5232,22 @@ async function generateSlipPdf(payrollId) {
       });
       y += 1;
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...SLIP_GRAY);
-      doc.text('Estimasi Rupiah lembur di atas dihitung dari Gaji Pokok / Pembagi Jam Kerja x jam x multiplier Pola Kerja, buat cross-check HR -- bukan pengganti field Nilai Lembur di atas.', marginX, y, { maxWidth: contentW });
-      y += 9;
+      // Pakai splitTextToSize + y dinamis (bukan y += angka tetap) buat ngukur beneran berapa baris
+      // yang kepakai -- soalnya panjang teksnya bisa berubah-ubah (ex: klausa prorata di bawah),
+      // jadi spasi fixed gampang numpuk/overlap kalau teksnya jadi lebih panjang dari perkiraan.
+      const catatanRupiahLines = doc.splitTextToSize('Estimasi Rupiah lembur di atas dihitung dari Gaji Pokok / Pembagi Jam Kerja x jam x multiplier Pola Kerja, buat cross-check HR -- bukan pengganti field Nilai Lembur di atas.', contentW);
+      doc.text(catatanRupiahLines, marginX, y);
+      y += catatanRupiahLines.length * 3.4 + 2;
+      if (potonganJamKurang) {
+        const targetNote = potonganJamKurang.rasioTerlewati < 1
+          ? 'diprorata sesuai hari kerja terjadwal yang sudah lewat karena periode ini masih berjalan'
+          : 'target penuh sebulan karena periode ini sudah selesai';
+        const catatanKekuranganLines = doc.splitTextToSize('Kekurangan Jam Kerja Lapangan: dihitung dari total jam wajib (' + targetNote + ') dikurangi jam kerja aktual (Cuti/Ijin approved dianggap lunas), lalu dikurangi lagi surplus jam kerja di hari off/libur. Estimasi cross-check HR, belum otomatis motong Total Potongan/THP di atas.', contentW);
+        doc.text(catatanKekuranganLines, marginX, y);
+        y += catatanKekuranganLines.length * 3.4 + 2;
+      } else {
+        y += 4;
+      }
     }
 
     doc.setTextColor(...SLIP_GRAY); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
