@@ -19,6 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="driveBridge.js"></script>
 </head>
@@ -936,6 +937,33 @@
               </thead>
               <tbody id="prosesHasilBody"><tr><td colspan="8" style="text-align:center; color:#8a94a3; padding:16px;">Belum ada data -- pilih periode lalu klik Proses.</td></tr></tbody>
             </table>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <div class="card-header space-between">
+            <h3>💼 Detail Payroll untuk Finance <span id="financeDetailPeriodeLabel"></span></h3>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn-secondary" onclick="toggleFinanceDetailTable()">👁️ Tampilkan/Sembunyikan</button>
+              <button type="button" class="btn-secondary" onclick="exportPayrollFinanceExcel()">📊 Export Excel</button>
+            </div>
+          </div>
+          <p style="font-size:12px; color:#8a94a3; padding:0 16px;">Rincian per karyawan: gaji & tunjangan, lembur, BPJS (porsi karyawan &amp; perusahaan), PPh 21, sampai THP -- plus baris TOTAL buat jurnal akuntansi.</p>
+          <div id="financeDetailTableWrap" style="display:none;">
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nama</th><th>Departemen</th><th>Jabatan</th><th>Kontrak</th>
+                    <th>Gaji Pokok</th><th>Tunj. Jabatan</th><th>Tunj. Transport</th><th>Tunj. Makan</th><th>Tunj. Lain</th><th>Lembur</th>
+                    <th>Bruto</th>
+                    <th>BPJS Kesehatan (Kry)</th><th>JHT (Kry)</th><th>JP (Kry)</th><th>Total BPJS Karyawan</th><th>Total BPJS Perusahaan</th>
+                    <th>PPh 21</th><th>Total Potongan</th><th>Take Home Pay</th>
+                  </tr>
+                </thead>
+                <tbody id="financeDetailBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 

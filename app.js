@@ -4611,17 +4611,129 @@ async function muatHasilPayroll() {
   const tahun = Number(document.getElementById('prosesTahun')?.value);
   if (!bulan || !tahun) return;
 
+  const periodeText = `— ${NAMA_BULAN[bulan]} ${tahun}`;
   const labelEl = document.getElementById('prosesPeriodeLabel');
-  if (labelEl) labelEl.textContent = `— ${NAMA_BULAN[bulan]} ${tahun}`;
+  if (labelEl) labelEl.textContent = periodeText;
+  const financeLabelEl = document.getElementById('financeDetailPeriodeLabel');
+  if (financeLabelEl) financeLabelEl.textContent = periodeText;
 
   try {
     const { data, error } = await supabaseClient.rpc('list_payroll_bulanan', { p_bulan: bulan, p_tahun: tahun });
     if (error) throw error;
     payrollHasilState = data || [];
     renderPayrollHasilTable();
+    // Kalau tabel detail finance lagi kebuka, refresh juga isinya biar nyambung sama periode yang baru dimuat.
+    const financeWrap = document.getElementById('financeDetailTableWrap');
+    if (financeWrap && financeWrap.style.display !== 'none') renderFinanceDetailTable();
   } catch (e) {
     showToast('Gagal memuat hasil payroll: ' + e.message, 'error');
   }
+}
+
+// ---- Detail Payroll untuk Finance: tabel rincian lengkap (gaji, tunjangan, BPJS
+// karyawan+perusahaan, PPh21, THP) per karyawan + baris TOTAL, bisa dilihat di layar
+// atau di-export ke Excel buat dikirim ke tim Finance. ----
+const FINANCE_DETAIL_COLUMNS = [
+  { key: 'NamaKaryawan', label: 'Nama' },
+  { key: 'Departemen', label: 'Departemen' },
+  { key: 'Kualifikasi', label: 'Jabatan' },
+  { key: 'JenisKontrak', label: 'Kontrak' },
+  { key: 'GajiPokok', label: 'Gaji Pokok', numeric: true },
+  { key: 'TunjanganJabatan', label: 'Tunj. Jabatan', numeric: true },
+  { key: 'TunjanganTransport', label: 'Tunj. Transport', numeric: true },
+  { key: 'TunjanganMakan', label: 'Tunj. Makan', numeric: true },
+  { key: 'TunjanganLain', label: 'Tunj. Lain', numeric: true },
+  { key: 'NilaiLembur', label: 'Lembur', numeric: true },
+  { key: 'PenghasilanBruto', label: 'Bruto', numeric: true },
+  { key: 'BpjsKesehatanKaryawan', label: 'BPJS Kesehatan (Kry)', numeric: true },
+  { key: 'JhtKaryawan', label: 'JHT (Kry)', numeric: true },
+  { key: 'JpKaryawan', label: 'JP (Kry)', numeric: true },
+  { key: 'TotalBpjsKaryawan', label: 'Total BPJS Karyawan', numeric: true },
+  { key: 'TotalBpjsPerusahaan', label: 'Total BPJS Perusahaan', numeric: true },
+  { key: 'Pph21', label: 'PPh 21', numeric: true },
+  { key: 'TotalPotongan', label: 'Total Potongan', numeric: true },
+  { key: 'TakeHomePay', label: 'Take Home Pay', numeric: true },
+];
+
+function toggleFinanceDetailTable() {
+  const wrap = document.getElementById('financeDetailTableWrap');
+  if (!wrap) return;
+  const isHidden = wrap.style.display === 'none';
+  if (isHidden) renderFinanceDetailTable();
+  wrap.style.display = isHidden ? 'block' : 'none';
+}
+
+function renderFinanceDetailTable() {
+  const tbody = document.getElementById('financeDetailBody');
+  if (!tbody) return;
+  if (payrollHasilState.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${FINANCE_DETAIL_COLUMNS.length}" style="text-align:center; color:#8a94a3; padding:16px;">Belum ada data untuk periode ini.</td></tr>`;
+    return;
+  }
+  const rp = (n) => 'Rp ' + Math.round(Number(n || 0)).toLocaleString('id-ID');
+  const totals = {};
+  FINANCE_DETAIL_COLUMNS.forEach(c => { if (c.numeric) totals[c.key] = 0; });
+
+  const rowsHtml = payrollHasilState.map(r => {
+    const cells = FINANCE_DETAIL_COLUMNS.map(c => {
+      if (c.numeric) {
+        totals[c.key] += Number(r[c.key] || 0);
+        return `<td style="text-align:right; white-space:nowrap;">${rp(r[c.key])}</td>`;
+      }
+      return `<td>${escapeHtml(r[c.key] || '-')}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  const totalCells = FINANCE_DETAIL_COLUMNS.map((c, i) => {
+    if (i === 0) return `<td><strong>TOTAL (${payrollHasilState.length} karyawan)</strong></td>`;
+    if (c.numeric) return `<td style="text-align:right; white-space:nowrap;"><strong>${rp(totals[c.key])}</strong></td>`;
+    return `<td></td>`;
+  }).join('');
+
+  tbody.innerHTML = rowsHtml + `<tr style="background:#f8fafc; border-top:2px solid #cbd5e1;">${totalCells}</tr>`;
+}
+
+function exportPayrollFinanceExcel() {
+  if (payrollHasilState.length === 0) { showToast('Belum ada data payroll untuk di-export.', 'error'); return; }
+  if (typeof XLSX === 'undefined') { showToast('Library Excel belum termuat, coba refresh halaman.', 'error'); return; }
+
+  const bulan = Number(document.getElementById('prosesBulan')?.value);
+  const tahun = Number(document.getElementById('prosesTahun')?.value);
+  const periodeLabel = `${NAMA_BULAN[bulan] || ''} ${tahun || ''}`.trim();
+
+  const totals = {};
+  FINANCE_DETAIL_COLUMNS.forEach(c => { if (c.numeric) totals[c.key] = 0; });
+
+  const dataRows = payrollHasilState.map(r => FINANCE_DETAIL_COLUMNS.map(c => {
+    if (c.numeric) {
+      const v = Math.round(Number(r[c.key] || 0));
+      totals[c.key] += v;
+      return v;
+    }
+    return r[c.key] || '-';
+  }));
+
+  const totalRow = FINANCE_DETAIL_COLUMNS.map((c, i) => {
+    if (i === 0) return `TOTAL (${payrollHasilState.length} karyawan)`;
+    return c.numeric ? totals[c.key] : '';
+  });
+
+  const aoa = [
+    [`Detail Payroll untuk Finance — ${periodeLabel}`],
+    [],
+    FINANCE_DETAIL_COLUMNS.map(c => c.label),
+    ...dataRows,
+    totalRow,
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = FINANCE_DETAIL_COLUMNS.map(c => ({ wch: c.numeric ? 16 : 20 }));
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: FINANCE_DETAIL_COLUMNS.length - 1 } }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Payroll Detail');
+  XLSX.writeFile(wb, `Detail_Payroll_Finance_${NAMA_BULAN[bulan] || 'periode'}_${tahun || ''}.xlsx`);
+  showToast('Export Excel berhasil dibuat.', 'success');
 }
 
 function renderPayrollHasilTable() {
