@@ -850,7 +850,7 @@
           <div class="table-responsive">
             <table>
               <thead>
-                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Pembagi Jam Kerja</th><th>Multiplier Hari Kerja</th><th>Multiplier Hari OFF</th></tr>
+                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Sabtu-Minggu OFF?</th><th>Pembagi Jam Kerja</th><th>Multiplier Hari Kerja</th><th>Multiplier Hari OFF</th></tr>
               </thead>
               <tbody id="kbPolaTableBody"></tbody>
             </table>
@@ -1208,7 +1208,7 @@
       <form id="formPengajuanBaru" onsubmit="event.preventDefault(); submitFormPengajuanBaru();">
         <div class="input-group">
           <label for="pengajuanKaryawan">Pilih Karyawan (Pemohon)</label>
-          <select id="pengajuanKaryawan" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+          <select id="pengajuanKaryawan" required onchange="autoDeteksiJenisHari()" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
             <option value="">-- Pilih Karyawan --</option>
           </select>
         </div>

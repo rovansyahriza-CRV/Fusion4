@@ -4397,6 +4397,7 @@ function renderKbPolaTable() {
       <td><strong>${escapeHtml(p.NamaPola || '-')}</strong><br><span style="font-size:10px;color:#8a94a3;">${escapeHtml(p.Keterangan || '')}</span></td>
       <td>${p.JamNormalPerHari != null ? p.JamNormalPerHari + ' jam' : '-'}</td>
       <td>${p.JamLemburOtomatisPerHari > 0 ? '+' + p.JamLemburOtomatisPerHari + ' jam' : '-'}</td>
+      <td style="text-align:center;"><input type="checkbox" class="kb-pola-weekend-off" ${p.SabtuMingguOff ? 'checked' : ''} style="width:18px;height:18px;"></td>
       <td><input type="number" step="0.01" class="kb-pola-pembagi" value="${p.PembagiJamKerja ?? ''}" placeholder="Contoh: 173" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
       <td><input type="number" step="0.01" class="kb-pola-mult-kerja" value="${p.MultiplierHariKerja ?? ''}" placeholder="Contoh: 1.5" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
       <td><input type="number" step="0.01" class="kb-pola-mult-off" value="${p.MultiplierHariOff ?? ''}" placeholder="Contoh: 2" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
@@ -4413,12 +4414,14 @@ async function simpanSemuaKbPola() {
     const pembagiV = tr.querySelector('.kb-pola-pembagi').value.trim();
     const multKerjaV = tr.querySelector('.kb-pola-mult-kerja').value.trim();
     const multOffV = tr.querySelector('.kb-pola-mult-off').value.trim();
+    const weekendOff = tr.querySelector('.kb-pola-weekend-off').checked;
     try {
       const { data, error } = await supabaseClient.rpc('update_pola_kerja', {
         p_id: Number(id),
         p_pembagi_jam: pembagiV === '' ? null : Number(pembagiV),
         p_multiplier_hari_kerja: multKerjaV === '' ? null : Number(multKerjaV),
-        p_multiplier_hari_off: multOffV === '' ? null : Number(multOffV)
+        p_multiplier_hari_off: multOffV === '' ? null : Number(multOffV),
+        p_sabtu_minggu_off: weekendOff
       });
       if (error || (data && data.status === 'ERROR')) failed++; else success++;
     } catch (e) { failed++; }
@@ -4445,12 +4448,13 @@ async function syncCustomKualifikasiToMasterGaji(divisi, departemen, kualifikasi
 
 async function autoDeteksiJenisHari() {
   const tanggal = document.getElementById('pengajuanTanggal')?.value;
+  const qrcode = document.getElementById('pengajuanKaryawan')?.value || null;
   const jenisHariSel = document.getElementById('pengajuanJenisHari');
   const hintEl = document.getElementById('pengajuanJenisHariHint');
   if (!tanggal || !jenisHariSel) return;
 
   try {
-    const { data, error } = await supabaseClient.rpc('cek_jenis_hari', { p_tanggal: tanggal });
+    const { data, error } = await supabaseClient.rpc('cek_jenis_hari', { p_tanggal: tanggal, p_qrcode: qrcode });
     if (error) throw error;
     if (data && data.jenis_hari) {
       jenisHariSel.value = data.jenis_hari;
