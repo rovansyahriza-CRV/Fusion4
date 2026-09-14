@@ -4872,13 +4872,13 @@ function renderTimesheetPage(doc, row, timesheetData, { pageW, marginX, contentW
   y += 9;
 
   const cols = [
-    { key: 'tanggalDisplay', label: 'Tgl', w: 8, align: 'center' },
-    { key: 'hari', label: 'Hari', w: 14, align: 'left' },
-    { key: 'jamMasuk1', label: 'Masuk', w: 15, align: 'center' },
-    { key: 'jamIstirahat', label: 'Istirahat', w: 15, align: 'center' },
-    { key: 'jamMasuk2', label: 'Masuk Lagi', w: 16, align: 'center' },
-    { key: 'jamPulang', label: 'Pulang', w: 15, align: 'center' },
-    { key: 'status', label: 'Status', w: 21, align: 'center' },
+    { key: 'tanggalDisplay', label: 'Tgl', w: 6, align: 'center' },
+    { key: 'hari', label: 'Hari', w: 10, align: 'left' },
+    { key: 'jamMasuk1', label: 'Masuk', w: 13, align: 'center' },
+    { key: 'jamIstirahat', label: 'Istirahat', w: 13, align: 'center' },
+    { key: 'jamMasuk2', label: 'Masuk Lagi', w: 15, align: 'center' },
+    { key: 'jamPulang', label: 'Pulang', w: 13, align: 'center' },
+    { key: 'status', label: 'Status', w: 19, align: 'center' },
   ];
   const ketW = contentW - cols.reduce((s, c) => s + c.w, 0);
   cols.push({ key: 'keterangan', label: 'Keterangan', w: ketW, align: 'left' });
