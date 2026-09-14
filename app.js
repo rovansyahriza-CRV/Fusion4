@@ -3930,6 +3930,7 @@ async function loadKompensasiPage() {
     const { data: liburData } = await supabaseClient.rpc('list_hari_libur');
     renderKbLiburTable(liburData || []);
     populateSimulatorDropdowns();
+    renderPayrollRiwayat();
   } catch (err) {
     showToast('Gagal memuat data Kompensasi & Benefit: ' + err.message, 'error');
   }
@@ -4137,6 +4138,7 @@ function switchKbTab(tab, btn) {
   document.getElementById('kbTabBpjs').style.display = tab === 'bpjs' ? 'block' : 'none';
   document.getElementById('kbTabSimulator').style.display = tab === 'simulator' ? 'block' : 'none';
   document.getElementById('kbTabPola').style.display = tab === 'pola' ? 'block' : 'none';
+  document.getElementById('kbTabProses').style.display = tab === 'proses' ? 'block' : 'none';
 }
 
 function populateKbGajiDivisiFilter() {
@@ -4569,4 +4571,215 @@ async function deleteKbLibur(id) {
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
+}
+
+// ==========================================
+// PROSES PAYROLL BULANAN
+// ==========================================
+let payrollHasilState = [];
+
+const NAMA_BULAN = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+async function jalankanProsesPayroll() {
+  const bulan = Number(document.getElementById('prosesBulan')?.value);
+  const tahun = Number(document.getElementById('prosesTahun')?.value);
+  if (!bulan || !tahun) { showToast('Pilih bulan dan tahun dulu.', 'error'); return; }
+
+  if (!confirm(`Proses payroll periode ${NAMA_BULAN[bulan]} ${tahun}? Kalau periode ini sudah pernah diproses, datanya akan ditimpa dengan hasil terbaru.`)) return;
+
+  showToast('Memproses payroll, mohon tunggu...', 'info');
+  try {
+    const namaProcessor = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.nama : 'Admin';
+    const { data, error } = await supabaseClient.rpc('proses_payroll_bulanan', {
+      p_bulan: bulan, p_tahun: tahun, p_processed_by: namaProcessor
+    });
+    if (error) throw error;
+    if (data && data.status === 'SUCCESS') {
+      showToast(`Payroll berhasil diproses: ${data.jumlah_karyawan_diproses} karyawan.`, 'success');
+      await muatHasilPayroll();
+      await renderPayrollRiwayat();
+    } else {
+      showToast((data && data.message) || 'Gagal proses payroll.', 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function muatHasilPayroll() {
+  const bulan = Number(document.getElementById('prosesBulan')?.value);
+  const tahun = Number(document.getElementById('prosesTahun')?.value);
+  if (!bulan || !tahun) return;
+
+  const labelEl = document.getElementById('prosesPeriodeLabel');
+  if (labelEl) labelEl.textContent = `— ${NAMA_BULAN[bulan]} ${tahun}`;
+
+  try {
+    const { data, error } = await supabaseClient.rpc('list_payroll_bulanan', { p_bulan: bulan, p_tahun: tahun });
+    if (error) throw error;
+    payrollHasilState = data || [];
+    renderPayrollHasilTable();
+  } catch (e) {
+    showToast('Gagal memuat hasil payroll: ' + e.message, 'error');
+  }
+}
+
+function renderPayrollHasilTable() {
+  const tbody = document.getElementById('prosesHasilBody');
+  if (!tbody) return;
+  if (payrollHasilState.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#8a94a3; padding:16px;">Belum ada data untuk periode ini.</td></tr>';
+    return;
+  }
+  const rp = (n) => 'Rp ' + Math.round(Number(n || 0)).toLocaleString('id-ID');
+  tbody.innerHTML = payrollHasilState.map(r => {
+    const totalJamLembur = Number(r.JamLemburOtomatisKerja || 0) + Number(r.JamLemburOtomatisOff || 0) + Number(r.JamLemburManualKerja || 0) + Number(r.JamLemburManualOff || 0);
+    return `
+    <tr>
+      <td>${escapeHtml(r.NamaKaryawan || '-')}</td>
+      <td>${escapeHtml(r.Kualifikasi || '-')}</td>
+      <td>${rp(r.PenghasilanBruto)}</td>
+      <td>${rp(r.TotalPotongan)}</td>
+      <td><strong>${rp(r.TakeHomePay)}</strong></td>
+      <td style="text-align:center;">${r.JumlahHariHadir || 0}</td>
+      <td style="text-align:center;">${totalJamLembur} jam</td>
+      <td>
+        ${r.ReportURL
+          ? `<a href="${r.ReportURL}" target="_blank" class="report-link">📄 Lihat</a>`
+          : `<button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="generateSlipPdf(${r.Id})">Generate</button>`}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function renderPayrollRiwayat() {
+  const tbody = document.getElementById('prosesRiwayatBody');
+  if (!tbody) return;
+  try {
+    const { data, error } = await supabaseClient.rpc('list_payroll_periode_tersimpan');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#8a94a3; padding:12px;">Belum ada periode yang diproses.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(r => `
+      <tr>
+        <td>${NAMA_BULAN[r.bulan]} ${r.tahun}</td>
+        <td style="text-align:center;">${r.jumlah_karyawan}</td>
+        <td><button type="button" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="lihatPeriodePayroll(${r.bulan}, ${r.tahun})">👁️ Lihat</button></td>
+      </tr>`).join('');
+  } catch (e) {
+    console.warn('Gagal memuat riwayat payroll:', e);
+  }
+}
+
+function lihatPeriodePayroll(bulan, tahun) {
+  document.getElementById('prosesBulan').value = bulan;
+  document.getElementById('prosesTahun').value = tahun;
+  muatHasilPayroll();
+}
+
+async function generateSlipPdf(payrollId) {
+  const row = payrollHasilState.find(r => r.Id === payrollId);
+  if (!row) { showToast('Data tidak ditemukan.', 'error'); return; }
+
+  showToast(`Membuat slip gaji ${row.NamaKaryawan}...`, 'info');
+  try {
+    const rp = (n) => 'Rp ' + Math.round(Number(n || 0)).toLocaleString('id-ID');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const marginX = 18;
+    let y = 20;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(30, 41, 59);
+    doc.text('PT BILAL MITRA ARYATAMA (BIMA)', marginX, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+    doc.text('SLIP GAJI KARYAWAN', marginX, y);
+    y += 3;
+    doc.setDrawColor(30, 41, 59); doc.setLineWidth(0.5);
+    doc.line(marginX, y, 210 - marginX, y);
+    y += 8;
+
+    doc.setFontSize(9); doc.setTextColor(51, 65, 85);
+    const infoLeft = [['Nama Karyawan', row.NamaKaryawan], ['Jabatan', row.Kualifikasi || '-'], ['Departemen', row.Departemen || '-']];
+    const infoRight = [['Periode', `${NAMA_BULAN[row.Bulan]} ${row.Tahun}`], ['Jenis Kontrak', row.JenisKontrak || '-'], ['Status PTKP', row.StatusPTKP || '-']];
+    infoLeft.forEach((r, i) => {
+      doc.setFont('helvetica', 'bold'); doc.text(r[0], marginX, y + i * 6);
+      doc.setFont('helvetica', 'normal'); doc.text(String(r[1]), marginX + 35, y + i * 6);
+    });
+    infoRight.forEach((r, i) => {
+      doc.setFont('helvetica', 'bold'); doc.text(r[0], marginX + 95, y + i * 6);
+      doc.setFont('helvetica', 'normal'); doc.text(String(r[1]), marginX + 130, y + i * 6);
+    });
+    y += 22;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(30, 41, 59);
+    doc.text('RINCIAN GAJI', marginX, y);
+    y += 6;
+
+    const pendapatan = [
+      ['Gaji Pokok', rp(row.GajiPokok)],
+      ['Tunjangan Jabatan', rp(row.TunjanganJabatan)],
+      ['Tunjangan Transport', rp(row.TunjanganTransport)],
+      ['Tunjangan Makan', rp(row.TunjanganMakan)],
+      ['Tunjangan Lain', rp(row.TunjanganLain)],
+      ['Nilai Lembur', rp(row.NilaiLembur)],
+    ];
+    const potongan = [
+      ['BPJS Kesehatan', rp(row.BpjsKesehatanKaryawan)],
+      ['JHT', rp(row.JhtKaryawan)],
+      ['JP', rp(row.JpKaryawan)],
+      ['PPh 21', rp(row.Pph21)],
+    ];
+
+    doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
+    let yL = y, yR = y;
+    pendapatan.forEach(p => { doc.text(p[0], marginX, yL); doc.text(p[1], marginX + 55, yL, { align: 'right' }); yL += 5.5; });
+    potongan.forEach(p => { doc.text(p[0], marginX + 95, yR); doc.text(p[1], marginX + 160, yR, { align: 'right' }); yR += 5.5; });
+
+    y = Math.max(yL, yR) + 3;
+    doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.3);
+    doc.line(marginX, y, 210 - marginX, y);
+    y += 6;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.text('Total Pendapatan (Bruto)', marginX, y); doc.text(rp(row.PenghasilanBruto), marginX + 55, y, { align: 'right' });
+    doc.text('Total Potongan', marginX + 95, y); doc.text(rp(row.TotalPotongan), marginX + 160, y, { align: 'right' });
+    y += 12;
+
+    doc.setFillColor(232, 244, 238); doc.setDrawColor(15, 122, 69);
+    doc.rect(marginX, y - 6, 210 - marginX * 2, 14, 'FD');
+    doc.setTextColor(15, 122, 69); doc.setFontSize(12);
+    doc.text('TAKE HOME PAY (THP)', marginX + 4, y + 2.5);
+    doc.text(rp(row.TakeHomePay), 210 - marginX - 4, y + 2.5, { align: 'right' });
+    y += 18;
+
+    doc.setTextColor(148, 163, 184); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+    doc.text('Catatan: Potongan BPJS hanya porsi karyawan. Perusahaan menanggung tambahan BPJS Kesehatan, JHT, JP, JKK, dan JKM.', marginX, y, { maxWidth: 174 });
+    y += 4;
+    doc.text('PPh 21 dihitung dengan metode Tarif Efektif Rata-rata (TER) bulanan sesuai PMK 168/2023.', marginX, y, { maxWidth: 174 });
+    y += 4;
+    doc.text(`Jumlah hari hadir: ${row.JumlahHariHadir || 0} hari. Diproses otomatis oleh sistem Fusion4 SmartGate.`, marginX, y, { maxWidth: 174 });
+
+    const pdfBlob = doc.output('blob');
+    const uploaded = await uploadToDrive('reports', `SLIP_${(row.NamaKaryawan || 'karyawan').replace(/\s+/g, '_')}_${row.Bulan}_${row.Tahun}.pdf`, 'application/pdf', pdfBlob);
+    const reportUrl = uploaded.fileId ? `https://drive.google.com/file/d/${uploaded.fileId}/view` : (uploaded.viewUrl || uploaded.directUrl);
+
+    await supabaseClient.rpc('update_payroll_report_url', { p_id: payrollId, p_report_url: reportUrl, p_report_fileid: uploaded.fileId });
+    showToast(`Slip gaji ${row.NamaKaryawan} berhasil dibuat.`, 'success');
+    await muatHasilPayroll();
+  } catch (e) {
+    showToast('Gagal membuat slip: ' + e.message, 'error');
+  }
+}
+
+async function generateSemuaSlip() {
+  const belumAdaSlip = payrollHasilState.filter(r => !r.ReportURL);
+  if (belumAdaSlip.length === 0) { showToast('Semua slip sudah dibuat.', 'info'); return; }
+  showToast(`Membuat ${belumAdaSlip.length} slip gaji...`, 'info');
+  for (const row of belumAdaSlip) {
+    await generateSlipPdf(row.Id);
+  }
+  showToast('Semua slip gaji selesai dibuat.', 'success');
 }

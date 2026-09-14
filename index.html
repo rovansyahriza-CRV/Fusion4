@@ -662,6 +662,7 @@
         <button type="button" class="tab-btn" data-kbtab="bpjs" onclick="switchKbTab('bpjs', this)">🏥 BPJS</button>
         <button type="button" class="tab-btn" data-kbtab="simulator" onclick="switchKbTab('simulator', this)">🧮 Simulator Payroll</button>
         <button type="button" class="tab-btn" data-kbtab="pola" onclick="switchKbTab('pola', this)">🕐 Pola Kerja &amp; Tarif Lembur</button>
+        <button type="button" class="tab-btn" data-kbtab="proses" onclick="switchKbTab('proses', this)">📊 Proses Payroll Bulanan</button>
       </div>
 
       <!-- TAB: Master Gaji & Tunjangan -->
@@ -885,6 +886,56 @@
             <table>
               <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Aksi</th></tr></thead>
               <tbody id="kbLiburTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Proses Payroll Bulanan -->
+      <div id="kbTabProses" style="display:none;">
+        <div class="card form-card">
+          <div class="card-header"><h3>📊 Proses Payroll Bulanan</h3></div>
+          <p style="font-size:12px; color:#8a94a3;">Otomatis hitung THP semua karyawan aktif yang punya Kontrak, berdasarkan Gaji+Tunjangan, Absensi, Lembur (otomatis &amp; manual), BPJS, dan PPh 21 (TER). Hasil disimpan sebagai arsip -- proses ulang periode yang sama akan menimpa data lama.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+            <div class="input-group" style="flex:1; min-width:140px;">
+              <label for="prosesBulan">Bulan</label>
+              <select id="prosesBulan">
+                <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+                <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+                <option value="7">Juli</option><option value="8">Agustus</option><option value="9" selected>September</option>
+                <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+              </select>
+            </div>
+            <div class="input-group" style="flex:1; min-width:100px;">
+              <label for="prosesTahun">Tahun</label>
+              <input type="number" id="prosesTahun" value="2026" min="2020" max="2099">
+            </div>
+            <button type="button" class="btn-primary" onclick="jalankanProsesPayroll()">🚀 Proses Payroll</button>
+            <button type="button" class="btn-secondary" onclick="muatHasilPayroll()">🔄 Lihat Hasil Periode Ini</button>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <div class="card-header space-between">
+            <h3>Hasil Payroll <span id="prosesPeriodeLabel"></span></h3>
+            <button type="button" class="btn-secondary" onclick="generateSemuaSlip()">📄 Generate Semua Slip PDF</button>
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr><th>Nama</th><th>Jabatan</th><th>Bruto</th><th>Potongan</th><th>THP</th><th>Hari Hadir</th><th>Jam Lembur</th><th>Slip</th></tr>
+              </thead>
+              <tbody id="prosesHasilBody"><tr><td colspan="8" style="text-align:center; color:#8a94a3; padding:16px;">Belum ada data -- pilih periode lalu klik Proses.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <div class="card-header"><h3>📅 Riwayat Periode Tersimpan</h3></div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Periode</th><th>Jumlah Karyawan</th><th>Aksi</th></tr></thead>
+              <tbody id="prosesRiwayatBody"></tbody>
             </table>
           </div>
         </div>

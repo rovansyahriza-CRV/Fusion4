@@ -177,6 +177,8 @@
 
   <div id="attendanceStatusBox" style="margin:10px 16px 0; display:none;"></div>
 
+  <div id="payrollSlipBox" style="margin:10px 16px 0; display:none;"></div>
+
   <div style="display:flex; gap:8px; margin:10px 16px 0;">
     <button id="btnAjukanIjin" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer; text-align:center;">🏃 IJIN</button>
     <button id="btnAjukanLembur" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer; text-align:center;">⚡ LEMBUR</button>
@@ -960,6 +962,26 @@ async function submitPin() {
     }
   }
 
+  const NAMA_BULAN_ID = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+  function renderPayrollSlip(data) {
+    const el = document.getElementById('payrollSlipBox');
+    if (!el || !data) return;
+    el.style.display = 'block';
+    el.style.cssText += "background:#fffbeb; border:1.5px solid #f59e0b; border-radius:12px; padding:12px 14px;";
+    const thpFormatted = 'Rp ' + Math.round(Number(data.thp || 0)).toLocaleString('id-ID');
+    el.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+        <span style="font-size:16px;">💰</span>
+        <span style="font-size:13px; font-weight:700; color:#92400e;">Slip Gaji ${NAMA_BULAN_ID[data.bulan]} ${data.tahun}</span>
+      </div>
+      <div style="font-size:12px; color:#78716c; margin-bottom:8px;">THP: <strong>${thpFormatted}</strong></div>
+      <a href="${data.report_url}" target="_blank" style="display:block; text-align:center; padding:8px; font-size:12px; font-weight:700; border-radius:8px; background:#f59e0b; color:#fff; text-decoration:none;">
+        Lihat Slip Gaji
+      </a>
+    `;
+  }
+
   function renderAttendanceStatus(data) {
     const el = document.getElementById('attendanceStatusBox');
     if (!el || !data) return;
@@ -994,7 +1016,7 @@ async function submitPin() {
 
     try {
       // Ambil semua data approval dari Supabase secara aman & paralel
-      let [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData, attendanceData, deliveryTriggerData] = await Promise.all([
+      let [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData, attendanceData, deliveryTriggerData, payrollSlipData] = await Promise.all([
         safeRpc('get_pending_employee_requests_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_ijin_lembur_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
@@ -1002,10 +1024,12 @@ async function submitPin() {
         safeRpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_today_attendance_status', { p_qrcode: qrId }),
-        safeRpc('get_delivery_trigger_by_qrcode', { p_qrcode: qrId })
+        safeRpc('get_delivery_trigger_by_qrcode', { p_qrcode: qrId }),
+        safeRpc('get_payroll_slip_by_qrcode', { p_qrcode: qrId })
       ]);
 
       renderAttendanceStatus(attendanceData);
+      renderPayrollSlip(payrollSlipData);
 
       // 1. Dapatkan otorisasi user (karyawanTbl & paswordTbl) untuk fallback jika RPC tidak return
       let authorTokens = [];
