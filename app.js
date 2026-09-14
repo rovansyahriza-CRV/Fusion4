@@ -4645,7 +4645,8 @@ function renderPayrollHasilTable() {
       <td style="text-align:center;">${totalJamLembur} jam</td>
       <td>
         ${r.ReportURL
-          ? `<a href="${r.ReportURL}" target="_blank" class="report-link">📄 Lihat</a>`
+          ? `<a href="${r.ReportURL}" target="_blank" class="report-link">📄 Lihat</a>
+             <button type="button" class="btn-secondary" style="padding:4px 6px; font-size:11px; margin-left:4px;" onclick="generateSlipPdf(${r.Id})" title="Generate ulang slip (misal habis update format PDF)">🔄</button>`
           : `<button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="generateSlipPdf(${r.Id})">Generate</button>`}
       </td>
     </tr>`;
