@@ -1,12 +1,17 @@
 -- =====================================================================================
--- FITUR BARU: TIMESHEET BULANAN (LAMPIRAN HALAMAN 2 SLIP GAJI)
+-- FITUR: TIMESHEET BULANAN (LAMPIRAN HALAMAN 2 SLIP GAJI)
 -- 1. get_timesheet_bulanan(p_karyawan_id, p_bulan, p_tahun) -> JSONB array per-tanggal
 --    Dipakai app.js -> generateSlipPdf() buat render halaman 2 (timesheet) di PDF slip gaji.
 -- 2. Referensi TimeLimit lokasi buat deteksi: tidak absen sebagian slot, telat masuk/masuk
---    lagi, atau pulang lebih cepat dari jadwal.
+--    lagi (toleransi 15 menit). Jam Pulang gak dicek keterlambatan/kecepatan -- submit_absensi
+--    udah ngunci window jam pulang duluan (gak bisa pulang sebelum waktunya kecuali pakai
+--    Voucher Ijin yang APPROVED), jadi begitu ada record Pulang berarti udah sah.
 -- 3. Cek Ijin/Cuti APPROVED dari pengajuan_ijin_lembur_tbl buat keterangan CUTI/IJIN.
--- Sudah diverifikasi: kasus real Anelka Bugihadinata Hariyono (KaryawanId 14) 31 Agustus 2026
--- -> "Tidak absen: Masuk, Istirahat; Masuk Lagi telat 207 menit (limit 13:00)"
+-- Sudah diverifikasi ke data real:
+--   - Anelka Bugihadinata Hariyono (KaryawanId 14) 31 Agustus 2026 ->
+--     "Tidak absen: Masuk, Istirahat; Masuk Lagi telat 207 menit (limit 13:00)"
+--   - Noor Arifin (KaryawanId 19) September 2026 -> telat Masuk 1-13 menit gak kena catatan
+--     (masih toleransi), telat Masuk Lagi 22/47/55 menit tetap kena catatan.
 -- =====================================================================================
 
 CREATE OR REPLACE FUNCTION public.get_timesheet_bulanan(p_karyawan_id bigint, p_bulan integer, p_tahun integer)
@@ -37,7 +42,7 @@ DECLARE
     v_delay INT;
     v_jam_masuk1 TIME;
     v_jam_masuk2 TIME;
-    v_jam_pulang TIME;
+    v_toleransi_telat CONSTANT INT := 15; -- menit, berlaku buat Masuk 1 & Masuk 2 (Pulang gak perlu -- sistem sudah ngunci window jam pulang di submit_absensi, jadi kalau ada record Pulang berarti udah sah, baik on-time maupun via Voucher Ijin yang di-approve)
 BEGIN
     SELECT "QrCodeId" INTO v_qrcode FROM "karyawanTbl" WHERE "Id" = p_karyawan_id LIMIT 1;
     IF v_qrcode IS NULL THEN
@@ -86,7 +91,6 @@ BEGIN
 
             v_jam_masuk1 := (v_absen."JamMasuk1" AT TIME ZONE 'Asia/Makassar')::TIME;
             v_jam_masuk2 := (v_absen."JamMasuk2" AT TIME ZONE 'Asia/Makassar')::TIME;
-            v_jam_pulang := (v_absen."JamPulang" AT TIME ZONE 'Asia/Makassar')::TIME;
 
             -- Slot yang gak keisi sama sekali
             v_missing := ARRAY[]::TEXT[];
@@ -95,24 +99,20 @@ BEGIN
             IF v_absen."JamMasuk2" IS NULL THEN v_missing := array_append(v_missing, 'Masuk Lagi'); END IF;
             IF v_absen."JamPulang" IS NULL THEN v_missing := array_append(v_missing, 'Pulang'); END IF;
 
-            -- Telat masuk / masuk lagi, atau pulang lebih cepat dari jadwal TimeLimit lokasi
+            -- Telat masuk / masuk lagi (toleransi 15 menit). Pulang gak dicek -- submit_absensi udah
+            -- ngunci window-nya (gak bisa pulang sebelum waktunya kecuali pakai Voucher Ijin approved),
+            -- jadi begitu ada record Pulang berarti udah sah.
             v_telat := ARRAY[]::TEXT[];
             IF v_jam_masuk1 IS NOT NULL THEN
                 v_delay := ROUND(EXTRACT(EPOCH FROM (v_jam_masuk1 - v_tl_masuk1)) / 60);
-                IF v_delay > 0 THEN
+                IF v_delay > v_toleransi_telat THEN
                     v_telat := array_append(v_telat, 'Masuk telat ' || v_delay || ' menit (limit ' || TO_CHAR(v_tl_masuk1, 'HH24:MI') || ')');
                 END IF;
             END IF;
             IF v_jam_masuk2 IS NOT NULL THEN
                 v_delay := ROUND(EXTRACT(EPOCH FROM (v_jam_masuk2 - v_tl_masuk2)) / 60);
-                IF v_delay > 0 THEN
+                IF v_delay > v_toleransi_telat THEN
                     v_telat := array_append(v_telat, 'Masuk Lagi telat ' || v_delay || ' menit (limit ' || TO_CHAR(v_tl_masuk2, 'HH24:MI') || ')');
-                END IF;
-            END IF;
-            IF v_jam_pulang IS NOT NULL THEN
-                v_delay := ROUND(EXTRACT(EPOCH FROM (v_tl_pulang - v_jam_pulang)) / 60);
-                IF v_delay > 0 THEN
-                    v_telat := array_append(v_telat, 'Pulang cepat ' || v_delay || ' menit (limit ' || TO_CHAR(v_tl_pulang, 'HH24:MI') || ')');
                 END IF;
             END IF;
         END IF;
