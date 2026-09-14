@@ -850,12 +850,12 @@
           <div class="table-responsive">
             <table>
               <thead>
-                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Tarif Lembur Hari Kerja (Rp/jam)</th><th>Tarif Lembur Hari OFF (Rp/jam)</th></tr>
+                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Pembagi Jam Kerja</th><th>Multiplier Hari Kerja</th><th>Multiplier Hari OFF</th></tr>
               </thead>
               <tbody id="kbPolaTableBody"></tbody>
             </table>
           </div>
-          <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Dipakai di Kontrak Karyawan (khusus PKWT) dan buat hitung nilai Rupiah lembur otomatis (Pekerja Lapangan) maupun manual (Otorisasi Lembur, ditandai Hari Kerja/Hari OFF).</p>
+          <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Formula: <strong>Tarif Lembur/Jam = (Gaji + Tunjangan Tetap ÷ Pembagi Jam Kerja) × Multiplier.</strong> Otomatis nyesuaiin ke gaji masing-masing karyawan, bukan angka Rupiah flat sama rata.</p>
           <div style="padding:12px 4px 4px;">
             <button type="button" class="btn-primary" onclick="simpanSemuaKbPola()">💾 Simpan Semua Perubahan</button>
           </div>

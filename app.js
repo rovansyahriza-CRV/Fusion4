@@ -1111,7 +1111,8 @@ async function submitKaryawanBaru() {
   const pic = document.getElementById('karyawanPic')?.value.trim() || '';
   const type = document.getElementById('karyawanType')?.value.trim() || '';
   let kualifikasi = document.getElementById('karyawanKualifikasi')?.value.trim() || '';
-  if (kualifikasi === 'CUSTOM') {
+  const isCustomKualifikasi = kualifikasi === 'CUSTOM';
+  if (isCustomKualifikasi) {
     kualifikasi = document.getElementById('karyawanKualifikasiCustom')?.value.trim() || '';
   }
   const statusNikah = document.getElementById('karyawanStatusNikah')?.value.trim() || '';
@@ -1140,6 +1141,9 @@ async function submitKaryawanBaru() {
 
       if (hasil && hasil.status === 'SUCCESS') {
         showToast(hasil.message || 'Data karyawan berhasil diupdate.', 'success');
+        if (isCustomKualifikasi && kualifikasi && divisi && departemen) {
+          await syncCustomKualifikasiToMasterGaji(divisi, departemen, kualifikasi);
+        }
         resetKaryawanForm();
         loadKaryawanPage();
       } else {
@@ -1174,6 +1178,10 @@ async function submitKaryawanBaru() {
       const pinInfo = hasil.digitalpin ? ` Digital PIN: ${hasil.digitalpin}` : '';
       const qrInfo = hasil.qrcodeid ? ` QrCodeId: ${hasil.qrcodeid}` : '';
       showToast((hasil.message || 'Karyawan baru berhasil dibuat.') + qrInfo + pinInfo, 'success');
+
+      if (isCustomKualifikasi && kualifikasi && divisi && departemen) {
+        await syncCustomKualifikasiToMasterGaji(divisi, departemen, kualifikasi);
+      }
 
       if (email && hasil.digitalpin) {
         try {
@@ -4386,8 +4394,9 @@ function renderKbPolaTable() {
       <td><strong>${escapeHtml(p.NamaPola || '-')}</strong><br><span style="font-size:10px;color:#8a94a3;">${escapeHtml(p.Keterangan || '')}</span></td>
       <td>${p.JamNormalPerHari != null ? p.JamNormalPerHari + ' jam' : '-'}</td>
       <td>${p.JamLemburOtomatisPerHari > 0 ? '+' + p.JamLemburOtomatisPerHari + ' jam' : '-'}</td>
-      <td><input type="text" inputmode="numeric" class="kb-pola-tarif-kerja" value="${p.TarifLemburHariKerja != null ? Number(p.TarifLemburHariKerja).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" placeholder="0" style="width:120px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="text" inputmode="numeric" class="kb-pola-tarif-off" value="${p.TarifLemburHariOff != null ? Number(p.TarifLemburHariOff).toLocaleString('id-ID') : ''}" oninput="formatRupiahInput(this)" placeholder="0" style="width:120px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" step="0.01" class="kb-pola-pembagi" value="${p.PembagiJamKerja ?? ''}" placeholder="Contoh: 173" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" step="0.01" class="kb-pola-mult-kerja" value="${p.MultiplierHariKerja ?? ''}" placeholder="Contoh: 1.5" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" step="0.01" class="kb-pola-mult-off" value="${p.MultiplierHariOff ?? ''}" placeholder="Contoh: 2" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
     </tr>`).join('');
 }
 
@@ -4398,17 +4407,35 @@ async function simpanSemuaKbPola() {
   let success = 0, failed = 0;
   for (const tr of rows) {
     const id = tr.dataset.kbId;
-    const tarifKerja = parseRupiahInput(tr.querySelector('.kb-pola-tarif-kerja'));
-    const tarifOff = parseRupiahInput(tr.querySelector('.kb-pola-tarif-off'));
+    const pembagiV = tr.querySelector('.kb-pola-pembagi').value.trim();
+    const multKerjaV = tr.querySelector('.kb-pola-mult-kerja').value.trim();
+    const multOffV = tr.querySelector('.kb-pola-mult-off').value.trim();
     try {
       const { data, error } = await supabaseClient.rpc('update_pola_kerja', {
         p_id: Number(id),
-        p_tarif_hari_kerja: tarifKerja,
-        p_tarif_hari_off: tarifOff
+        p_pembagi_jam: pembagiV === '' ? null : Number(pembagiV),
+        p_multiplier_hari_kerja: multKerjaV === '' ? null : Number(multKerjaV),
+        p_multiplier_hari_off: multOffV === '' ? null : Number(multOffV)
       });
       if (error || (data && data.status === 'ERROR')) failed++; else success++;
     } catch (e) { failed++; }
   }
   showToast(`Selesai. ${success} baris tersimpan${failed > 0 ? `, ${failed} gagal` : ''}.`, failed > 0 ? 'error' : 'success');
   loadKompensasiPage();
+}
+
+async function syncCustomKualifikasiToMasterGaji(divisi, departemen, kualifikasi) {
+  try {
+    const { data, error } = await supabaseClient.rpc('add_master_gaji', {
+      p_divisi: divisi,
+      p_departemen: departemen,
+      p_kualifikasi: kualifikasi
+    });
+    if (error) throw error;
+    if (data && data.status === 'SUCCESS' && data.message === 'Baris baru ditambahkan.') {
+      showToast(`Jabatan "${kualifikasi}" otomatis ditambahkan ke Master Gaji & Tunjangan.`, 'info');
+    }
+  } catch (e) {
+    console.warn('Gagal sinkron Kualifikasi custom ke Master Gaji:', e);
+  }
 }
