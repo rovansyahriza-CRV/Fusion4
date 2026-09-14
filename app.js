@@ -4679,6 +4679,33 @@ function lihatPeriodePayroll(bulan, tahun) {
   muatHasilPayroll();
 }
 
+// Logo BIMA di-cache sekali per sesi biar generateSemuaSlip() ga fetch file gambar berkali-kali
+let _bimaLogoDataUrlCache = null;
+async function getBimaLogoDataUrl() {
+  if (_bimaLogoDataUrlCache !== null) return _bimaLogoDataUrlCache || null;
+  try {
+    const resp = await fetch('logo-bima.png');
+    const blob = await resp.blob();
+    _bimaLogoDataUrlCache = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    _bimaLogoDataUrlCache = false; // gagal load logo bukan alasan buat gagalin seluruh slip
+  }
+  return _bimaLogoDataUrlCache || null;
+}
+
+// Warna brand BIMA (diambil dari logo-bima.png) -- dipakai biar tema slip nyambung sama identitas perusahaan
+const SLIP_ORANGE = [233, 82, 37];
+const SLIP_DARK = [58, 58, 58];
+const SLIP_GRAY = [120, 120, 120];
+const SLIP_LINE = [222, 222, 222];
+const SLIP_GREEN = [15, 122, 69];
+const SLIP_GREEN_BG = [232, 244, 238];
+
 async function generateSlipPdf(payrollId) {
   const row = payrollHasilState.find(r => r.Id === payrollId);
   if (!row) { showToast('Data tidak ditemukan.', 'error'); return; }
@@ -4688,35 +4715,50 @@ async function generateSlipPdf(payrollId) {
     const rp = (n) => 'Rp ' + Math.round(Number(n || 0)).toLocaleString('id-ID');
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageW = 210;
     const marginX = 18;
-    let y = 20;
+    const contentW = pageW - marginX * 2;
+    let y = 14;
 
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(30, 41, 59);
-    doc.text('PT BILAL MITRA ARYATAMA (BIMA)', marginX, y);
-    y += 5;
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
-    doc.text('SLIP GAJI KARYAWAN', marginX, y);
-    y += 3;
-    doc.setDrawColor(30, 41, 59); doc.setLineWidth(0.5);
-    doc.line(marginX, y, 210 - marginX, y);
+    // ---- Aksen bar atas ----
+    doc.setFillColor(...SLIP_ORANGE);
+    doc.rect(0, 0, pageW, 3, 'F');
+    y += 10;
+
+    // ---- Header: logo + nama perusahaan ----
+    const logoDataUrl = await getBimaLogoDataUrl();
+    const textX = logoDataUrl ? marginX + 20 : marginX;
+    if (logoDataUrl) {
+      doc.addImage(logoDataUrl, 'PNG', marginX, y - 11, 16, 16);
+    }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...SLIP_DARK);
+    doc.text('PT BILAL MITRA ARYATAMA (BIMA)', textX, y - 4);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...SLIP_ORANGE);
+    doc.text('SLIP GAJI KARYAWAN', textX, y + 1.5);
     y += 8;
+    doc.setDrawColor(...SLIP_ORANGE); doc.setLineWidth(0.6);
+    doc.line(marginX, y, pageW - marginX, y);
+    y += 9;
 
-    doc.setFontSize(9); doc.setTextColor(51, 65, 85);
+    // ---- Info grid 2 kolom ----
+    doc.setFontSize(9);
     const infoLeft = [['Nama Karyawan', row.NamaKaryawan], ['Jabatan', row.Kualifikasi || '-'], ['Departemen', row.Departemen || '-']];
     const infoRight = [['Periode', `${NAMA_BULAN[row.Bulan]} ${row.Tahun}`], ['Jenis Kontrak', row.JenisKontrak || '-'], ['Status PTKP', row.StatusPTKP || '-']];
     infoLeft.forEach((r, i) => {
-      doc.setFont('helvetica', 'bold'); doc.text(r[0], marginX, y + i * 6);
-      doc.setFont('helvetica', 'normal'); doc.text(String(r[1]), marginX + 35, y + i * 6);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_GRAY); doc.text(r[0], marginX, y + i * 6);
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(...SLIP_DARK); doc.text(String(r[1]), marginX + 35, y + i * 6);
     });
     infoRight.forEach((r, i) => {
-      doc.setFont('helvetica', 'bold'); doc.text(r[0], marginX + 95, y + i * 6);
-      doc.setFont('helvetica', 'normal'); doc.text(String(r[1]), marginX + 130, y + i * 6);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_GRAY); doc.text(r[0], marginX + 95, y + i * 6);
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(...SLIP_DARK); doc.text(String(r[1]), marginX + 130, y + i * 6);
     });
     y += 22;
 
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(30, 41, 59);
-    doc.text('RINCIAN GAJI', marginX, y);
-    y += 6;
+    doc.setDrawColor(...SLIP_ORANGE); doc.setFillColor(...SLIP_ORANGE);
+    doc.rect(marginX, y - 3.5, 1.2, 4.5, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...SLIP_DARK);
+    doc.text('RINCIAN GAJI', marginX + 4, y);
+    y += 7;
 
     const pendapatan = [
       ['Gaji Pokok', rp(row.GajiPokok)],
@@ -4733,34 +4775,52 @@ async function generateSlipPdf(payrollId) {
       ['PPh 21', rp(row.Pph21)],
     ];
 
-    doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...SLIP_GRAY);
+    doc.text('PENDAPATAN', marginX, y);
+    doc.text('POTONGAN', marginX + 95, y);
+    y += 5;
+
+    doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(...SLIP_DARK);
     let yL = y, yR = y;
     pendapatan.forEach(p => { doc.text(p[0], marginX, yL); doc.text(p[1], marginX + 55, yL, { align: 'right' }); yL += 5.5; });
     potongan.forEach(p => { doc.text(p[0], marginX + 95, yR); doc.text(p[1], marginX + 160, yR, { align: 'right' }); yR += 5.5; });
 
     y = Math.max(yL, yR) + 3;
-    doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.3);
-    doc.line(marginX, y, 210 - marginX, y);
-    y += 6;
+    doc.setDrawColor(...SLIP_LINE); doc.setLineWidth(0.3);
+    doc.line(marginX, y, pageW - marginX, y);
+    y += 7;
 
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
-    doc.text('Total Pendapatan (Bruto)', marginX, y); doc.text(rp(row.PenghasilanBruto), marginX + 55, y, { align: 'right' });
-    doc.text('Total Potongan', marginX + 95, y); doc.text(rp(row.TotalPotongan), marginX + 160, y, { align: 'right' });
-    y += 12;
+    // ---- Total Pendapatan & Total Potongan: masing-masing satu baris penuh, biar labelnya
+    // (apalagi "Total Pendapatan (Bruto)" yang panjang) ga numpuk sama angkanya ----
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...SLIP_DARK);
+    doc.text('Total Pendapatan (Bruto)', marginX, y);
+    doc.text(rp(row.PenghasilanBruto), pageW - marginX, y, { align: 'right' });
+    y += 6.5;
+    doc.text('Total Potongan', marginX, y);
+    doc.text(rp(row.TotalPotongan), pageW - marginX, y, { align: 'right' });
+    y += 10;
 
-    doc.setFillColor(232, 244, 238); doc.setDrawColor(15, 122, 69);
-    doc.rect(marginX, y - 6, 210 - marginX * 2, 14, 'FD');
-    doc.setTextColor(15, 122, 69); doc.setFontSize(12);
+    doc.setFillColor(...SLIP_GREEN_BG); doc.setDrawColor(...SLIP_GREEN); doc.setLineWidth(0.4);
+    doc.roundedRect(marginX, y - 6, contentW, 14, 2, 2, 'FD');
+    doc.setTextColor(...SLIP_GREEN); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
     doc.text('TAKE HOME PAY (THP)', marginX + 4, y + 2.5);
-    doc.text(rp(row.TakeHomePay), 210 - marginX - 4, y + 2.5, { align: 'right' });
+    doc.text(rp(row.TakeHomePay), pageW - marginX - 4, y + 2.5, { align: 'right' });
     y += 18;
 
-    doc.setTextColor(148, 163, 184); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
-    doc.text('Catatan: Potongan BPJS hanya porsi karyawan. Perusahaan menanggung tambahan BPJS Kesehatan, JHT, JP, JKK, dan JKM.', marginX, y, { maxWidth: 174 });
+    doc.setTextColor(...SLIP_GRAY); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+    doc.text('Catatan: Potongan BPJS hanya porsi karyawan. Perusahaan menanggung tambahan BPJS Kesehatan, JHT, JP, JKK, dan JKM.', marginX, y, { maxWidth: contentW });
     y += 4;
-    doc.text('PPh 21 dihitung dengan metode Tarif Efektif Rata-rata (TER) bulanan sesuai PMK 168/2023.', marginX, y, { maxWidth: 174 });
+    doc.text('PPh 21 dihitung dengan metode Tarif Efektif Rata-rata (TER) bulanan sesuai PMK 168/2023.', marginX, y, { maxWidth: contentW });
     y += 4;
-    doc.text(`Jumlah hari hadir: ${row.JumlahHariHadir || 0} hari. Diproses otomatis oleh sistem Fusion4 SmartGate.`, marginX, y, { maxWidth: 174 });
+    doc.text(`Jumlah hari hadir: ${row.JumlahHariHadir || 0} hari. Diproses otomatis oleh sistem Fusion4 SmartGate.`, marginX, y, { maxWidth: contentW });
+
+    // ---- Footer ----
+    const pageH = doc.internal.pageSize.getHeight();
+    doc.setDrawColor(...SLIP_LINE); doc.setLineWidth(0.2);
+    doc.line(marginX, pageH - 14, pageW - marginX, pageH - 14);
+    doc.setTextColor(...SLIP_GRAY); doc.setFontSize(7);
+    doc.text('Fusion4 SmartGate - PT Bilal Mitra Aryatama (BIMA)', marginX, pageH - 10);
+    doc.text('Dokumen ini digenerate otomatis dan sah tanpa tanda tangan basah.', marginX, pageH - 6.5);
 
     const pdfBlob = doc.output('blob');
     const uploaded = await uploadToDrive('reports', `SLIP_${(row.NamaKaryawan || 'karyawan').replace(/\s+/g, '_')}_${row.Bulan}_${row.Tahun}.pdf`, 'application/pdf', pdfBlob);
