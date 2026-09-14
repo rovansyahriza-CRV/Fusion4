@@ -991,21 +991,32 @@ async function submitPin() {
       return;
     }
 
-    const isPulang = data.status === 'SUDAH_PULANG';
     el.style.display = 'block';
     el.style.cssText += "background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px;";
-    el.innerHTML = `
-      <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#334155;">
-        <span>🕒</span>
-        <span><strong>Masuk</strong> ${data.jamMasuk} • ${data.lokasiMasuk || '-'}</span>
-      </div>
-      ${isPulang ? `
-      <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#334155; margin-top:4px;">
-        <span>🏁</span>
-        <span><strong>Pulang</strong> ${data.jamPulang} • ${data.lokasiPulang || '-'}</span>
-      </div>` : `
-      <div style="font-size:11px; color:#64748b; margin-top:4px;">🟢 Sedang bekerja, belum absen pulang.</div>`}
-    `;
+
+    // Timeline absensi hari ini: Masuk -> Istirahat -> Masuk Lagi -> Pulang.
+    // Cuma render baris yang jamnya udah keisi, biar otomatis nambah tiap tahap kelewat.
+    const rows = [
+      ['🕒', 'Masuk', data.jamMasuk, data.lokasiMasuk],
+      ['🍽️', 'Istirahat', data.jamIstirahat, data.lokasiIstirahat],
+      ['▶️', 'Masuk Lagi', data.jamMasuk2, data.lokasiMasuk2],
+      ['🏁', 'Pulang', data.jamPulang, data.lokasiPulang],
+    ].filter(r => r[2]);
+
+    const rowsHtml = rows.map(([icon, label, jam, lokasi], i) => `
+      <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#334155; ${i > 0 ? 'margin-top:4px;' : ''}">
+        <span>${icon}</span>
+        <span><strong>${label}</strong> ${jam} • ${lokasi || '-'}</span>
+      </div>`).join('');
+
+    const CAPTION_BY_STATUS = {
+      SUDAH_MASUK: '🟢 Sedang bekerja, belum istirahat.',
+      ISTIRAHAT: '🟠 Sedang istirahat.',
+      SUDAH_MASUK_2: '🟢 Sedang bekerja, belum absen pulang.',
+    };
+    const caption = CAPTION_BY_STATUS[data.status];
+
+    el.innerHTML = rowsHtml + (caption ? `<div style="font-size:11px; color:#64748b; margin-top:4px;">${caption}</div>` : '');
   }
 
   async function loadApprovalIssues(qrId) {
