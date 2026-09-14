@@ -1084,8 +1084,16 @@ function showResultCard(text, kind) {
 
   const btnDone = document.createElement('button');
   btnDone.className = "btn-block btn-primary";
-  btnDone.innerText = "Selesai";
-  btnDone.onclick = () => location.href = location.pathname;
+  if (fromBadge && qrCodeId) {
+    // Kalau flow-nya dibuka dari Digital Badge (self-service, bukan kiosk bersama), abis absen
+    // gak perlu balik ke halaman scan attendance lagi -- langsung tutup & balik ke Badge dia.
+    // digital-badge.html udah dukung auto-login lewat ?QrCodeId=... (lookup DigitalPIN otomatis).
+    btnDone.innerText = "✅ Tutup & Kembali ke Badge";
+    btnDone.onclick = () => location.href = "digital-badge.html?QrCodeId=" + encodeURIComponent(qrCodeId);
+  } else {
+    btnDone.innerText = "Selesai";
+    btnDone.onclick = () => location.href = location.pathname;
+  }
   resultBanner.parentNode.insertBefore(btnDone, resultBanner.nextSibling);
 }
 
