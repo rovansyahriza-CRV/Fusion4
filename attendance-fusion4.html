@@ -1111,6 +1111,17 @@ function showResultCard(text, kind) {
     btnDone.onclick = () => location.href = location.pathname;
   }
   resultBanner.parentNode.insertBefore(btnDone, resultBanner.nextSibling);
+
+  if (fromBadge && qrCodeId) {
+    // Tetep kasih akses Pindah Lokasi (Checkout) di sini juga -- biar abis absen dari Badge
+    // gak wajib balik ke Badge dulu kalau mau lanjut checkout pindah lokasi.
+    const btnPindah = document.createElement('button');
+    btnPindah.className = "btn-block btn-secondary";
+    btnPindah.style.marginTop = "10px";
+    btnPindah.innerText = "🚚 Pindah Lokasi (Checkout)";
+    btnPindah.onclick = () => location.href = "pindah-lokasi.html";
+    resultBanner.parentNode.insertBefore(btnPindah, btnDone.nextSibling);
+  }
 }
 
 // ============ 0. SCAN QR (kalau belum ada QrCodeId dari URL) ============
