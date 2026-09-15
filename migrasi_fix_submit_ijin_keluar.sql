@@ -1,0 +1,41 @@
+-- ============================================================================
+-- FIX: Tombol "Ijin Pulang" di kiosk absensi nyangkut di "Memproses ijin pulang..."
+-- Tanggal: 2026-09-15
+-- ============================================================================
+-- Dilaporkan bro: CRV scan wajah, muncul pop-up "Ijin, silakan pulang", diklik
+-- tapi nyangkut selamanya di teks "Memproses ijin pulang..." tanpa pesan error
+-- apapun. Ditemukan DUA bug di submit_ijin_keluar(p_qrcodeid, p_lokasi, p_kodeijin)
+-- -- fungsi lama yang dipanggil dari attendance-fusion4.html lewat callApi()
+-- action "SUBMIT_IJIN_KELUAR":
+--
+-- 1) INSERT ke absensiTbl pakai INSERT polos (bukan UPSERT), padahal ada UNIQUE
+--    constraint ("Tanggal","QrCodeId"). Begitu fitur auto-approve Direktur +
+--    cek HR Admin (migrasi sebelumnya) mulai auto-isi absensiTbl.Status='IJIN'
+--    saat pengajuan Ijin disetujui, HAMPIR SELALU sudah ada baris absensiTbl
+--    utk hari itu (dari isian otomatis itu, atau dari jam masuk pagi) begitu
+--    karyawan klik "Ijin Pulang" -- jadi INSERT-nya nabrak constraint dan
+--    seluruh transaksi function di-rollback diam-diam.
+--    -> Diganti INSERT ... ON CONFLICT ("Tanggal","QrCodeId") DO UPDATE, sama
+--       pola-nya seperti apply_pengajuan_final_side_effects().
+--
+-- 2) BUG LAMA (tidak terkait perubahan Direktur/HR Admin -- baru ketahuan
+--    sekarang karena baru sekarang fitur ini benar-benar dites end-to-end):
+--    kolom absensiTbl.JamPulang tipenya timestamptz, tapi kode nulis
+--    TO_CHAR(NOW() AT TIME ZONE 'Asia/Makassar', 'HH24:MI:SS') -- hasilnya
+--    teks jam doang ("16:23:45"), BUKAN timestamptz. Ini bikin function-nya
+--    SELALU gagal (error tipe data) walau tanpa konflik baris sekalipun --
+--    kemungkinan fitur "Ijin Pulang" belum pernah berhasil sejak awal dibuat.
+--    -> Diganti pakai NOW() langsung (timestamptz asli), konsisten sama
+--       kolom JamMasuk1/JamMasuk2 yang lain.
+--
+-- Bonus: frontend (attendance-fusion4.html, handler tombol "Gunakan Ijin")
+-- sebelumnya gak ada try/catch -- kalau RPC-nya error, promise-nya cuma
+-- berhenti diam-diam dan UI nyangkut selamanya di "Memproses...". Sekarang
+-- dibungkus try/catch dan nampilin pesan error yang jelas kalau gagal.
+--
+-- Sudah diuji pakai data dummy yang mensimulasikan persis situasi CRV (baris
+-- absensiTbl sudah ada dari jam masuk pagi + Status='IJIN' dari auto-approve),
+-- klik "Ijin Pulang" berhasil update baris yang sama (bukan bikin duplikat),
+-- JamMasuk1 tetap terjaga, Status jadi 'IJIN_PULANG', kode_ijin ke-mark used.
+-- Data dummy sudah dihapus bersih.
+-- ============================================================================

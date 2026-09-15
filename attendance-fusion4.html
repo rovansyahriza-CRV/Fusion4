@@ -970,11 +970,16 @@ async function checkIjinThenProceed() {
       document.getElementById('btnPakaiIjin').onclick = async () => {
         document.getElementById('ijinCard').style.display = "none";
         setStatus("Memproses ijin pulang...", "info");
-        const res = await callApi("SUBMIT_IJIN_KELUAR", { qrCodeId: qrCodeId, lokasi: activeLocation, kodeIjin: ijinResult.kodeIjin });
-        if (res.status === "SUCCESS") {
-          showResultCard(res.message, "ok");
-        } else {
-          showResultCard("❌ " + res.message, "fail");
+        try {
+          const res = await callApi("SUBMIT_IJIN_KELUAR", { qrCodeId: qrCodeId, lokasi: activeLocation, kodeIjin: ijinResult.kodeIjin });
+          if (res.status === "SUCCESS") {
+            showResultCard(res.message, "ok");
+          } else {
+            showResultCard("❌ " + res.message, "fail");
+          }
+        } catch (e) {
+          console.error("Gagal submit ijin pulang:", e.message);
+          showResultCard("❌ Gagal memproses ijin pulang: " + e.message, "fail");
         }
       };
       document.getElementById('btnLewatiIjin').onclick = () => {
