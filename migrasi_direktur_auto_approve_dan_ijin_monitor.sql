@@ -1,0 +1,54 @@
+-- ============================================================================
+-- FITUR: Auto-approve level "Direktur" + Ijin ikut tampil di Monitoring Attendance
+-- Tanggal: 2026-09-15
+-- ============================================================================
+-- Latar belakang: audit sebelumnya (lihat migrasi "fix_cuti_author_chain")
+-- menemukan bahwa TIDAK ADA karyawan yang Kualifikasi/Author-nya PERSIS
+-- "Direktur" (yang ada "Direktur Utama" / "Direktur Operasional"). Akibatnya,
+-- semua pengajuan Ijin/Cuti/Lembur yang rantai persetujuannya berhenti di level
+-- "Direktur" TIDAK PERNAH muncul di daftar pending siapa pun -- macet permanen.
+--
+-- Keputusan bisnis (dari bro): level "Direktur" cukup jadi info/notifikasi saja,
+-- tidak perlu tombol approve manual. Begitu request nyampe ke level itu, sistem
+-- langsung APPROVED otomatis (termasuk efek samping seperti potong kuota cuti /
+-- generate kode_ijin), dan hasilnya kelihatan di modul "Monitoring Attendance &
+-- Enroll" yang sudah ada (tab Attendance, kolom Status -- sama seperti Cuti yang
+-- sudah lebih dulu otomatis muncul di situ).
+--
+-- Perubahan:
+--
+-- 1) Fungsi baru apply_pengajuan_final_side_effects(request_id) -- extract efek
+--    samping approval final (potong SisaCuti + insert absensiTbl utk Cuti; kini
+--    JUGA insert absensiTbl Status='IJIN' utk Ijin -- supaya Ijin ikut kelihatan
+--    di tab Attendance monitoring, sama seperti Cuti) supaya tidak perlu
+--    duplikasi kode di 5 titik "approval final" yang berbeda. Insert absensiTbl
+--    sekarang pakai ON CONFLICT ("Tanggal","QrCodeId") DO UPDATE SET "Status"=...
+--    -- supaya tidak ERROR kalau karyawan kebetulan sudah absen (clock-in) di
+--    hari yang sama sebelum Ijin/Cuti-nya disetujui (jam masuk & lokasi asli
+--    tidak ketimpa, cuma kolom Status yang diupdate). Lembur SENGAJA tidak
+--    disentuh -- karyawan tetap masuk kerja normal hari itu, jadi tidak natural
+--    kalau Status attendance-nya ketimpa jadi "LEMBUR".
+--
+-- 2) submit_pengajuan_ijin_lembur() & submit_pengajuan_cuti(): kalau rantai
+--    approval pemohon cuma 1 level DAN level itu langsung "Direktur" (AuthorizedBy
+--    kosong, atau diisi persis "Direktur"), request langsung di-insert dengan
+--    status APPROVED (level1_by = "Sistem (Auto-Approve Direktur)"), efek samping
+--    final langsung jalan saat itu juga. Tidak ada lagi yang perlu approve manual.
+--
+-- 3) process_approval_action(): kalau level BERIKUTNYA yang dituju (level2_target_role
+--    saat lolos dari level 1, atau level3_target_role saat lolos dari level 2)
+--    adalah persis "Direktur", level itu langsung di-auto-approve-kan final
+--    (bukan cuma di-propose lalu nunggu approver yang tidak akan pernah ada).
+--    Level sebelumnya tetap tercatat approve/propose seperti biasa oleh approver
+--    manusia yang beneran approve.
+--
+-- 4) Frontend (app.js, tab Attendance di "Monitoring Attendance & Enroll"):
+--    ditambah 1 kondisi badge warna ungu "📝 IJIN" untuk Status yang mengandung
+--    "IJIN" -- sebelumnya tidak ada styling khusus, jadi akan salah kelihatan
+--    seperti badge hijau "OPEN" biasa.
+--
+-- Sudah diuji end-to-end pakai 4 karyawan dummy (1-level auto-approve utk Ijin,
+-- Cuti, dan Lembur; 2-level yang berakhir di Direktur; serta kasus tabrakan
+-- ON CONFLICT saat sudah ada absensi asli di hari yang sama) lalu semua data
+-- dummy dihapus bersih -- tidak menyentuh data karyawan/pengajuan asli.
+-- ============================================================================

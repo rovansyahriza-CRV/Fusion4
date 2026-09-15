@@ -537,6 +537,9 @@ function renderMonitoringTable() {
         } else if (uVal.includes('SAKIT')) {
           bg = '#FEF3C7'; color = '#B45309'; border = '#FDE68A';
           displayVal = '🏥 ' + escapeHtml(val);
+        } else if (uVal.includes('IJIN')) {
+          bg = '#EDE9FE'; color = '#6D28D9'; border = '#DDD6FE';
+          displayVal = '📝 ' + escapeHtml(val);
         }
         return `<td><span style="display:inline-block;padding:2px 8px;border-radius:6px;background:${bg};color:${color};border:1px solid ${border};font-weight:700;font-size:11px;">${displayVal}</span></td>`;
       }
