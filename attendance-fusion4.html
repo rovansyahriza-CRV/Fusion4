@@ -147,6 +147,7 @@
     <button id="btnStartFaceFirst" class="btn-block btn-accent">📸 Scan Wajah</button>
     <button id="btnShowQrOption" class="btn-block btn-secondary">📷 Atau Scan QR Code</button>
     <button id="btnGoPindahLokasi" class="btn-block btn-secondary" style="margin-top:16px; border-top:1px solid var(--border); padding-top:15px;">🚚 Pindah Lokasi (Checkout)</button>
+    <button id="btnCloseToBadgeEntry" class="btn-block btn-secondary" style="display:none; margin-top:16px; border-top:1px solid var(--border); padding-top:15px;">✅ Tutup & Kembali ke Badge</button>
   </div>
 
   <div id="qrCard" class="card" style="display:none;">
@@ -222,6 +223,21 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const params = new URLSearchParams(window.location.search);
 let qrCodeId = (params.get('QrCodeId') || params.get('qrCodeId') || params.get('qrcodeid') || "").trim().toUpperCase();
 let fromBadge = (params.get('fromBadge') === '1');
+
+// Kalau flow-nya dibuka dari Digital Badge, kasih jalan keluar dari menu awal juga (bukan cuma
+// setelah selesai absen) -- biar bisa langsung tutup balik ke Badge TANPA maksa milih Scan Wajah/QR
+// dulu, dan tetep gak ganggu tombol "Pindah Lokasi (Checkout)" yang emang udah ada di menu ini.
+const btnCloseToBadgeEntry = document.getElementById('btnCloseToBadgeEntry');
+if (btnCloseToBadgeEntry) {
+  if (fromBadge && qrCodeId) {
+    btnCloseToBadgeEntry.style.display = "block";
+    btnCloseToBadgeEntry.onclick = () => {
+      location.href = "digital-badge.html?QrCodeId=" + encodeURIComponent(qrCodeId);
+    };
+  } else {
+    btnCloseToBadgeEntry.style.display = "none";
+  }
+}
 
 let activeLocation = "";
 let currentPerson = null;
