@@ -351,6 +351,7 @@
                 <th>Digital PIN</th>
                 <th>Type</th>
                 <th>Kualifikasi</th>
+                <th>Diotorisasi Oleh</th>
                 <th>Departemen / Divisi</th>
                 <th>Tgl Masuk</th>
                 <th>Status</th>
@@ -358,7 +359,7 @@
               </tr>
             </thead>
             <tbody id="karyawanTableBody">
-              <tr><td colspan="9" style="text-align:center; color:#777;">Memuat data...</td></tr>
+              <tr><td colspan="10" style="text-align:center; color:#777;">Memuat data...</td></tr>
             </tbody>
           </table>
         </div>
@@ -446,6 +447,13 @@
               <div style="margin-bottom:3px;"><strong style="color:#e8562c;">📦 SMMS Portal:</strong> <strong>MR</strong>=Master Resources, <strong>REQ</strong>=Request, <strong>RFQ</strong>=Buat RFQ, <strong>SVR</strong>=Seleksi Vendor, <strong>PO-&lt;Proj&gt;</strong>=Ajukan PO/SO, <strong>TV</strong>=Terima Vendor.</div>
               <div><strong style="color:#6B46C1;">⚡ Super Admin:</strong> Kosongkan atau ketik <strong>ALL</strong> untuk membuka seluruh menu tanpa batas.</div>
             </div>
+          </div>
+          <div class="input-group">
+            <label for="karyawanAuthorizedBy">Diotorisasi Oleh (Approval Ijin/Cuti/Lembur)</label>
+            <select id="karyawanAuthorizedBy">
+              <option value="">-- Tidak ada atasan / Direktur (Auto-Approve) --</option>
+            </select>
+            <span style="font-size:11px; color:#8a94a3; display:block; margin-top:3px;">Pilih siapa yang jadi approver pengajuan Ijin/Cuti/Lembur karyawan ini (rantai approval Level 1/2/3). Kosongkan kalau karyawan ini gak punya atasan (pengajuannya otomatis disetujui sistem tanpa approval manual).</span>
           </div>
         </div>
 

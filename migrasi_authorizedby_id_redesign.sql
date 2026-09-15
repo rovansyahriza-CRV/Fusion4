@@ -1,0 +1,82 @@
+-- ============================================================================
+-- FITUR: Menu "Diotorisasi Oleh" di Kelola Karyawan + Redesain rantai approval
+-- Ijin/Cuti/Lembur jadi berbasis ID karyawan (bukan cocokin teks jabatan lagi)
+-- Tanggal: 2026-09-15
+-- ============================================================================
+-- Permintaan bro: dikasih menu buat set AuthorizedBy tiap karyawan, dengan Author
+-- (dalam hal ini maksudnya "siapa atasannya") mengacu ke ID karyawan, bukan ngetik
+-- nama jabatan manual seperti sekarang.
+--
+-- KONDISI SEBELUMNYA yang ditemukan: karyawanTbl.Author & karyawanTbl.AuthorizedBy
+-- (kolom TEXT) dipakai submit_pengajuan_ijin_lembur/submit_pengajuan_cuti buat
+-- membangun rantai approval dengan cara COCOKIN TEKS -- cari karyawan lain yang
+-- Author-nya atau Kualifikasi-nya PERSIS SAMA dengan teks itu. Ini rapuh banget:
+-- kolom Author banyak isinya data lama gak nyambung (contoh: milik CRV isinya
+-- "Lead-2, Leader HSE Meeting, Internal Auditor, Admin MWT, Management
+-- Walkthrough" -- kelihatannya daftar role izin HSE, bukan hierarki approval),
+-- dan gak ada menu buat mengisi/mengedit AuthorizedBy sama sekali -- cuma bisa
+-- diisi manual lewat database langsung.
+--
+-- (Catatan: ada JUGA kolom "Author" yang berbeda di paswordTbl, dipakai buat kode
+-- akses menu/approval SMMS/Employee Request seperti "AER-101", "APER", dst -- ini
+-- SUDAH ada menu editnya di form Kelola Karyawan dan TIDAK diubah/disentuh sama
+-- sekali oleh migrasi ini. Yang direstrukturisasi cuma yang di karyawanTbl.)
+--
+-- PERUBAHAN:
+-- 1) Kolom baru karyawanTbl."AuthorizedById" (bigint, FK ke karyawanTbl."Id"
+--    sendiri, nullable). Kosong = karyawan itu gak punya atasan yang di-set
+--    (otomatis dianggap "Direktur", pengajuannya auto-approve tanpa approval
+--    manusia sama sekali -- persis kayak kasus CRV kemarin).
+-- 2) Menu baru di halaman Kelola Karyawan (form Tambah/Edit Karyawan): dropdown
+--    "Diotorisasi Oleh (Approval Ijin/Cuti/Lembur)" -- pilih nama karyawan lain
+--    dari daftar (gak bisa pilih diri sendiri), value yang disimpan adalah ID-nya.
+--    Tabel daftar karyawan juga nambah kolom "Diotorisasi Oleh" biar bisa
+--    di-review sekaligus semua orang siapa atasan approval-nya.
+-- 3) Rantai approval (submit_pengajuan_ijin_lembur, submit_pengajuan_cuti) sekarang
+--    jalan murni dengan mengikuti AuthorizedById dari satu karyawan ke karyawan
+--    berikutnya (maksimal 3 level, sama seperti desain sebelumnya). Begitu ketemu
+--    approver yang Kualifikasi-nya diawali "Direktur" (Direktur Utama/Direktur
+--    Operasional), level itu otomatis di-approve sistem tanpa perlu klik manual --
+--    fitur "Direktur Auto-Approve" dari migrasi sebelumnya TETAP jalan sama persis,
+--    cuma sekarang dipicu dari Kualifikasi orang yang beneran ketemu by ID, bukan
+--    dari teks 'Direktur' yang harus diketik manual di suatu tempat.
+--    PENTING beda kecil dari desain lama: kalau atasan seseorang adalah manusia
+--    biasa (bukan Direktur) dan atasan itu sendiri gak punya atasan lagi di
+--    atasnya, atasan itu TETAP HARUS klik Approve sendiri (gak ada auto-skip
+--    lagi) -- beda dari sebelumnya yang auto-approve kalau field-nya kosong.
+--    Ini lebih akurat: yang approve beneran orangnya, bukan sistem yang nebak.
+-- 4) get_pending_ijin_lembur_approvals_by_qrcode: Level 1/2/3 sekarang dicocokkan
+--    langsung ke ID approver (levelN_approver_id), bukan cocokin nama
+--    jabatan/Author/Nama lagi. Cek HR Admin (Level 0) TIDAK berubah -- tetap
+--    dicocokkan by Kualifikasi/Author/Nama = "HR Operations / HR Admin" (ini
+--    gerbang berbasis jabatan, memang bukan bagian dari rantai personal).
+-- 5) update_karyawan_core & create_karyawan_full: tambah parameter
+--    p_authorized_by_id, dengan validasi sederhana gak boleh menunjuk diri
+--    sendiri.
+-- 6) list_karyawan_all: tambah kolom authorizedbyid & authorizedbyname (join ke
+--    nama orangnya) buat ditampilkan di tabel & form edit.
+--
+-- CATATAN PENTING soal 6 pengajuan lama yang masih PENDING_PROPOSE (id 12-17,
+-- punya Nur Isnaini Putri/Yuni Herlina x3/Rizzal Surya Kusuma/Angelia Amey Pasla,
+-- tanggal 11-14 Sept): dicek, ternyata mereka SUDAH stuck/gak kelihatan di antrian
+-- approval siapa pun SEBELUM migrasi ini juga -- level1_target_role-nya kesimpen
+-- literal teks "Direktur" (dari versi submit_pengajuan_ijin_lembur paling awal,
+-- sebelum fitur cek HR Admin ada), tapi gak ada satupun karyawan yang Kualifikasi/
+-- Author/Nama-nya PERSIS SAMA dengan teks "Direktur" (yang asli "Direktur Utama"/
+-- "Direktur Operasional"), jadi dari awal emang gak pernah muncul di antrian
+-- approval siapa pun. Ini BUG LAMA yang independen dari migrasi ini -- migrasi ini
+-- SENGAJA TIDAK ikut mem-backfill/finalize ke-6 pengajuan itu (biar gak diam-diam
+-- nge-approve Ijin yang tanggalnya udah lewat & bisa nimpa data absensi hari itu
+-- tanpa sepengetahuan bro). Perlu diputuskan manual: mau di-reject (karena udah
+-- basi/lewat tanggal) atau di-approve manual lewat database.
+--
+-- Sudah diuji end-to-end pakai 9 karyawan dummy (ID 99990-99998) simulasi 4
+-- skenario: (a) rantai 3 level penuh diakhiri Direktur (capped di level 3), (b)
+-- rantai 2 level yang langsung auto-approve di level 2 karena atasannya Direktur,
+-- (c) karyawan tanpa atasan sama sekali (auto-approve total, 0 approval manusia),
+-- (d) rantai 1 level dengan atasan akhir manusia biasa (WAJIB klik approve
+-- sendiri, gak auto-skip). Semua 4 skenario dijalankan penuh sampai APPROVED,
+-- efek samping (potong absensiTbl jadi Status='IJIN', generate kode_ijin) juga
+-- diverifikasi jalan. update_karyawan_core & list_karyawan_all juga dites
+-- (termasuk validasi tolak self-reference). Semua data dummy sudah dihapus bersih.
+-- ============================================================================

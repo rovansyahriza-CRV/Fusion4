@@ -953,7 +953,7 @@ let karyawanState = { rows: [] };
 
 async function loadKaryawanPage() {
   const tbody = document.getElementById('karyawanTableBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#777;">Memuat data...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">Memuat data...</td></tr>';
   populateKaryawanDivisiOptions();
 
   try {
@@ -961,9 +961,30 @@ async function loadKaryawanPage() {
     if (error) throw error;
     karyawanState.rows = data || [];
     renderKaryawanTable();
+    populateKaryawanAuthorizedByOptions();
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:red;">Gagal memuat data: ${err.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">Gagal memuat data: ${err.message}</td></tr>`;
   }
+}
+
+// Isi dropdown "Diotorisasi Oleh" dari daftar karyawan yang udah dimuat (karyawanState.rows).
+// excludeId dipakai pas mode Edit, biar karyawan gak bisa milih dirinya sendiri jadi atasan.
+function populateKaryawanAuthorizedByOptions(excludeId) {
+  const sel = document.getElementById('karyawanAuthorizedBy');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- Tidak ada atasan / Direktur (Auto-Approve) --</option>';
+  (karyawanState.rows || [])
+    .filter(r => !excludeId || r.id !== excludeId)
+    .slice()
+    .sort((a, b) => String(a.namapersonnel || '').localeCompare(String(b.namapersonnel || '')))
+    .forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = `${r.namapersonnel || '(tanpa nama)'} (${r.kualifikasi || '-'})`;
+      sel.appendChild(opt);
+    });
+  if (current) sel.value = current;
 }
 
 function renderKaryawanTable() {
@@ -979,7 +1000,7 @@ function renderKaryawanTable() {
   if (countEl) countEl.textContent = `${filtered.length} Karyawan`;
 
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#777;">Belum ada data.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">Belum ada data.</td></tr>';
     return;
   }
 
@@ -988,6 +1009,9 @@ function renderKaryawanTable() {
       ? `<span class="badge-unit" style="background:#E5F6EC;color:#178A4C;">Active</span>`
       : `<span class="badge-unit" style="background:#FCEAE8;color:#D9312E;">Inactive</span>`;
     const tglMasuk = r.tglmasuk ? new Date(r.tglmasuk).toLocaleDateString('id-ID') : '-';
+    const authorizedByDisplay = r.authorizedbyname
+      ? escapeHtml(r.authorizedbyname)
+      : '<span style="color:#b45309;">Direktur (Auto)</span>';
     return `
       <tr>
         <td><strong>${escapeHtml(r.namapersonnel)}</strong></td>
@@ -995,6 +1019,7 @@ function renderKaryawanTable() {
         <td>${escapeHtml(String(r.digitalpin ?? '')) || '-'}</td>
         <td>${escapeHtml(r.type) || '-'}</td>
         <td>${escapeHtml(r.kualifikasi) || '-'}</td>
+        <td>${authorizedByDisplay}</td>
         <td>${escapeHtml(r.departemen) || '-'}${r.divisi ? ' / ' + escapeHtml(r.divisi) : ''}</td>
         <td>${tglMasuk}</td>
         <td>${statusBadge}</td>
@@ -1056,6 +1081,11 @@ function editKaryawan(id) {
   document.getElementById('karyawanJumlahAnak').value = row.jumlahanak || '';
   document.getElementById('karyawanAuthor').value = row.author || '';
   document.getElementById('karyawanPic').value = row.pic || '';
+
+  populateKaryawanAuthorizedByOptions(row.id);
+  const authSelect = document.getElementById('karyawanAuthorizedBy');
+  if (authSelect) authSelect.value = '';
+  ensureSelectHasValue(authSelect, row.authorizedbyid ? String(row.authorizedbyid) : '');
 
   document.getElementById('karyawanFormTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1161,6 +1191,9 @@ function resetKaryawanForm() {
   if (kualSelect) kualSelect.innerHTML = '<option value="">-- Pilih Departemen Terlebih Dahulu --</option>';
   const customGroup = document.getElementById('groupKaryawanKualifikasiCustom');
   if (customGroup) customGroup.style.display = 'none';
+  populateKaryawanAuthorizedByOptions();
+  const authSelect = document.getElementById('karyawanAuthorizedBy');
+  if (authSelect) authSelect.value = '';
 
   setKaryawanEditMode(false);
   document.getElementById('karyawanFormTitle').textContent = '+ Tambah Karyawan Baru';
@@ -1219,6 +1252,8 @@ async function submitKaryawanBaru() {
   }
   const statusNikah = document.getElementById('karyawanStatusNikah')?.value.trim() || '';
   const jumlahAnak = document.getElementById('karyawanJumlahAnak')?.value.trim() || '';
+  const authorizedByIdRaw = document.getElementById('karyawanAuthorizedBy')?.value || '';
+  const authorizedById = authorizedByIdRaw ? parseInt(authorizedByIdRaw, 10) : null;
 
   if (!nama) { showToast('Nama karyawan wajib diisi.', 'error'); return; }
 
@@ -1238,6 +1273,7 @@ async function submitKaryawanBaru() {
         p_type: type || null,
         p_status_nikah: statusNikah || null,
         p_jumlah_anak: jumlahAnak || null,
+        p_authorized_by_id: authorizedById,
       });
       if (error) throw error;
 
@@ -1273,6 +1309,7 @@ async function submitKaryawanBaru() {
       p_email: email || null,
       p_status_nikah: statusNikah || null,
       p_jumlah_anak: jumlahAnak || null,
+      p_authorized_by_id: authorizedById,
     });
     if (error) throw error;
 
