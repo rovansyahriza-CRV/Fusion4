@@ -28,7 +28,7 @@ async function initAuthSession() {
   } else {
     currentUser = null;
     updateUIAuth();
-    loadUserDropdown();
+    setupLoginSearch();
   }
 }
 
@@ -185,25 +185,87 @@ function logoutUser() {
   window.location.reload();
 }
 
-async function loadUserDropdown() {
-  const selectEl = document.getElementById('loginId');
-  if (!selectEl) return;
+// Login versi searchable combobox: BEDA sama loadUserDropdown() versi lama yang langsung nge-dump
+// SEMUA nama admin/PIC ke <select> begitu halaman dibuka (kebaca orang luar sebelum login).
+// Sekarang daftar nama baru muncul sebagai saran ketika user udah ngetik minimal 2 huruf, dan
+// hasilnya di-query fresh dari server tiap ketikan (RPC search_active_karyawan, dibatasi 8 hasil) --
+// bukan hasil filter dari list yang udah ke-load duluan di client.
+function setupLoginSearch() {
+  const searchEl = document.getElementById('loginSearch');
+  const hiddenIdEl = document.getElementById('loginId');
+  const suggestEl = document.getElementById('loginSuggestions');
+  if (!searchEl || !hiddenIdEl || !suggestEl) return;
 
-  try {
-    const { data, error } = await supabaseClient.rpc('get_active_karyawan');
-    if (error) throw error;
+  let debounceTimer = null;
 
-    selectEl.innerHTML = '<option value="">-- Pilih Nama Karyawan --</option>';
-    (data || []).forEach(user => {
-      const option = document.createElement('option');
-      option.value = String(user.id).trim();
-      option.textContent = `${String(user.nama).trim()} (ID: ${String(user.id).trim()})`;
-      selectEl.appendChild(option);
-    });
-  } catch (error) {
-    console.error('Error loadUserDropdown:', error);
-    selectEl.innerHTML = '<option value="">Gagal koneksi ke server</option>';
+  function closeSuggestions() {
+    suggestEl.style.display = 'none';
+    suggestEl.innerHTML = '';
   }
+
+  function selectSuggestion(user) {
+    hiddenIdEl.value = String(user.id).trim();
+    searchEl.value = `${String(user.nama).trim()} (ID: ${String(user.id).trim()})`;
+    closeSuggestions();
+  }
+
+  function renderSuggestions(list) {
+    if (!list.length) {
+      suggestEl.innerHTML = '<div style="padding:10px 12px; color:#888; font-size:13px;">Nama tidak ditemukan.</div>';
+      suggestEl.style.display = 'block';
+      return;
+    }
+    suggestEl.innerHTML = '';
+    list.forEach(user => {
+      const item = document.createElement('div');
+      item.textContent = `${String(user.nama).trim()} (ID: ${String(user.id).trim()})`;
+      item.style.cssText = 'padding:10px 12px; cursor:pointer; font-size:14px; border-bottom:1px solid #f0f0f0;';
+      item.addEventListener('mouseenter', () => { item.style.background = '#f2f2f2'; });
+      item.addEventListener('mouseleave', () => { item.style.background = '#fff'; });
+      // mousedown (bukan click) supaya keeksekusi duluan sebelum event blur di input nutup daftar ini.
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        selectSuggestion(user);
+      });
+      suggestEl.appendChild(item);
+    });
+    suggestEl.style.display = 'block';
+  }
+
+  async function runSearch(query) {
+    try {
+      const { data, error } = await supabaseClient.rpc('search_active_karyawan', { p_query: query });
+      if (error) throw error;
+      renderSuggestions(data || []);
+    } catch (error) {
+      console.error('Error search_active_karyawan:', error);
+      suggestEl.innerHTML = '<div style="padding:10px 12px; color:#c00; font-size:13px;">Gagal terhubung ke server.</div>';
+      suggestEl.style.display = 'block';
+    }
+  }
+
+  searchEl.addEventListener('input', () => {
+    // Ketikan berubah -> pilihan lama (kalau ada) jadi gak valid lagi, wajib pilih ulang dari saran.
+    hiddenIdEl.value = '';
+    const query = searchEl.value.trim();
+    clearTimeout(debounceTimer);
+    if (query.length < 2) {
+      closeSuggestions();
+      return;
+    }
+    debounceTimer = setTimeout(() => runSearch(query), 250);
+  });
+
+  searchEl.addEventListener('focus', () => {
+    if (searchEl.value.trim().length >= 2 && suggestEl.innerHTML) {
+      suggestEl.style.display = 'block';
+    }
+  });
+
+  searchEl.addEventListener('blur', () => {
+    // Delay dikit biar mousedown di item saran sempet ke-handle duluan sebelum daftar ditutup.
+    setTimeout(closeSuggestions, 150);
+  });
 }
 
 function updateUIAuth() {
@@ -249,6 +311,11 @@ document.getElementById('formLogin')?.addEventListener('submit', async function 
   const id = document.getElementById('loginId').value;
   const pass = document.getElementById('loginPass').value;
   const btn = document.getElementById('btnLoginSubmit');
+
+  if (!id) {
+    showToast('Ketik nama Anda dan pilih dari daftar saran dulu.', 'error');
+    return;
+  }
 
   btn.textContent = 'Memverifikasi...';
   btn.disabled = true;
