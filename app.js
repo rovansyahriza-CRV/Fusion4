@@ -1969,11 +1969,15 @@ function renderOtorisasiTable() {
     tbody.innerHTML = filtered.map(item => {
       const typeBadge = item.tipe === 'IJIN'
         ? `<span style="color:#D97706; font-weight:700;">🚪 Ijin Pulang</span>`
+        : item.tipe === 'CUTI'
+        ? `<span style="color:#0369A1; font-weight:700;">🏖️ Cuti</span>`
         : `<span style="color:#2563EB; font-weight:700;">⏱️ Lembur (SPKL)</span>`;
 
       const action = item.required_action || 'APPROVE';
       let btnHtml = '';
-      if (action === 'PROPOSE') {
+      if (action === 'HR_CHECK') {
+        btnHtml = `<button type="button" class="btn-action-propose" onclick='openModalApprovalAction(${item.id}, "HR_CHECK", ${JSON.stringify(JSON.stringify(item))})'>🗂️ Cek HR</button>`;
+      } else if (action === 'PROPOSE') {
         btnHtml = `<button type="button" class="btn-action-propose" onclick='openModalApprovalAction(${item.id}, "PROPOSE", ${JSON.stringify(JSON.stringify(item))})'>⚡ Propose</button>`;
       } else if (action === 'REVIEW') {
         btnHtml = `<button type="button" class="btn-action-review" onclick='openModalApprovalAction(${item.id}, "REVIEW", ${JSON.stringify(JSON.stringify(item))})'>🔍 Review</button>`;
@@ -1996,7 +2000,7 @@ function renderOtorisasiTable() {
           <td style="max-width:240px; white-space:normal;">${escapeHtml(item.alasan || '-')}</td>
           <td>
             <div class="step-tracker-mini">
-              <span>Level ${item.current_level} dari ${item.total_levels}</span>
+              <span>${item.current_level === 0 ? 'Cek HR Admin' : `Level ${item.current_level} dari ${item.total_levels}`}</span>
             </div>
           </td>
           <td style="text-align:center;">
@@ -2028,10 +2032,14 @@ function renderOtorisasiTable() {
     tbody.innerHTML = filtered.map(item => {
       const typeBadge = item.tipe === 'IJIN'
         ? `<span style="color:#D97706; font-weight:700;">🚪 IJIN</span>`
+        : item.tipe === 'CUTI'
+        ? `<span style="color:#0369A1; font-weight:700;">🏖️ CUTI</span>`
         : `<span style="color:#2563EB; font-weight:700;">⏱️ LEMBUR</span>`;
 
       let statusBadge = '';
-      if (item.status === 'PENDING_PROPOSE') {
+      if (item.status === 'PENDING_HR_CHECK') {
+        statusBadge = `<span class="badge-status-step badge-pending-propose">Menunggu Cek HR Admin</span>`;
+      } else if (item.status === 'PENDING_PROPOSE') {
         statusBadge = `<span class="badge-status-step badge-pending-propose">Menunggu Propose (L1)</span>`;
       } else if (item.status === 'PROPOSED') {
         statusBadge = `<span class="badge-status-step badge-proposed">Proposed (Menunggu L2)</span>`;
@@ -2062,7 +2070,7 @@ function renderOtorisasiTable() {
           <td style="max-width:200px; white-space:normal;">${escapeHtml(item.alasan || '-')}</td>
           <td>
             ${statusBadge}<br>
-            <small style="color:#64748B;">Level: ${item.current_level}/${item.total_levels}</small>
+            <small style="color:#64748B;">Level: ${item.current_level === 0 ? 'HR' : item.current_level}/${item.total_levels}</small>
           </td>
           <td>${voucherHtml}</td>
           <td style="text-align:center;">
@@ -2267,7 +2275,12 @@ function openModalApprovalAction(requestId, actionName, reqJsonStr) {
 
   if (notesInput) notesInput.value = '';
 
-  if (actionName === 'PROPOSE') {
+  if (actionName === 'HR_CHECK') {
+    if (titleEl) titleEl.textContent = '🗂️ Cek HR Admin';
+    if (subEl) subEl.textContent = 'Verifikasi data pengajuan sebelum diteruskan ke approval Level 1.';
+    if (btnApprove) { btnApprove.textContent = 'Ya, Lolos Cek & Teruskan'; btnApprove.style.display = 'block'; }
+    if (btnReject) btnReject.style.display = 'block';
+  } else if (actionName === 'PROPOSE') {
     if (titleEl) titleEl.textContent = '⚡ Usulkan Permohonan (Propose)';
     if (subEl) subEl.textContent = 'Teruskan permohonan ini ke atasan level berikutnya untuk review.';
     if (btnApprove) { btnApprove.textContent = 'Ya, Usulkan (Propose)'; btnApprove.style.display = 'block'; }
@@ -2293,13 +2306,13 @@ function openModalApprovalAction(requestId, actionName, reqJsonStr) {
   if (bodyEl) {
     bodyEl.innerHTML = `
       <div style="display:grid; grid-template-columns:110px 1fr; gap:6px;">
-        <strong>Tipe:</strong> <span>${item.tipe === 'IJIN' ? '🚪 Ijin Pulang' : '⏱️ Lembur (SPKL)'}</span>
+        <strong>Tipe:</strong> <span>${item.tipe === 'IJIN' ? '🚪 Ijin Pulang' : item.tipe === 'CUTI' ? '🏖️ Cuti' : '⏱️ Lembur (SPKL)'}</span>
         <strong>Pemohon:</strong> <span>${escapeHtml(item.nama_pemohon || item.qrcodeid)} (${escapeHtml(item.kualifikasi || '-')})</span>
         <strong>Tanggal:</strong> <span>${formatTglIndo(item.tanggal)}</span>
         ${item.lokasi ? `<strong>Lokasi:</strong> <span>${escapeHtml(item.lokasi)}</span>` : ''}
         ${item.durasi_jam ? `<strong>Durasi:</strong> <span>${item.durasi_jam} Jam</span>` : ''}
         <strong>Alasan:</strong> <span style="white-space:pre-wrap;">${escapeHtml(item.alasan || '-')}</span>
-        <strong>Progress:</strong> <span>Level ${item.current_level} dari total ${item.total_levels} Level</span>
+        <strong>Progress:</strong> <span>${item.current_level === 0 ? 'Menunggu Cek HR Admin' : `Level ${item.current_level} dari total ${item.total_levels} Level`}</span>
         ${item.kode_ijin ? `<strong>Kode Ijin:</strong> <span class="voucher-code-tag voucher-active">${escapeHtml(item.kode_ijin)}</span>` : ''}
         ${item.voucher_pin ? `<strong>PIN Lembur:</strong> <span class="voucher-code-tag voucher-active">${escapeHtml(item.voucher_pin)}</span>` : ''}
       </div>

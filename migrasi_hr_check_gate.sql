@@ -1,0 +1,64 @@
+-- ============================================================================
+-- FITUR: Cek HR Admin (Level 0) sebelum lanjut ke approval Level 1
+-- Tanggal: 2026-09-15
+-- ============================================================================
+-- Permintaan bro: sebelum pengajuan Ijin/Cuti/Lembur bisa lanjut ke approval
+-- Level 1 (rantai Author/AuthorizedBy), harus lolos cek dulu dari karyawan yang
+-- Kualifikasi/Author-nya persis "HR Operations / HR Admin" (di database sekarang
+-- ini Prasetyo Bimantara). HR Admin bisa Approve (lanjut ke Level 1) atau Reject
+-- (pengajuan langsung ditolak, gak lanjut kemana-mana) -- berlaku untuk semua
+-- tipe: Ijin, Cuti, dan Lembur.
+--
+-- Perubahan skema pengajuan_ijin_lembur_tbl:
+-- - Kolom baru: hrcheck_target_role, hrcheck_by, hrcheck_at, hrcheck_action,
+--   hrcheck_notes -- pola persis sama seperti level1/2/3_by/at/action/notes yang
+--   sudah ada.
+-- - current_level sekarang boleh 0 (artinya "menunggu cek HR Admin"), sebelumnya
+--   cuma 1-3.
+-- - status baru 'PENDING_HR_CHECK' -- state awal begitu pengajuan dibuat.
+--
+-- Perubahan fungsi:
+-- 1) submit_pengajuan_ijin_lembur() & submit_pengajuan_cuti(): sekarang SELALU
+--    insert dengan current_level=0, status='PENDING_HR_CHECK', dan
+--    hrcheck_target_role='HR Operations / HR Admin'. Perhitungan rantai Author/
+--    AuthorizedBy (level1/2/3_target_role) tetap jalan seperti biasa di saat
+--    submit, cuma pengajuan gak langsung auto-approve lagi di titik ini
+--    walaupun kebetulan cuma 1 level & langsung "Direktur" -- itu tetap harus
+--    lolos cek HR Admin dulu.
+--
+-- 2) process_approval_action(): ditambah cabang baru untuk current_level=0.
+--    Kalau HR Admin approve:
+--    - Kalau total_levels=1 dan level1_target_role='Direktur' -> langsung
+--      final-kan (APPROVED) sekalian, karena level Direktur cuma info doang
+--      (fitur auto-approve Direktur dari migrasi sebelumnya). Efek samping
+--      (potong kuota cuti, kode ijin, insert absensiTbl) langsung jalan.
+--    - Selain itu -> lanjut ke current_level=1, status='PENDING_PROPOSE' (state
+--      yang sama persis seperti sebelum ada fitur ini, tinggal nunggu approver
+--      Level 1 yang sesungguhnya).
+--    Kalau HR Admin reject -> pakai jalur REJECT generik yang sudah ada
+--    (rejected_by/rejected_at/reject_reason), gak perlu logic baru.
+--
+-- 3) get_pending_ijin_lembur_approvals_by_qrcode(): ditambah pencocokan untuk
+--    current_level=0 terhadap hrcheck_target_role (match ke Author/Kualifikasi/
+--    Nama viewer, sama persis gaya matching level 1/2/3), dengan
+--    required_action='HR_CHECK'.
+--
+-- 4) Frontend (app.js, halaman "Otorisasi Ijin & Lembur"):
+--    - Tombol baru "🗂️ Cek HR" utk item dengan required_action='HR_CHECK'.
+--    - Modal approval dengan judul & teks khusus utk aksi HR_CHECK.
+--    - Label progress level & status badge disesuaikan biar "Level 0" tampil
+--      sebagai "Cek HR Admin" / "Menunggu Cek HR Admin", bukan angka mentah.
+--    - Bonus fix: badge tipe pengajuan (di tab antrean & riwayat) sebelumnya
+--      cuma bisa nampilin IJIN atau LEMBUR -- CUTI ikut ketiban badge "Lembur"
+--      yang salah. Sekarang CUTI dapat badge sendiri ("🏖️ Cuti").
+--
+-- PENTING -- pengajuan lama (yang sudah disubmit SEBELUM migrasi ini) tidak
+-- terpengaruh: mereka sudah start di current_level>=1, jadi otomatis dianggap
+-- "sudah lewat" cek HR Admin (tidak di-mundurkan ke level 0).
+--
+-- Sudah diuji end-to-end pakai 5 karyawan dummy: skenario HR check lolos lalu
+-- auto-approve Direktur (Ijin), HR check lolos lalu lanjut Level 1 -> auto-approve
+-- Direktur di Level 2 (Cuti, termasuk verifikasi potong SisaCuti & absensiTbl),
+-- dan HR check reject (Ijin) -- lalu semua data dummy dihapus bersih, tidak
+-- menyentuh data karyawan/pengajuan asli.
+-- ============================================================================
