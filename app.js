@@ -961,30 +961,94 @@ async function loadKaryawanPage() {
     if (error) throw error;
     karyawanState.rows = data || [];
     renderKaryawanTable();
-    populateKaryawanAuthorizedByOptions();
+    setupKaryawanAuthorizedBySearch();
   } catch (err) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">Gagal memuat data: ${err.message}</td></tr>`;
   }
 }
 
-// Isi dropdown "Diotorisasi Oleh" dari daftar karyawan yang udah dimuat (karyawanState.rows).
-// excludeId dipakai pas mode Edit, biar karyawan gak bisa milih dirinya sendiri jadi atasan.
-function populateKaryawanAuthorizedByOptions(excludeId) {
-  const sel = document.getElementById('karyawanAuthorizedBy');
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = '<option value="">-- Tidak ada atasan / Direktur (Auto-Approve) --</option>';
-  (karyawanState.rows || [])
-    .filter(r => !excludeId || r.id !== excludeId)
-    .slice()
-    .sort((a, b) => String(a.namapersonnel || '').localeCompare(String(b.namapersonnel || '')))
-    .forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r.id;
-      opt.textContent = `${r.namapersonnel || '(tanpa nama)'} (${r.kualifikasi || '-'})`;
-      sel.appendChild(opt);
-    });
-  if (current) sel.value = current;
+// Searchable combobox buat field "Diotorisasi Oleh" -- filter lokal dari karyawanState.rows
+// yang udah dimuat (gak perlu round-trip ke server tiap ketikan, beda sama pola search login
+// yang emang sengaja query server tiap ketik). Listener cuma di-attach sekali (guard flag).
+let karyawanAuthorizedBySearchBound = false;
+function setupKaryawanAuthorizedBySearch() {
+  const searchEl = document.getElementById('karyawanAuthorizedBySearch');
+  const hiddenEl = document.getElementById('karyawanAuthorizedBy');
+  const suggestEl = document.getElementById('karyawanAuthorizedBySuggestions');
+  if (!searchEl || !hiddenEl || !suggestEl || karyawanAuthorizedBySearchBound) return;
+  karyawanAuthorizedBySearchBound = true;
+
+  function closeSuggestions() {
+    suggestEl.style.display = 'none';
+    suggestEl.innerHTML = '';
+  }
+
+  function selectNone() {
+    hiddenEl.value = '';
+    searchEl.value = '';
+    closeSuggestions();
+  }
+
+  function selectSuggestion(row) {
+    hiddenEl.value = String(row.id);
+    searchEl.value = `${row.namapersonnel || '(tanpa nama)'} (${row.kualifikasi || '-'})`;
+    closeSuggestions();
+  }
+
+  function renderSuggestions(list) {
+    suggestEl.innerHTML = '';
+
+    const noneOpt = document.createElement('div');
+    noneOpt.textContent = '-- Tidak ada atasan / Direktur (Auto-Approve) --';
+    noneOpt.style.cssText = 'padding:10px 12px; cursor:pointer; font-size:13px; color:#b45309; border-bottom:1px solid #f0f0f0;';
+    noneOpt.addEventListener('mouseenter', () => { noneOpt.style.background = '#f2f2f2'; });
+    noneOpt.addEventListener('mouseleave', () => { noneOpt.style.background = '#fff'; });
+    noneOpt.addEventListener('mousedown', (e) => { e.preventDefault(); selectNone(); });
+    suggestEl.appendChild(noneOpt);
+
+    if (!list.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'Nama tidak ditemukan.';
+      empty.style.cssText = 'padding:10px 12px; color:#888; font-size:13px;';
+      suggestEl.appendChild(empty);
+    } else {
+      list.forEach(row => {
+        const item = document.createElement('div');
+        item.textContent = `${row.namapersonnel || '(tanpa nama)'} (${row.kualifikasi || '-'})`;
+        item.style.cssText = 'padding:10px 12px; cursor:pointer; font-size:14px; border-bottom:1px solid #f0f0f0;';
+        item.addEventListener('mouseenter', () => { item.style.background = '#f2f2f2'; });
+        item.addEventListener('mouseleave', () => { item.style.background = '#fff'; });
+        // mousedown (bukan click) supaya keeksekusi duluan sebelum blur nutup daftar ini.
+        item.addEventListener('mousedown', (e) => { e.preventDefault(); selectSuggestion(row); });
+        suggestEl.appendChild(item);
+      });
+    }
+    suggestEl.style.display = 'block';
+  }
+
+  function runFilter(query) {
+    const excludeId = parseInt(document.getElementById('karyawanEditId')?.value || '', 10) || null;
+    const q = query.toLowerCase();
+    const list = (karyawanState.rows || [])
+      .filter(r => !excludeId || r.id !== excludeId)
+      .filter(r => !q || String(r.namapersonnel || '').toLowerCase().includes(q))
+      .slice()
+      .sort((a, b) => String(a.namapersonnel || '').localeCompare(String(b.namapersonnel || '')))
+      .slice(0, 15);
+    renderSuggestions(list);
+  }
+
+  searchEl.addEventListener('input', () => {
+    hiddenEl.value = '';
+    runFilter(searchEl.value.trim());
+  });
+  searchEl.addEventListener('focus', () => {
+    runFilter(searchEl.value.trim());
+  });
+  searchEl.addEventListener('blur', () => {
+    // Delay dikit biar mousedown di item saran sempet ke-handle duluan sebelum daftar ditutup.
+    setTimeout(closeSuggestions, 150);
+  });
 }
 
 function renderKaryawanTable() {
@@ -1082,10 +1146,11 @@ function editKaryawan(id) {
   document.getElementById('karyawanAuthor').value = row.author || '';
   document.getElementById('karyawanPic').value = row.pic || '';
 
-  populateKaryawanAuthorizedByOptions(row.id);
-  const authSelect = document.getElementById('karyawanAuthorizedBy');
-  if (authSelect) authSelect.value = '';
-  ensureSelectHasValue(authSelect, row.authorizedbyid ? String(row.authorizedbyid) : '');
+  setupKaryawanAuthorizedBySearch();
+  const authHidden = document.getElementById('karyawanAuthorizedBy');
+  const authSearch = document.getElementById('karyawanAuthorizedBySearch');
+  if (authHidden) authHidden.value = row.authorizedbyid ? String(row.authorizedbyid) : '';
+  if (authSearch) authSearch.value = row.authorizedbyid ? String(row.authorizedbyname || '(tanpa nama)') : '';
 
   document.getElementById('karyawanFormTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1191,9 +1256,11 @@ function resetKaryawanForm() {
   if (kualSelect) kualSelect.innerHTML = '<option value="">-- Pilih Departemen Terlebih Dahulu --</option>';
   const customGroup = document.getElementById('groupKaryawanKualifikasiCustom');
   if (customGroup) customGroup.style.display = 'none';
-  populateKaryawanAuthorizedByOptions();
-  const authSelect = document.getElementById('karyawanAuthorizedBy');
-  if (authSelect) authSelect.value = '';
+  setupKaryawanAuthorizedBySearch();
+  const authHidden = document.getElementById('karyawanAuthorizedBy');
+  const authSearch = document.getElementById('karyawanAuthorizedBySearch');
+  if (authHidden) authHidden.value = '';
+  if (authSearch) authSearch.value = '';
 
   setKaryawanEditMode(false);
   document.getElementById('karyawanFormTitle').textContent = '+ Tambah Karyawan Baru';

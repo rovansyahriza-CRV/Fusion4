@@ -448,12 +448,13 @@
               <div><strong style="color:#6B46C1;">⚡ Super Admin:</strong> Kosongkan atau ketik <strong>ALL</strong> untuk membuka seluruh menu tanpa batas.</div>
             </div>
           </div>
-          <div class="input-group">
-            <label for="karyawanAuthorizedBy">Diotorisasi Oleh (Approval Ijin/Cuti/Lembur)</label>
-            <select id="karyawanAuthorizedBy">
-              <option value="">-- Tidak ada atasan / Direktur (Auto-Approve) --</option>
-            </select>
-            <span style="font-size:11px; color:#8a94a3; display:block; margin-top:3px;">Pilih siapa yang jadi approver pengajuan Ijin/Cuti/Lembur karyawan ini (rantai approval Level 1/2/3). Kosongkan kalau karyawan ini gak punya atasan (pengajuannya otomatis disetujui sistem tanpa approval manual).</span>
+          <div class="input-group" style="position:relative;">
+            <label for="karyawanAuthorizedBySearch">Diotorisasi Oleh (Approval Ijin/Cuti/Lembur)</label>
+            <input type="text" id="karyawanAuthorizedBySearch" placeholder="Ketik nama atasan... (kosongkan = Direktur/Auto-Approve)" autocomplete="off"
+                   style="width:100%; padding:10px; border-radius:6px; border:1px solid #ccc; box-sizing:border-box;">
+            <input type="hidden" id="karyawanAuthorizedBy" value="">
+            <div id="karyawanAuthorizedBySuggestions" style="display:none; position:absolute; top:100%; left:0; right:0; margin-top:2px; background:#fff; border:1px solid #ccc; border-radius:6px; max-height:220px; overflow-y:auto; z-index:20; box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>
+            <span style="font-size:11px; color:#8a94a3; display:block; margin-top:3px;">Ketik buat cari nama atasan (rantai approval Level 1/2/3). Kosongkan kalau karyawan ini gak punya atasan (pengajuannya otomatis disetujui sistem tanpa approval manual).</span>
           </div>
         </div>
 
