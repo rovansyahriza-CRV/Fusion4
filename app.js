@@ -638,6 +638,37 @@ async function searchAlamatLokasi() {
   }
 }
 
+function applyPastedCoord() {
+  const raw = (document.getElementById('lokasiPasteCoord')?.value || '').trim();
+  if (!raw) { showToast('Paste dulu koordinatnya, contoh: -6.208763, 106.845599', 'error'); return; }
+
+  // Terima format "lat, lng" hasil copy dari Google Maps -- dipisah koma atau spasi,
+  // boleh pakai desimal negatif (LS/BB).
+  const match = raw.match(/(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)/);
+  if (!match) {
+    showToast('Format koordinat tidak dikenali. Contoh: -6.208763, 106.845599', 'error');
+    return;
+  }
+
+  const lat = parseFloat(match[1]);
+  const lng = parseFloat(match[2]);
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    showToast('Nilai koordinat di luar jangkauan wajar. Cek lagi ya.', 'error');
+    return;
+  }
+
+  initLokasiMapIfNeeded();
+  setLokasiMapPoint(lat, lng, true);
+  showToast('Koordinat berhasil di-set: ' + lat.toFixed(6) + ', ' + lng.toFixed(6), 'success');
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.target && e.target.id === 'lokasiPasteCoord' && e.key === 'Enter') {
+    e.preventDefault();
+    applyPastedCoord();
+  }
+});
+
 async function loadLokasiPage() {
   initLokasiMapIfNeeded();
   const tbody = document.getElementById('lokasiTableBody');
@@ -836,6 +867,7 @@ function resetLokasiForm() {
   document.getElementById('lokasiStatus').value = 'Active';
   document.getElementById('lokasiType').value = '';
   document.getElementById('lokasiSearchAlamat').value = '';
+  if (document.getElementById('lokasiPasteCoord')) document.getElementById('lokasiPasteCoord').value = '';
   document.getElementById('lokasiLat').value = '';
   document.getElementById('lokasiLng').value = '';
 

@@ -268,6 +268,12 @@
         <p style="font-size:12.5px;color:#8A8580;margin:0 0 8px;">Klik atau geser pin di peta buat nentuin titik lokasi -- Latitude/Longitude di bawah keisi otomatis.</p>
         <div id="lokasiMap" style="width:100%; height:340px; border-radius:12px; border:1.5px solid #e6ded9;"></div>
 
+        <div style="display:flex; gap:10px; margin:14px 0 4px; flex-wrap:wrap;">
+          <input type="text" id="lokasiPasteCoord" placeholder="Atau paste koordinat dari Google Maps (contoh: -6.208763, 106.845599)"
+            style="flex:1; min-width:220px; padding:10px 12px; border-radius:8px; border:1.5px solid #e6ded9;">
+          <button type="button" class="btn-logout-card" onclick="applyPastedCoord()">📍 Set dari Koordinat</button>
+        </div>
+
         <div class="form-grid" style="margin-top:14px;">
           <div class="input-group">
             <label for="lokasiLat">Latitude</label>
