@@ -1073,9 +1073,7 @@ function renderKaryawanTable() {
       ? `<span class="badge-unit" style="background:#E5F6EC;color:#178A4C;">Active</span>`
       : `<span class="badge-unit" style="background:#FCEAE8;color:#D9312E;">Inactive</span>`;
     const tglMasuk = r.tglmasuk ? new Date(r.tglmasuk).toLocaleDateString('id-ID') : '-';
-    const authorizedByDisplay = r.authorizedbyname
-      ? escapeHtml(r.authorizedbyname)
-      : '<span style="color:#b45309;">Direktur (Auto)</span>';
+    const authInlineValue = r.authorizedbyname ? escapeHtml(r.authorizedbyname) : '';
     return `
       <tr>
         <td><strong>${escapeHtml(r.namapersonnel)}</strong></td>
@@ -1083,7 +1081,13 @@ function renderKaryawanTable() {
         <td>${escapeHtml(String(r.digitalpin ?? '')) || '-'}</td>
         <td>${escapeHtml(r.type) || '-'}</td>
         <td>${escapeHtml(r.kualifikasi) || '-'}</td>
-        <td>${authorizedByDisplay}</td>
+        <td style="position:relative; min-width:170px;">
+          <input type="text" class="ab-inline-search" data-row-id="${r.id}" value="${authInlineValue}"
+                 placeholder="-- Direktur (Auto) --" autocomplete="off"
+                 style="width:100%; padding:6px 8px; border-radius:6px; border:1px solid #ddd; font-size:13px; box-sizing:border-box; ${r.authorizedbyname ? '' : 'color:#b45309;'}">
+          <input type="hidden" class="ab-inline-hidden" data-row-id="${r.id}" value="${r.authorizedbyid || ''}">
+          <div class="ab-inline-suggest" data-row-id="${r.id}" style="display:none; position:absolute; top:100%; left:0; right:0; margin-top:2px; background:#fff; border:1px solid #ccc; border-radius:6px; max-height:200px; overflow-y:auto; z-index:30; box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>
+        </td>
         <td>${escapeHtml(r.departemen) || '-'}${r.divisi ? ' / ' + escapeHtml(r.divisi) : ''}</td>
         <td>${tglMasuk}</td>
         <td>${statusBadge}</td>
@@ -1092,6 +1096,124 @@ function renderKaryawanTable() {
         </td>
       </tr>`;
   }).join('');
+  setupInlineAuthorizedByTable();
+}
+
+// Combobox search "Diotorisasi Oleh" LANGSUNG di tiap baris tabel Kelola Karyawan --
+// dipakai event delegation di tbody (bukan bind listener satu-satu per baris) supaya
+// tetap ringan walau tabelnya di-render ulang tiap kali search/filter jalan.
+let karyawanInlineAuthBound = false;
+function setupInlineAuthorizedByTable() {
+  const tbody = document.getElementById('karyawanTableBody');
+  if (!tbody || karyawanInlineAuthBound) return;
+  karyawanInlineAuthBound = true;
+
+  function getEls(rowId) {
+    return {
+      search: tbody.querySelector(`.ab-inline-search[data-row-id="${rowId}"]`),
+      hidden: tbody.querySelector(`.ab-inline-hidden[data-row-id="${rowId}"]`),
+      suggest: tbody.querySelector(`.ab-inline-suggest[data-row-id="${rowId}"]`),
+    };
+  }
+
+  function renderInlineSuggestions(rowId, list, suggestEl) {
+    suggestEl.innerHTML = '';
+
+    const noneOpt = document.createElement('div');
+    noneOpt.textContent = '-- Tidak ada atasan / Direktur (Auto-Approve) --';
+    noneOpt.style.cssText = 'padding:8px 10px; cursor:pointer; font-size:12px; color:#b45309; border-bottom:1px solid #f0f0f0;';
+    noneOpt.addEventListener('mouseenter', () => { noneOpt.style.background = '#f2f2f2'; });
+    noneOpt.addEventListener('mouseleave', () => { noneOpt.style.background = '#fff'; });
+    noneOpt.addEventListener('mousedown', (e) => { e.preventDefault(); commitInlineAuthorizedBy(rowId, null, ''); });
+    suggestEl.appendChild(noneOpt);
+
+    if (!list.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'Nama tidak ditemukan.';
+      empty.style.cssText = 'padding:8px 10px; color:#888; font-size:12px;';
+      suggestEl.appendChild(empty);
+    } else {
+      list.forEach(row => {
+        const item = document.createElement('div');
+        item.textContent = `${row.namapersonnel || '(tanpa nama)'} (${row.kualifikasi || '-'})`;
+        item.style.cssText = 'padding:8px 10px; cursor:pointer; font-size:13px; border-bottom:1px solid #f0f0f0;';
+        item.addEventListener('mouseenter', () => { item.style.background = '#f2f2f2'; });
+        item.addEventListener('mouseleave', () => { item.style.background = '#fff'; });
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          commitInlineAuthorizedBy(rowId, row.id, row.namapersonnel || '(tanpa nama)');
+        });
+        suggestEl.appendChild(item);
+      });
+    }
+    suggestEl.style.display = 'block';
+  }
+
+  function runInlineFilter(rowId, query, suggestEl) {
+    if (!suggestEl) return;
+    const q = query.toLowerCase();
+    const list = (karyawanState.rows || [])
+      .filter(r => r.id !== rowId)
+      .filter(r => !q || String(r.namapersonnel || '').toLowerCase().includes(q))
+      .slice()
+      .sort((a, b) => String(a.namapersonnel || '').localeCompare(String(b.namapersonnel || '')))
+      .slice(0, 15);
+    renderInlineSuggestions(rowId, list, suggestEl);
+  }
+
+  async function commitInlineAuthorizedBy(rowId, newAuthorizedById, displayName) {
+    const { search, hidden, suggest } = getEls(rowId);
+    const previousValue = search ? search.value : '';
+    const previousHidden = hidden ? hidden.value : '';
+
+    if (search) search.value = displayName;
+    if (hidden) hidden.value = newAuthorizedById || '';
+    if (suggest) { suggest.style.display = 'none'; suggest.innerHTML = ''; }
+
+    try {
+      const { data: hasil, error } = await supabaseClient.rpc('set_karyawan_authorized_by', {
+        p_id: rowId,
+        p_authorized_by_id: newAuthorizedById || null,
+      });
+      if (error) throw error;
+      if (!hasil || hasil.status !== 'SUCCESS') {
+        throw new Error((hasil && hasil.message) || 'Gagal update.');
+      }
+      showToast('Diotorisasi Oleh berhasil diupdate.', 'success');
+      const row = (karyawanState.rows || []).find(r => r.id === rowId);
+      if (row) {
+        row.authorizedbyid = newAuthorizedById || null;
+        row.authorizedbyname = newAuthorizedById ? displayName : null;
+      }
+      if (search) search.style.color = newAuthorizedById ? '' : '#b45309';
+    } catch (err) {
+      showToast('Gagal update Diotorisasi Oleh: ' + err.message, 'error');
+      if (search) search.value = previousValue;
+      if (hidden) hidden.value = previousHidden;
+    }
+  }
+
+  tbody.addEventListener('input', (e) => {
+    if (!e.target.classList.contains('ab-inline-search')) return;
+    const rowId = parseInt(e.target.dataset.rowId, 10);
+    const { hidden, suggest } = getEls(rowId);
+    if (hidden) hidden.value = '';
+    runInlineFilter(rowId, e.target.value.trim(), suggest);
+  });
+
+  tbody.addEventListener('focusin', (e) => {
+    if (!e.target.classList.contains('ab-inline-search')) return;
+    const rowId = parseInt(e.target.dataset.rowId, 10);
+    const { suggest } = getEls(rowId);
+    runInlineFilter(rowId, e.target.value.trim(), suggest);
+  });
+
+  tbody.addEventListener('focusout', (e) => {
+    if (!e.target.classList.contains('ab-inline-search')) return;
+    const rowId = parseInt(e.target.dataset.rowId, 10);
+    const { suggest } = getEls(rowId);
+    setTimeout(() => { if (suggest) { suggest.style.display = 'none'; suggest.innerHTML = ''; } }, 150);
+  });
 }
 
 function setKaryawanEditMode(isEdit) {
