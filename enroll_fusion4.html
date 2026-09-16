@@ -95,10 +95,10 @@
     
     .face-oval {
       position: absolute;
-      width: 44%;
-      height: 80%;
+      width: 66%;
+      aspect-ratio: 1 / 1;
       border: 2.5px dashed rgba(255,255,255,0.8);
-      border-radius: 50%;
+      border-radius: 14px;
       box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
       pointer-events: none;
       transition: border-color 0.3s;
@@ -240,10 +240,10 @@
       <canvas id="hiddenCanvas" style="display:none;"></canvas>
     </div>
 
-    <!-- SCAN IDENTIFY BUTTON -->
-    <button type="button" id="btnIdentifyFace" class="btn-identify" onclick="scanFaceToIdentify()" disabled>
-      <span>⚡ Scan Wajah (Ambil QrCodeId Otomatis)</span>
-    </button>
+    <!-- AUTO QR SCAN INDICATOR (deteksi otomatis, tidak perlu diklik) -->
+    <div id="qrScanIndicator" class="btn-identify" style="cursor:default;">
+      <span id="qrScanIndicatorText">🔎 Arahkan QR Code Karyawan ke Kamera...</span>
+    </div>
 
     <div class="form-group">
       <label for="selectKaryawan">Nama Karyawan:</label>
@@ -254,7 +254,7 @@
 
     <div class="form-group">
       <label>QrCodeId Karyawan:</label>
-      <input type="text" id="inputQrId" placeholder="Pindai wajah atau pilih karyawan" readonly style="background:#F2EFEB; color:#333; font-family:'IBM Plex Mono', monospace; font-weight:700;">
+      <input type="text" id="inputQrId" placeholder="Pindai QR Code atau pilih karyawan" readonly style="background:#F2EFEB; color:#333; font-family:'IBM Plex Mono', monospace; font-weight:700;">
     </div>
 
     <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px; display:flex; justify-content:space-between; align-items:center;">
@@ -284,7 +284,7 @@
       <button type="button" class="btn-secondary" onclick="scanQrCode()">
         <span>📷 Scan QR Badge</span>
       </button>
-      <button type="button" class="btn-secondary" onclick="resetSamples()">
+      <button type="button" class="btn-secondary" onclick="fullReset()">
         <span>↺ Reset</span>
       </button>
     </div>
@@ -296,7 +296,7 @@
   const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  let currentFacingMode = 'user';
+  let currentFacingMode = 'environment';
   let videoStream = null;
   let karyawanList = [];
   let allFaceData = [];
@@ -304,16 +304,21 @@
   let capturedImages = [];
   let isModelsLoaded = false;
 
+  let qrScanActive = false;
+  let lastDetectedQr = null;
+  let qrCooldownUntil = 0;
+
   const video = document.getElementById('videoElement');
   const canvas = document.getElementById('hiddenCanvas');
   const statusMsg = document.getElementById('statusMsg');
   const faceOval = document.getElementById('faceOval');
 
   document.addEventListener('DOMContentLoaded', async () => {
-    await initModels();
     await loadKaryawanList();
-    await loadAllFaceData();
     await startCamera();
+    startQrAutoScan();
+    await initModels();
+    await loadAllFaceData();
   });
 
   async function initModels() {
@@ -337,8 +342,7 @@
       await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
       isModelsLoaded = true;
-      setStatus("Model AI siap. Pindai wajah atau pilih karyawan dari daftar.", "info");
-      document.getElementById('btnIdentifyFace').disabled = false;
+      setStatus("Model AI siap. Arahkan QR Code karyawan ke kamera atau pilih dari daftar.", "info");
       document.getElementById('btnCapture').disabled = false;
     } catch (err) {
       setStatus("Gagal memuat model AI: " + err.message, "error");
@@ -355,7 +359,7 @@
 
       if (error) throw error;
       karyawanList = data || [];
-      sel.innerHTML = '<option value="">-- Pilih Karyawan (atau Scan Wajah) --</option>' +
+      sel.innerHTML = '<option value="">-- Pilih Karyawan (atau Scan QR) --</option>' +
         karyawanList.map(k => `<option value="${k.Id}">${k.NamaPersonnel} (${k.Kualifikasi || 'Karyawan'})</option>`).join('');
     } catch (err) {
       sel.innerHTML = '<option value="">Gagal memuat karyawan</option>';
@@ -407,101 +411,95 @@
   }
 
   /**
-   * Pindai wajah di depan kamera untuk mencari dan mengambil QrCodeId serta nama karyawan
+   * Auto-scan QR Code terus-menerus di latar belakang (tidak perlu klik tombol).
+   * Jalan dari kamera manapun yang lagi aktif (default: kamera belakang).
    */
-  async function scanFaceToIdentify() {
-    if (!isModelsLoaded) {
-      setStatus("Model AI sedang dimuat, harap tunggu sebentar...", "info");
-      return;
-    }
+  function startQrAutoScan() {
+    qrScanActive = true;
+    requestAnimationFrame(qrScanTick);
+  }
 
-    const btn = document.getElementById('btnIdentifyFace');
-    btn.disabled = true;
-    if (faceOval) faceOval.classList.add('scanning');
-    setStatus("🔍 Menganalisis wajah untuk mengambil QrCodeId...", "info");
+  function stopQrAutoScan() {
+    qrScanActive = false;
+  }
+
+  function qrScanTick() {
+    if (!qrScanActive) return;
+    requestAnimationFrame(qrScanTick);
+
+    if (typeof jsQR === 'undefined') return;
+    if (!video.videoWidth || !video.videoHeight) return;
+    if (Date.now() < qrCooldownUntil) return;
 
     try {
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-      let detection = null;
-      const doInference = async () => {
-        return await faceapi
-          .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
-          .withFaceLandmarks()
-          .withFaceDescriptor();
-      };
-
-      try {
-        detection = await doInference();
-      } catch (e) {
-        if (faceapi.tf && faceapi.tf.getBackend() !== 'cpu') {
-          await faceapi.tf.setBackend('cpu');
-          detection = await doInference();
+      if (code && code.data) {
+        const rawQr = code.data.trim();
+        if (rawQr && rawQr !== lastDetectedQr) {
+          handleQrDetected(rawQr);
         }
       }
-
-      if (!detection) {
-        setStatus("⚠️ Wajah tidak terdeteksi. Posisikan wajah tepat di dalam oval.", "error");
-        return;
-      }
-
-      if (!allFaceData || allFaceData.length === 0) {
-        // Coba refresh data biometrik
-        await loadAllFaceData();
-      }
-
-      const scanDesc = detection.descriptor;
-      let bestMatch = null;
-      let bestDistance = 0.52; // Matching threshold
-
-      for (const p of allFaceData) {
-        if (!p.descriptor) continue;
-        const dist = faceapi.euclideanDistance(scanDesc, p.descriptor);
-        if (dist < bestDistance) {
-          bestDistance = dist;
-          bestMatch = p;
-        }
-      }
-
-      if (bestMatch && bestMatch.qrCodeId) {
-        const matchQr = String(bestMatch.qrCodeId).trim().toUpperCase();
-        const kar = karyawanList.find(k => 
-          String(k.QrCodeId || '').trim().toUpperCase() === matchQr || 
-          String(k.NamaPersonnel || '').trim().toLowerCase() === String(bestMatch.nama || '').trim().toLowerCase()
-        );
-
-        const sel = document.getElementById('selectKaryawan');
-        if (kar) {
-          sel.value = kar.Id;
-          document.getElementById('inputQrId').value = kar.QrCodeId || bestMatch.qrCodeId;
-          setStatus(`✅ Teridentifikasi: ${kar.NamaPersonnel} (${kar.QrCodeId})! Silakan ambil sampel baru.`, "success");
-        } else {
-          document.getElementById('inputQrId').value = bestMatch.qrCodeId;
-          setStatus(`✅ Teridentifikasi: ${bestMatch.nama} (${bestMatch.qrCodeId})!`, "success");
-        }
-        resetSamples();
-      } else {
-        setStatus("⚠️ Wajah belum terdaftar di database biometrik. Silakan pilih Nama Karyawan dari daftar dropdown di bawah.", "error");
-      }
-    } catch (err) {
-      console.error("Identifikasi wajah error:", err);
-      setStatus("Gagal identifikasi: " + err.message, "error");
-    } finally {
-      btn.disabled = false;
-      if (faceOval) faceOval.classList.remove('scanning');
+    } catch (e) {
+      // abaikan error decode sesaat (frame blur/transisi kamera)
     }
   }
 
   /**
-   * Pindai QR Code dari kartu fisik/layar
+   * Dipanggil begitu QR Code ketemu (baik dari auto-scan maupun tombol manual di bawah).
+   */
+  function handleQrDetected(rawQr) {
+    lastDetectedQr = rawQr;
+    qrCooldownUntil = Date.now() + 3000; // jeda 3 detik biar gak spam re-trigger
+
+    const matchKar = karyawanList.find(k => String(k.QrCodeId || '').trim().toUpperCase() === rawQr.toUpperCase());
+    const sel = document.getElementById('selectKaryawan');
+
+    if (faceOval) {
+      faceOval.classList.add('scanning');
+      setTimeout(() => faceOval.classList.remove('scanning'), 1200);
+    }
+    const indicatorText = document.getElementById('qrScanIndicatorText');
+
+    if (matchKar) {
+      sel.value = matchKar.Id;
+      document.getElementById('inputQrId').value = matchKar.QrCodeId;
+      setStatus(`✅ QR Code terdeteksi: ${matchKar.NamaPersonnel} (${matchKar.QrCodeId})`, "success");
+      if (indicatorText) indicatorText.textContent = `✅ ${matchKar.NamaPersonnel} (${matchKar.QrCodeId})`;
+    } else {
+      document.getElementById('inputQrId').value = rawQr;
+      setStatus(`✅ QR Code terdeteksi: ${rawQr}`, "success");
+      if (indicatorText) indicatorText.textContent = `✅ QR terdeteksi: ${rawQr}`;
+    }
+
+    resetSamples();
+
+    // Setelah dapat identitas dari QR (kamera belakang), otomatis pindah ke kamera
+    // depan biar siap buat ambil sampel foto wajah.
+    if (currentFacingMode !== 'user') {
+      setTimeout(() => {
+        currentFacingMode = 'user';
+        startCamera();
+      }, 700);
+    }
+  }
+
+  /**
+   * Pindai satu kali secara manual (fallback kalau auto-scan belum menangkap)
    */
   async function scanQrCode() {
     setStatus("🔍 Memindai QR Code dari kamera...", "info");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    if (!video.videoWidth || !video.videoHeight) {
+      setStatus("⚠️ Kamera belum siap.", "error");
+      return;
+    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -509,18 +507,9 @@
     if (typeof jsQR !== 'undefined') {
       const code = jsQR(imageData.data, imageData.width, imageData.height);
       if (code && code.data) {
-        const rawQr = code.data.trim();
-        const matchKar = karyawanList.find(k => String(k.QrCodeId || '').trim().toUpperCase() === rawQr.toUpperCase());
-        const sel = document.getElementById('selectKaryawan');
-        if (matchKar) {
-          sel.value = matchKar.Id;
-          document.getElementById('inputQrId').value = matchKar.QrCodeId;
-          setStatus(`✅ QR Code terdeteksi: ${matchKar.NamaPersonnel} (${matchKar.QrCodeId})`, "success");
-        } else {
-          document.getElementById('inputQrId').value = rawQr;
-          setStatus(`✅ QR Code terdeteksi: ${rawQr}`, "success");
-        }
-        resetSamples();
+        qrCooldownUntil = 0;
+        lastDetectedQr = null;
+        handleQrDetected(code.data.trim());
         return;
       }
     }
@@ -533,7 +522,7 @@
   async function captureSample() {
     const qrId = document.getElementById('inputQrId').value;
     if (!qrId || qrId === '-') {
-      alert("Pindai wajah untuk auto-deteksi atau pilih nama karyawan terlebih dahulu.");
+      alert("Pindai QR Code untuk auto-deteksi atau pilih nama karyawan terlebih dahulu.");
       return;
     }
 
@@ -600,6 +589,21 @@
     }
     document.getElementById('btnCapture').style.display = 'flex';
     document.getElementById('btnSave').style.display = 'none';
+  }
+
+  /**
+   * Reset total: bersihkan identitas yang kedetect + sampel, biar siap scan
+   * badge/karyawan lain dari awal (tombol "↺ Reset").
+   */
+  function fullReset() {
+    lastDetectedQr = null;
+    qrCooldownUntil = 0;
+    document.getElementById('selectKaryawan').value = '';
+    document.getElementById('inputQrId').value = '';
+    const indicatorText = document.getElementById('qrScanIndicatorText');
+    if (indicatorText) indicatorText.textContent = '🔎 Arahkan QR Code Karyawan ke Kamera...';
+    resetSamples();
+    setStatus("Siap memindai. Arahkan QR Code karyawan ke kamera.", "info");
   }
 
   async function saveEnrollment() {
