@@ -388,8 +388,36 @@
   function handleKaryawanChange() {
     const sel = document.getElementById('selectKaryawan');
     const kar = karyawanList.find(k => k.Id == sel.value);
-    document.getElementById('inputQrId').value = kar ? (kar.QrCodeId || '-') : '';
+    if (kar) {
+      applyIdentifiedKaryawan(kar, 'Karyawan dipilih');
+    } else {
+      document.getElementById('inputQrId').value = '';
+      resetSamples();
+    }
+  }
+
+  /**
+   * Satu jalur yang sama dipakai baik oleh hasil scan QR yang cocok MAUPUN
+   * pilih manual dari dropdown -- biar perilakunya konsisten: langsung siap
+   * enroll wajah (pindah ke kamera depan) begitu identitas karyawan didapat.
+   */
+  function applyIdentifiedKaryawan(kar, label) {
+    const sel = document.getElementById('selectKaryawan');
+    const indicatorText = document.getElementById('qrScanIndicatorText');
+
+    sel.value = kar.Id;
+    document.getElementById('inputQrId').value = kar.QrCodeId || '-';
+    setStatus(`✅ ${label}: ${kar.NamaPersonnel} (${kar.QrCodeId})! Siap ambil sampel foto.`, "success");
+    if (indicatorText) indicatorText.textContent = `✅ ${kar.NamaPersonnel} (${kar.QrCodeId})`;
+
     resetSamples();
+
+    if (currentFacingMode !== 'user') {
+      setTimeout(() => {
+        currentFacingMode = 'user';
+        startCamera();
+      }, 500);
+    }
   }
 
   async function startCamera() {
@@ -458,34 +486,31 @@
     qrCooldownUntil = Date.now() + 3000; // jeda 3 detik biar gak spam re-trigger
 
     const matchKar = karyawanList.find(k => String(k.QrCodeId || '').trim().toUpperCase() === rawQr.toUpperCase());
-    const sel = document.getElementById('selectKaryawan');
 
     if (faceOval) {
       faceOval.classList.add('scanning');
       setTimeout(() => faceOval.classList.remove('scanning'), 1200);
     }
-    const indicatorText = document.getElementById('qrScanIndicatorText');
 
     if (matchKar) {
-      sel.value = matchKar.Id;
-      document.getElementById('inputQrId').value = matchKar.QrCodeId;
-      setStatus(`✅ QR Code terdeteksi: ${matchKar.NamaPersonnel} (${matchKar.QrCodeId})`, "success");
-      if (indicatorText) indicatorText.textContent = `✅ ${matchKar.NamaPersonnel} (${matchKar.QrCodeId})`;
+      // Sama persis dengan jalur pilih manual dari dropdown.
+      applyIdentifiedKaryawan(matchKar, 'QR Code terdeteksi');
     } else {
+      const indicatorText = document.getElementById('qrScanIndicatorText');
       document.getElementById('inputQrId').value = rawQr;
       setStatus(`✅ QR Code terdeteksi: ${rawQr}`, "success");
       if (indicatorText) indicatorText.textContent = `✅ QR terdeteksi: ${rawQr}`;
-    }
 
-    resetSamples();
+      resetSamples();
 
-    // Setelah dapat identitas dari QR (kamera belakang), otomatis pindah ke kamera
-    // depan biar siap buat ambil sampel foto wajah.
-    if (currentFacingMode !== 'user') {
-      setTimeout(() => {
-        currentFacingMode = 'user';
-        startCamera();
-      }, 700);
+      // QR-nya kebaca tapi gak ketemu di daftar karyawan -- tetap pindah ke
+      // kamera depan siapa tau mau lanjut enroll manual pakai ID mentahnya.
+      if (currentFacingMode !== 'user') {
+        setTimeout(() => {
+          currentFacingMode = 'user';
+          startCamera();
+        }, 700);
+      }
     }
   }
 
