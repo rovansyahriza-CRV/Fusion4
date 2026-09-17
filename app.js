@@ -34,16 +34,18 @@ async function initAuthSession() {
 
 async function loginUser(idKaryawan, password) {
   try {
-    const { data, error } = await supabaseClient.rpc('verify_login', {
+    const { data, error } = await supabaseClient.rpc('fusion_login', {
       p_id: idKaryawan,
       p_password: password
     });
     if (error) throw error;
 
-    if (data && data.length > 0) {
-      const userRow = data[0];
+    if (data && data.user && data.token) {
+      const userRow = data.user;
       currentUser = {
         id: userRow.id,
+        adminToken: data.token,
+        adminExpiresAt: data.expiresAt,
         nama: userRow.nama,
         kualifikasi: userRow.kualifikasi,
         pic: '',
@@ -922,7 +924,7 @@ async function submitPasswordAdmin() {
   if (btn) { btn.disabled = true; btn.textContent = 'Memproses...'; }
 
   try {
-    const { data: hasil, error } = await supabaseClient.rpc('admin_reset_password_absensi', {
+    const { data: hasil, error } = await fusionAdminRpc('admin_reset_password_absensi', {
       p_karyawan_id: parseInt(karyawanId, 10),
       p_new_password: newPassword,
     });
@@ -1433,6 +1435,11 @@ async function submitKaryawanBaru() {
   const divisi = document.getElementById('karyawanDivisi')?.value.trim() || '';
   const author = document.getElementById('karyawanAuthor')?.value.trim() || '';
   const pic = document.getElementById('karyawanPic')?.value.trim() || '';
+  if (editId && Number(editId) === Number(currentUser?.id) &&
+      !pic.toLowerCase().split(/[,;\n\r]+/).map(t => t.trim()).some(t => t === 'all' || t === 'dk')) {
+    showToast('Akses edit akun sendiri harus tetap memiliki PIC ALL atau DK. Perubahan belum disimpan.', 'error');
+    return;
+  }
   const type = document.getElementById('karyawanType')?.value.trim() || '';
   let kualifikasi = document.getElementById('karyawanKualifikasi')?.value.trim() || '';
   const isCustomKualifikasi = kualifikasi === 'CUSTOM';
@@ -1452,7 +1459,7 @@ async function submitKaryawanBaru() {
 
   try {
     if (editId) {
-      const { data: hasil, error } = await supabaseClient.rpc('update_karyawan_core', {
+      const { data: hasil, error } = await fusionAdminRpc('update_karyawan_core', {
         p_id: parseInt(editId, 10),
         p_departemen: departemen || null,
         p_divisi: divisi || null,
@@ -1467,6 +1474,12 @@ async function submitKaryawanBaru() {
       if (error) throw error;
 
       if (hasil && hasil.status === 'SUCCESS') {
+        if (Number(editId) === Number(currentUser?.id)) {
+          currentUser.pic = pic;
+          currentUser.author = author;
+          localStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
+          applySidebarAccess();
+        }
         showToast(hasil.message || 'Data karyawan berhasil diupdate.', 'success');
         if (isCustomKualifikasi && kualifikasi && divisi && departemen) {
           await syncCustomKualifikasiToMasterGaji(divisi, departemen, kualifikasi);
@@ -1485,7 +1498,7 @@ async function submitKaryawanBaru() {
 
     if (!password) { showToast('Password login absen wajib diisi.', 'error'); return; }
 
-    const { data: hasil, error } = await supabaseClient.rpc('create_karyawan_full', {
+    const { data: hasil, error } = await fusionAdminRpc('create_karyawan_full', {
       p_nama: nama,
       p_type: type || null,
       p_kualifikasi: kualifikasi || null,
@@ -1633,7 +1646,7 @@ async function submitBadge() {
   if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
 
   try {
-    const { error: infoErr } = await supabaseClient.rpc('update_karyawan_badge_info', {
+    const { error: infoErr } = await fusionAdminRpc('update_karyawan_badge_info', {
       p_id: parseInt(editId, 10), p_kualifikasi: kualifikasi, p_isactive: isActive,
     });
     if (infoErr) throw infoErr;
@@ -1951,7 +1964,7 @@ async function submitKontrak() {
 
     // Kalau bukan mode edit dan nama nggak match karyawan yang sudah ada -> quick-create dulu
     if (!editId && !karyawanId) {
-      const { data: hasilKaryawan, error: errKaryawan } = await supabaseClient.rpc('create_karyawan_full', {
+      const { data: hasilKaryawan, error: errKaryawan } = await fusionAdminRpc('create_karyawan_full', {
         p_nama: namaInput,
         p_email: emailBaru || null,
       });
@@ -5667,4 +5680,10 @@ async function generateSemuaSlip() {
   }
   setSlipGenProgress(false);
   showToast('Semua slip gaji selesai dibuat.', 'success');
+}
+
+// Administrative writes use a server-validated session, never a client-supplied actor ID.
+async function fusionAdminRpc(name,params){
+ if(!currentUser?.adminToken||Date.parse(currentUser.adminExpiresAt||'')<=Date.now())return {data:null,error:{message:'Silakan logout dan login kembali untuk menggunakan fitur admin yang diperbarui.'}};
+ return supabaseClient.rpc(name+'_secure',{...params,p_session_token:currentUser.adminToken});
 }
