@@ -1220,11 +1220,9 @@ function setupInlineAuthorizedByTable() {
 
 function setKaryawanEditMode(isEdit) {
   document.querySelectorAll('.karyawan-create-only').forEach(el => { el.style.display = isEdit ? 'none' : ''; });
-  const namaEl = document.getElementById('karyawanNama');
-  if (namaEl) namaEl.disabled = isEdit;
   const hint = document.getElementById('karyawanFormHint');
   if (hint) hint.textContent = isEdit
-    ? 'Mode edit update Departemen, Divisi, Kualifikasi/Jabatan, Kode Proyek, Author, dan PIC. Field lain (Nama, Password, dll) gak berubah.'
+    ? 'Mode edit update Nama, Departemen, Divisi, Kualifikasi/Jabatan, Kode Proyek, Author, dan PIC. Field lain (Password, dll) gak berubah.'
     : 'QrCodeId & Digital PIN di-generate otomatis. Field detail lain (KTP, alamat, dll) bisa dilengkapi belakangan.';
   const btnSubmit = document.getElementById('btnSubmitKaryawan');
   if (btnSubmit) btnSubmit.textContent = isEdit ? '💾 Simpan Perubahan' : '💾 Simpan Karyawan Baru';
@@ -1399,7 +1397,7 @@ function cekDuplikatNamaKaryawan() {
     const emailWrap = document.getElementById('karyawanEmailWrap');
     const editId = document.getElementById('karyawanEditId')?.value || '';
 
-    if (editId || nama.length < 3) {
+    if (nama.length < 3) {
       if (hintEl) hintEl.style.display = 'none';
       if (emailWrap) emailWrap.style.display = 'none';
       return;
@@ -1407,7 +1405,8 @@ function cekDuplikatNamaKaryawan() {
 
     const namaLower = nama.toLowerCase();
     const match = (karyawanState.rows || []).find(r =>
-      String(r.namapersonnel || '').toLowerCase().trim() === namaLower
+      String(r.namapersonnel || '').toLowerCase().trim() === namaLower &&
+      (!editId || Number(r.id) !== Number(editId))
     );
 
     if (match) {
@@ -1416,6 +1415,9 @@ function cekDuplikatNamaKaryawan() {
         hintEl.style.color = '#b45309';
         hintEl.textContent = `⚠️ Sudah ada karyawan dengan nama sama: ${match.namapersonnel} (${match.qrcodeid}). Pastikan ini bukan duplikat.`;
       }
+      if (emailWrap) emailWrap.style.display = 'none';
+    } else if (editId) {
+      if (hintEl) hintEl.style.display = 'none';
       if (emailWrap) emailWrap.style.display = 'none';
     } else {
       if (hintEl) {
@@ -1470,6 +1472,7 @@ async function submitKaryawanBaru() {
         p_status_nikah: statusNikah || null,
         p_jumlah_anak: jumlahAnak || null,
         p_authorized_by_id: authorizedById,
+        p_nama: nama,
       });
       if (error) throw error;
 
