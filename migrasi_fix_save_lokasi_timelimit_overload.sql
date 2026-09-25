@@ -1,0 +1,53 @@
+-- ============================================================================
+-- FIX: Edit "Jam Kerja (TimeLimit)" di menu Kelola Lokasi gak kesimpen
+-- Tanggal: 2026-09-16
+-- ============================================================================
+-- Dilaporkan bro: pas edit lokasi "Workshop Handil depan" (Id 30), ubah jam
+-- kerja terus Simpan, muncul toast "berhasil" tapi jam kerjanya gak berubah.
+--
+-- ROOT CAUSE: fungsi save_lokasi_with_timelimit() ternyata punya DUA VERSI
+-- (overload) yang nyangkut -- persis pola bug yang sama kayak
+-- create_karyawan_full/update_karyawan_core kemarin (migrasi lama nambah/ubah
+-- fungsi tanpa DROP FUNCTION dulu buat versi lama, jadi malah nambah versi
+-- baru, bukan gantiin):
+--   1) save_lokasi_with_timelimit(bigint, text, DOUBLE PRECISION, DOUBLE
+--      PRECISION, integer, text, text, time, time, time, time)  <- versi asli,
+--      cocok sama tipe kolom Latitude/Longitude di lokasiTbl.
+--   2) save_lokasi_with_timelimit(bigint, text, NUMERIC, NUMERIC, integer,
+--      text, text, time, time, time, time)  <- versi nyasar, tipe lat/lng
+--      salah (NUMERIC, bukan DOUBLE PRECISION), dan juga sebenarnya rusak
+--      buat nambah lokasi BARU (insert CreateDate pakai NOW() langsung ke
+--      kolom yang tipenya TEXT, bakal error type-mismatch).
+--
+-- Karena 2 fungsi itu nama & urutan parameternya identik (cuma beda tipe),
+-- pas web app manggil lewat Supabase RPC (PostgREST), Postgres/PostgREST
+-- gak bisa nentuin mau pakai yang mana -- gagal dengan error ambigu.
+-- app.js NANGKEP error itu diam-diam terus otomatis FALLBACK ke RPC
+-- update_lokasi() yang CUMA update nama/koordinat/radius/status/type --
+-- SAMA SEKALI GAK NYENTUH tabel timeLimitTbl. Makanya toast tetap bilang
+-- "Lokasi berhasil diperbarui" (dari fallback), padahal jam kerja yang
+-- diketik di form gak pernah beneran tersimpan.
+--
+-- FIX:
+-- 1) Overload yang salah (versi NUMERIC) sudah DIHAPUS. Sekarang cuma
+--    tersisa 1 versi yang benar, gak ambigu lagi.
+-- 2) Ditemukan JUGA: 16 lokasi lain (Wakul Office, ROW-1, Workshop Handil,
+--    Lokasi X, Kantor Workshop Handil BIMA, PHM Light Tubular, PHM Heavy
+--    Tubular, PHM Laydown area, PHM Office Handil, PHM Senipah, PHM Senipah
+--    Warehouse, PHM Senipah Gate, PTK Tanjung Batu Jetty, PTK Tanjung Batu x2,
+--    Jetty Somber) dari dulu belum PERNAH punya baris jam kerja di timeLimitTbl
+--    sama sekali (kena bug yang sama sejak lokasi-lokasi itu dibuat) -- tabel
+--    Kelola Lokasi nampilin default 07:30-17:00 di badge-nya, tapi itu cuma
+--    placeholder tampilan (fallback client-side), bukan data asli.
+--    16 lokasi ini + Workshop Handil depan (total 17) sudah di-backfill
+--    dengan nilai default 07:30/12:00/13:00/17:00 -- SAMA PERSIS dengan yang
+--    sudah efektif dipakai sistem absensi selama ini (submit_absensi() sudah
+--    punya fallback COALESCE dari migrasi sebelumnya kalau timeLimitTbl kosong),
+--    jadi backfill ini TIDAK mengubah perilaku absensi siapapun, cuma bikin
+--    datanya beneran tersimpan di database supaya bisa diedit per-lokasi kalau
+--    memang butuh jam kerja yang beda dari default.
+--
+-- Sudah diuji: panggil save_lokasi_with_timelimit untuk Id 30 (Workshop
+-- Handil depan) -- sekarang beneran bikin/update baris di timeLimitTbl.
+-- Dicek ulang: 0 lokasi yang masih kosong jam kerjanya.
+-- ============================================================================

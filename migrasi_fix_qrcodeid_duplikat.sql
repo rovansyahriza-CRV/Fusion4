@@ -1,0 +1,43 @@
+-- ============================================================================
+-- FIX: QrCodeId "K-1000" dobel di banyak karyawan
+-- Tanggal: 2026-09-15
+-- ============================================================================
+-- Dilaporkan bro: ada 19 karyawan (Hasbudi, Muhammad, Maulana Tri W, M Viki
+-- Apresa, Joshua Imanuel, Cuncung, M Kusnan, Mardani, Hendra Pratama, M Yusuf,
+-- Haripullah, Muhammad Hamdiansyah, Heri Darmansyah, M Riduan S, Naufal Asyqar,
+-- Ahmad Yani, Sadar Rais, M Aldi, Haerul L) yang QrCodeId-nya sama persis
+-- "K-1000", padahal Id asli mereka beda-beda (100000 s/d 100018).
+--
+-- ROOT CAUSE: create_karyawan_full() generate QrCodeId pakai:
+--   v_qrcodeid := 'K-' || LPAD(v_new_id::TEXT, 4, '0');
+-- LPAD di Postgres itu untuk PADDING (nambah nol di depan) kalau stringnya LEBIH
+-- PENDEK dari target length. Tapi begitu stringnya LEBIH PANJANG dari target
+-- (kasus ini: Id 6 digit kayak "100000", target cuma 4), Postgres LPAD malah
+-- MEMOTONG dari kanan, nyisain cuma 4 karakter pertama dari kiri -- "100000",
+-- "100001", "100002", dst SEMUA jadi "1000" kalau dipotong ke 4 karakter. Makanya
+-- 19 karyawan dengan Id 100000-100018 semua kebagian QrCodeId "K-1000" yang sama.
+--
+-- Ini kejadian begitu counter Id karyawan nembus 100000 (kemungkinan dari bulk
+-- import data lama yang sengaja pakai Id besar). Untungnya dicek dulu sebelum
+-- di-fix: BELUM ADA satu pun catatan absensi, pengajuan Ijin/Cuti/Lembur, atau
+-- face descriptor yang kepakai QrCodeId "K-1000" -- jadi belum ada data yang
+-- salah catat/ketuker orangnya. DigitalPin ke-19 orang itu juga semuanya unik
+-- (gak ikut collision), jadi login pakai PIN gak kena dampak.
+--
+-- FIX:
+-- 1) Backfill 19 baris yang bentrok (karyawanTbl & paswordTbl, dua-duanya) jadi
+--    QrCodeId unik berdasarkan Id asli masing-masing: "K-100000", "K-100001",
+--    dst sampai "K-100018".
+-- 2) create_karyawan_full() diperbaiki: kalau Id karyawan baru masih di bawah
+--    10000, tetap pola lama "K-0001".."K-9999" (di-pad nol, 4 digit). Begitu Id
+--    udah 10000 ke atas, LANGSUNG pakai angka aslinya tanpa di-LPAD lagi (biar
+--    gak ke-truncate) -- contoh "K-100019".
+-- 3) Bonus temuan: ternyata ada 2 fungsi lain (update_karyawan_core &
+--    create_karyawan_full) yang punya DUA VERSI (overload) nyangkut dari migrasi
+--    "Diotorisasi Oleh" sebelumnya -- versi lama (tanpa parameter
+--    p_authorized_by_id) gak ke-hapus pas versi barunya dibuat. Sudah dibersihkan,
+--    sekarang cuma ada 1 versi masing-masing (yang dengan p_authorized_by_id).
+--
+-- Sudah diuji: generate karyawan baru dummy (Id 100019) sekarang benar dapat
+-- QrCodeId "K-100019" (bukan "K-1000" lagi), data dummy sudah dihapus.
+-- ============================================================================

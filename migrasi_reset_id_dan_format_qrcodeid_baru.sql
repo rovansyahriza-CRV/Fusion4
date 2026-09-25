@@ -1,0 +1,61 @@
+-- ============================================================================
+-- FIX: Id karyawan baru gak lanjut dari 63, malah lompat ke 100061 dst +
+-- Ganti format QrCodeId balik ke format lama (Access): Id+3HurufNama+TglMasuk
+-- Tanggal: 2026-09-16
+-- ============================================================================
+-- Ditemukan bro: di tabel karyawanTbl, abis Id 62 (M Sarifuddin) tiba-tiba
+-- lompat ke Id 99999 (Normansyah), terus 100000 (Hasbudi) dst sampai 100060.
+-- Id 63-99998 itu MEMANG gak pernah kepake sama sekali dari dulu (dicek,
+-- bukan yang kehapus) -- kemungkinan pas ada proses bulk-import data lama,
+-- sequence generator Id-nya (karyawanTbl_Id_seq) sengaja/gak sengaja
+-- ke-set/ke-push ke angka gede itu.
+--
+-- ROOT CAUSE kenapa karyawan baru abis ini tetap lanjut dari 100061 (bukan
+-- ngisi 63 dst) walau sequence-nya di-reset: create_karyawan_full() TERNYATA
+-- gak pernah pakai nilai sequence buat nentuin Id baru. Dia hitung sendiri:
+--   v_new_id := GREATEST(MAX(karyawanTbl.Id), MAX(paswordTbl.Id)) + 1
+-- Sequence-nya cuma "dipaksa ikut" belakangan (setval), bukan sumber
+-- kebenarannya. Karena Id tertinggi yang PERNAH ada tetap 100060 (Normansyah
+-- dkk gak mungkin dihapus, itu data asli), rumus ini bakal SELALU ngasih Id
+-- 100061 ke atas, gak peduli sequence-nya diapain.
+--
+-- FIX (2 bagian):
+-- 1) create_karyawan_full() diubah: Id baru sekarang bener-bener diambil dari
+--    sequence "karyawanTbl_Id_seq" (nextval), TAPI dibungkus loop yang otomatis
+--    lompat ke nomor berikutnya kalau ternyata nomor itu udah kepake di
+--    karyawanTbl ATAU paswordTbl. Ini penting supaya begitu sequence jalan
+--    dari 63 dan nanti nyampe ke rentang lama yang udah kepake (99999-100060),
+--    dia otomatis lompatin ke 100061 dengan aman -- gak akan pernah bentrok Id.
+--    Sequence-nya di-reset ke 63 sekarang, jadi karyawan baru abis ini bakal
+--    dapet Id 63, 64, 65, dst (ngisi celah yang kosong), lalu pas nyampe ke
+--    99999 bakal otomatis lompat ke 100061 dan seterusnya normal lagi.
+-- 2) Format QrCodeId DIGANTI, balik ke format lama sistem Access sebelum
+--    migrasi ke web (dicontek dari karyawan Id 7-21 yang masih pakai format
+--    ini, misal "7Nil01012023" punya Nila Sari, Id 7 + 3 huruf awal nama
+--    "Nil" + tanggal masuk 01-01-2023):
+--        QrCodeId = Id + LEFT(NamaPersonnel, 3) + FORMAT(TglMasuk, "ddmmyyyy")
+--    Contoh: karyawan baru Id 63, nama "Firman Maulana", masuk 07-04-2026
+--    -> QrCodeId = "63Fir07042026".
+--    Format ini otomatis SELALU UNIK (karena selalu diawali Id yang unik per
+--    orang), jadi gak akan pernah kena masalah kayak bug QrCodeId "K-1000"
+--    dobel yang kemarin (itu murni gara-gara format "K-XXXX" 4 digit yang di-
+--    LPAD, ke-truncate begitu Id-nya lebih dari 4 digit).
+--
+-- CATATAN: QrCodeId karyawan yang SUDAH ADA (117 orang, termasuk yang format
+-- "K-XXXX") TIDAK diubah/di-generate ulang -- badge yang udah dicetak/dipegang
+-- karyawan tetap valid dan tetap bisa discan seperti biasa. Perubahan ini
+-- CUMA berlaku buat karyawan BARU yang didaftarkan setelah migrasi ini.
+--
+-- Sudah diuji:
+-- (a) Test normal: create_karyawan_full('Test Formatbaru', ..., tglmasuk
+--     '2026-04-07') -> dapat Id 63, QrCodeId "63Tes07042026". Sesuai ekspektasi.
+-- (b) Test lompat rentang: sequence disimulasikan mepet ke 99998, panggil
+--     create_karyawan_full lagi -> otomatis lompatin 99999 s/d 100060 (semua
+--     kepake), dapat Id 100061, QrCodeId "100061Tes07042026". Logic skip
+--     kebukti jalan bener.
+-- Kedua data dummy di atas sudah dihapus bersih (karyawanTbl & paswordTbl),
+-- dan sequence sudah dikembalikan ke posisi 63 (is_called=false) supaya
+-- karyawan BENERAN pertama abis migrasi ini yang dapet Id 63, bukan kebuang
+-- ke test. Diverifikasi ulang: total karyawan tetap 117, max Id tetap
+-- 100060, gak ada sisa data test nyangkut.
+-- ============================================================================

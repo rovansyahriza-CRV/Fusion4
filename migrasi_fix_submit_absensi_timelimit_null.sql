@@ -1,0 +1,63 @@
+-- ============================================================================
+-- FIX: Absen berulang di banyak lokasi selalu gagal "Tidak ada jadwal slot
+-- absensi yang sesuai saat ini" (kasus Yuni Herlina, Workshop Handil)
+-- Tanggal: 2026-09-15
+-- ============================================================================
+-- Dilaporkan bro: Yuni Herlina (K-0026) di lokasi "Workshop Handil" scan wajah
+-- untuk absen Pulang, hasilnya selalu "Tidak ada jadwal slot absensi yang
+-- sesuai saat ini" -- APAPUN jamnya, terus-menerus ("kok gini terus ya pak?").
+--
+-- ROOT CAUSE: function submit_absensi(qrcodeid, lokasi, password, ts_offline)
+-- ambil jam batas (JamMasuk1/Istirahat/Masuk2/Pulang) per lokasi dari tabel
+-- timeLimitTbl pakai pola:
+--
+--   SELECT COALESCE("JamMasuk1", '07:30'), ... INTO v_limit_masuk1, ...
+--   FROM "timeLimitTbl" WHERE "Area" = v_lokasi_id;
+--
+-- COALESCE di situ cuma jaga-jaga kalau KOLOMnya NULL padahal BARISnya ada.
+-- Tapi kalau BARISNYA SENDIRI TIDAK ADA (lokasi belum pernah diisi jam
+-- kerjanya di timeLimitTbl), "SELECT ... INTO" di PL/pgSQL akan nge-SET SEMUA
+-- variabel jadi NULL (bukan dibiarkan tetap di nilai default yang sudah
+-- di-declare di awal function) -- ini perilaku baku PL/pgSQL yang gampang
+-- kelewatan.
+--
+-- Begitu keempat variabel limit jadi NULL, SEMUA perbandingan waktu
+-- (v_time_now < v_limit_istirahat, dst) selalu bernilai NULL/FALSE, apapun
+-- jam scan-nya. Akibatnya:
+--   - Absen PERTAMA hari itu (Skenario A) salah kecatat sebagai "Jam Pulang"
+--     (Status CLOSED) walau discan pagi hari -- karena kondisi IF/ELSIF-nya
+--     gagal semua dan jatuh ke ELSE.
+--   - Absen KEDUA dst hari itu (Skenario B) SELALU gagal dengan pesan
+--     generik "Tidak ada jadwal slot absensi yang sesuai saat ini" -- karena
+--     keempat blok WINDOW 1-4 gagal semua kondisinya.
+--
+-- DAMPAK: dicek, 17 dari sekitar 30 lokasi di lokasiTbl TIDAK PUNYA baris di
+-- timeLimitTbl sama sekali (termasuk Workshop Handil, PHM Senipah, PTK
+-- Tanjung Batu, Wakul Office, dan banyak lagi) -- jadi bug ini berpotensi
+-- kena ke karyawan mana pun yang absen di lokasi-lokasi tsb, bukan cuma Yuni.
+--
+-- FIX: ganti pola pengambilan jam limit pakai LEFT JOIN ke satu baris dummy,
+-- supaya SELECT INTO selalu dapat tepat 1 baris (COALESCE beneran jalan
+-- sebagai fallback ke default 07:30/12:00/13:00/17:00) walau lokasinya belum
+-- ada baris di timeLimitTbl:
+--
+--   SELECT COALESCE(t."JamMasuk1", '07:30'), ...
+--   INTO v_limit_masuk1, ...
+--   FROM (SELECT 1) dummy_row
+--   LEFT JOIN "timeLimitTbl" t ON t."Area" = v_lokasi_id;
+--
+-- Sudah diuji: (1) Skenario A di lokasi tanpa timeLimitTbl jam 08:00 pagi ->
+-- sekarang benar kecatat "Jam Masuk 1" Status OPEN (sebelumnya salah jadi
+-- "Jam Pulang" CLOSED). (2) Skenario B persis kasus Yuni (qrcode K-0026,
+-- lokasi Workshop Handil, jam 17:07) -> sekarang berhasil "Jam Pulang"
+-- tercatat, bukan error lagi. (3) Regresi dicek di lokasi yang SUDAH punya
+-- baris timeLimitTbl (Workshop Handil Office) -> perilaku tetap sama seperti
+-- sebelumnya, tidak berubah.
+--
+-- SARAN LANJUTAN (belum dilakukan, perlu keputusan bro): 17 lokasi yang belum
+-- punya baris timeLimitTbl sekarang otomatis pakai default 07:30/12:00/13:00/
+-- 17:00 lewat fallback ini. Kalau ada lokasi yang jam kerjanya beda (misal
+-- shift PHM Senipah atau PTK Tanjung Batu), sebaiknya diisi eksplisit di
+-- halaman pengaturan timeLimitTbl (atau minta aku isikan) daripada terus
+-- mengandalkan fallback default.
+-- ============================================================================
