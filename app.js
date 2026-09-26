@@ -16,13 +16,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==========================================
 
 async function initAuthSession() {
-  const savedUser = localStorage.getItem('fusion4_smartgate_user');
+  const savedUser = sessionStorage.getItem('fusion4_smartgate_user');
   if (savedUser) {
     currentUser = JSON.parse(savedUser);
     // Refresh PIC & Author dari database tiap buka app
     currentUser.pic = await fetchKaryawanPic(currentUser.id);
     currentUser.author = await fetchKaryawanAuthor(currentUser.id);
-    localStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
+    sessionStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
     updateUIAuth();
     applySidebarAccess();
   } else {
@@ -53,7 +53,7 @@ async function loginUser(idKaryawan, password) {
       };
       currentUser.pic = await fetchKaryawanPic(currentUser.id);
       currentUser.author = await fetchKaryawanAuthor(currentUser.id);
-      localStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
+      sessionStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
       updateUIAuth();
       applySidebarAccess();
       showToast(`Selamat datang, ${currentUser.nama}!`, 'success');
@@ -182,7 +182,7 @@ function attemptNav(key, sectionId, btnEl, loaderFn) {
 }
 
 function logoutUser() {
-  localStorage.removeItem('fusion4_smartgate_user');
+  sessionStorage.removeItem('fusion4_smartgate_user');
   currentUser = null;
   window.location.reload();
 }
@@ -1480,7 +1480,7 @@ async function submitKaryawanBaru() {
         if (Number(editId) === Number(currentUser?.id)) {
           currentUser.pic = pic;
           currentUser.author = author;
-          localStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
+          sessionStorage.setItem('fusion4_smartgate_user', JSON.stringify(currentUser));
           applySidebarAccess();
         }
         showToast(hasil.message || 'Data karyawan berhasil diupdate.', 'success');
