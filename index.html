@@ -401,9 +401,16 @@
           </div>
           <div class="input-group">
             <label for="karyawanType">Kode Proyek / Penempatan</label>
-            <select id="karyawanType">
+            <!-- Select asli tetap jadi sumber nilai (dipakai simpan/edit), ditampilkan lewat kotak cari di bawahnya. -->
+            <select id="karyawanType" style="display:none;" aria-hidden="true" tabindex="-1">
               <option value="">-- Pilih Project / Penempatan --</option>
             </select>
+            <div style="position:relative;">
+              <input type="text" id="karyawanTypeSearch" placeholder="Cari kode / nama project..." autocomplete="off"
+                     role="combobox" aria-expanded="false" aria-controls="karyawanTypeSuggest" style="width:100%;box-sizing:border-box;">
+              <div id="karyawanTypeSuggest" role="listbox"
+                   style="display:none; position:absolute; top:100%; left:0; right:0; margin-top:2px; background:#fff; border:1px solid #ccc; border-radius:6px; max-height:260px; overflow-y:auto; z-index:40; box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>
+            </div>
             <span style="font-size:11px; color:#8a94a3; display:block; margin-top:3px;">Dari daftar project Operational: project client (014, 015, ...) atau Non-Project/HO per divisi (901-905). Non-Project otomatis terisi sesuai Divisi.</span>
           </div>
           <div class="input-group">

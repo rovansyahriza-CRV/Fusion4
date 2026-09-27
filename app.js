@@ -965,6 +965,7 @@ async function loadKaryawanPage() {
     populateKaryawanFilters();
     renderKaryawanTable();
     setupKaryawanAuthorizedBySearch();
+    setupKaryawanTypeSearch();
   } catch (err) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">Gagal memuat data: ${err.message}</td></tr>`;
   }
@@ -1096,7 +1097,73 @@ function fillKaryawanTypeOptions() {
     group('Project Client', active.filter(p => p.projectType !== 'INTERNAL')) +
     group('Non-Project / HO', active.filter(p => p.projectType === 'INTERNAL'));
   if (current) ensureSelectHasValue(sel, current);
+  syncKaryawanTypeSearch();
+  setupKaryawanTypeSearch();
 }
+// Kotak cari buat "Kode Proyek / Penempatan": filter lokal dari opsi select#karyawanType (termasuk
+// opsi "(data lama)"), pola sama kayak combobox "Diotorisasi Oleh". Nilai tetap disimpan di select.
+function syncKaryawanTypeSearch() {
+  const sel = document.getElementById('karyawanType');
+  const inp = document.getElementById('karyawanTypeSearch');
+  if (!sel || !inp) return;
+  inp.value = sel.value ? (sel.selectedOptions[0]?.textContent || sel.value) : '';
+}
+let karyawanTypeSearchBound = false;
+function setupKaryawanTypeSearch() {
+  const sel = document.getElementById('karyawanType');
+  const inp = document.getElementById('karyawanTypeSearch');
+  const box = document.getElementById('karyawanTypeSuggest');
+  if (!sel || !inp || !box || karyawanTypeSearchBound) return;
+  karyawanTypeSearchBound = true;
+
+  const close = () => { box.style.display = 'none'; box.innerHTML = ''; inp.setAttribute('aria-expanded', 'false'); };
+  const choose = value => { sel.value = value; syncKaryawanTypeSearch(); close(); };
+  const render = query => {
+    const q = query.toLowerCase();
+    const opts = [...sel.options].filter(o => o.value && (!q || o.textContent.toLowerCase().includes(q)));
+    box.innerHTML = '';
+    const addRow = (text, style, onPick) => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      div.style.cssText = style;
+      if (onPick) {
+        div.setAttribute('role', 'option');
+        div.addEventListener('mouseenter', () => { div.style.background = '#f2f2f2'; });
+        div.addEventListener('mouseleave', () => { div.style.background = '#fff'; });
+        // mousedown (bukan click) biar kejalan sebelum blur nutup daftar.
+        div.addEventListener('mousedown', e => { e.preventDefault(); onPick(); });
+      }
+      box.appendChild(div);
+    };
+    addRow('-- Kosongkan --', 'padding:8px 12px; cursor:pointer; font-size:13px; color:#b45309; border-bottom:1px solid #f0f0f0;', () => choose(''));
+    if (!opts.length) addRow('Project tidak ditemukan.', 'padding:10px 12px; color:#888; font-size:13px;');
+    let lastGroup = null;
+    opts.forEach(o => {
+      const group = o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : 'Data lama';
+      if (group !== lastGroup) {
+        addRow(group, 'padding:6px 12px; font-size:11px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:#8a94a3; background:#fafafa;');
+        lastGroup = group;
+      }
+      addRow(o.textContent, 'padding:9px 12px; cursor:pointer; font-size:14px; border-bottom:1px solid #f0f0f0;' + (o.value === sel.value ? 'font-weight:700;' : ''), () => choose(o.value));
+    });
+    box.style.display = 'block';
+    inp.setAttribute('aria-expanded', 'true');
+  };
+  inp.addEventListener('input', () => render(inp.value.trim()));
+  inp.addEventListener('focus', () => { inp.select(); render(''); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { syncKaryawanTypeSearch(); close(); }
+    if (e.key === 'Enter') {
+      // Enter = pilih hasil pertama yang cocok (biar cepat tanpa mouse).
+      e.preventDefault();
+      const first = [...sel.options].find(o => o.value && o.textContent.toLowerCase().includes(inp.value.trim().toLowerCase()));
+      if (first) choose(first.value);
+    }
+  });
+  // Teks yang gak jadi dipilih dikembalikan ke nilai tersimpan (gak ada nilai "setengah jadi").
+  inp.addEventListener('blur', () => setTimeout(() => { syncKaryawanTypeSearch(); close(); }, 150));
+}
+
 // Divisi non-Operation cuma punya satu project Non-Project (Direksi 901, BD 902, HR 903, SCM 904)
 // -> isi otomatis kalau Kode Proyek masih kosong. Operation gak diisi otomatis (bisa site 014/015
 // atau overhead 905).
@@ -1105,7 +1172,7 @@ function suggestKaryawanTypeFromDivisi() {
   const divisi = document.getElementById('karyawanDivisi')?.value || '';
   if (!sel || sel.value || !divisi) return;
   const sameDivisi = karyawanProjectList.filter(p => p.status !== 'CLOSED' && String(p.divisi || '').trim() === divisi);
-  if (sameDivisi.length === 1 && sameDivisi[0].projectType === 'INTERNAL') sel.value = sameDivisi[0].code;
+  if (sameDivisi.length === 1 && sameDivisi[0].projectType === 'INTERNAL') { sel.value = sameDivisi[0].code; syncKaryawanTypeSearch(); }
 }
 function karyawanProjectLabel(code) {
   if (code === '001') return '001 · HO / Kantor';
@@ -1367,6 +1434,7 @@ function editKaryawan(id) {
 
   document.getElementById('karyawanType').value = '';
   ensureSelectHasValue(document.getElementById('karyawanType'), String(row.type || '').trim());
+  syncKaryawanTypeSearch();
   document.getElementById('karyawanStatusNikah').value = row.statuspernikahan || '';
   document.getElementById('karyawanJumlahAnak').value = row.jumlahanak || '';
   document.getElementById('karyawanAuthor').value = row.author || '';
@@ -1468,6 +1536,7 @@ function handleKaryawanKualifikasiChange() {
 function resetKaryawanForm() {
   ['karyawanNama','karyawanType','karyawanTglMasuk','karyawanAuthor','karyawanPic','karyawanEditId','karyawanEmail','karyawanKualifikasiCustom','karyawanStatusNikah','karyawanJumlahAnak']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  syncKaryawanTypeSearch();
   const passEl = document.getElementById('karyawanPassword');
   if (passEl) passEl.value = '12345';
   const hintEl = document.getElementById('karyawanNamaHint');
@@ -3665,6 +3734,7 @@ function prefillKaryawanFromRequest(reqId) {
     typeEl.value = '';
     ensureSelectHasValue(typeEl, String(req.projectcode || '').trim());
     suggestKaryawanTypeFromDivisi();
+    syncKaryawanTypeSearch();
   }
   if (tglEl) tglEl.value = req.tanggaldibutuhkan || getTodayDateString();
   if (passEl) passEl.value = '12345'; // Password default 12345
