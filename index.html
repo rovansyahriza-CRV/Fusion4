@@ -401,12 +401,14 @@
           </div>
           <div class="input-group">
             <label for="karyawanType">Kode Proyek / Penempatan</label>
-            <input type="text" id="karyawanType" placeholder="Contoh: 014, 015, atau HO (Head Office)">
-            <span style="font-size:11px; color:#8a94a3; display:block; margin-top:3px;">Isi manual dulu -- nanti bisa dipilih dari Master Data Proyek (modul Operasional, belum dibuat).</span>
+            <select id="karyawanType">
+              <option value="">-- Pilih Project / Penempatan --</option>
+            </select>
+            <span style="font-size:11px; color:#8a94a3; display:block; margin-top:3px;">Dari daftar project Operational: project client (014, 015, ...) atau Non-Project/HO per divisi (901-905). Non-Project otomatis terisi sesuai Divisi.</span>
           </div>
           <div class="input-group">
             <label for="karyawanDivisi">Divisi</label>
-            <select id="karyawanDivisi" onchange="handleKaryawanDivisiChange()">
+            <select id="karyawanDivisi" onchange="handleKaryawanDivisiChange(); suggestKaryawanTypeFromDivisi();">
               <option value="">-- Pilih Divisi --</option>
             </select>
           </div>

@@ -1068,17 +1068,44 @@ function fillKaryawanSelect(el, values, allLabel) {
 }
 // Filter Project = kolom Type karyawan (penugasan project: 001 HO, 014, 015, ...). Nama project
 // diambil dari daftar project Operational (RPC publik op_list_projects_public) kalau kodenya cocok.
-let karyawanProjectNames = null;
+let karyawanProjectNames = null, karyawanProjectList = [];
 async function loadKaryawanProjectNames() {
   if (karyawanProjectNames) return;
   try {
     const { data, error } = await supabaseClient.rpc('op_list_projects_public');
     if (error) throw error;
-    karyawanProjectNames = Object.fromEntries((data || []).map(p => [String(p.code).trim(), p.name]));
+    karyawanProjectList = data || [];
+    karyawanProjectNames = Object.fromEntries(karyawanProjectList.map(p => [String(p.code).trim(), p.name]));
   } catch (err) {
     console.warn('Gagal memuat nama project:', err.message);
     karyawanProjectNames = {};
   }
+  fillKaryawanTypeOptions();
+}
+// Dropdown "Kode Proyek / Penempatan" di form karyawan = daftar project Operational: project client
+// & Non-Project/HO (901-905). Nilai lama yang gak ada di daftar (mis. 001) tetap ditampilkan
+// "(data lama)" lewat ensureSelectHasValue, jadi edit karyawan lama gak menghapus datanya.
+function fillKaryawanTypeOptions() {
+  const sel = document.getElementById('karyawanType');
+  if (!sel) return;
+  const current = sel.value;
+  const active = karyawanProjectList.filter(p => p.status !== 'CLOSED').sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  const group = (label, list) => list.length ? `<optgroup label="${label}">` + list.map(p =>
+    `<option value="${escapeHtml(p.code)}">${escapeHtml(p.code + ' · ' + p.name)}</option>`).join('') + '</optgroup>' : '';
+  sel.innerHTML = '<option value="">-- Pilih Project / Penempatan --</option>' +
+    group('Project Client', active.filter(p => p.projectType !== 'INTERNAL')) +
+    group('Non-Project / HO', active.filter(p => p.projectType === 'INTERNAL'));
+  if (current) ensureSelectHasValue(sel, current);
+}
+// Divisi non-Operation cuma punya satu project Non-Project (Direksi 901, BD 902, HR 903, SCM 904)
+// -> isi otomatis kalau Kode Proyek masih kosong. Operation gak diisi otomatis (bisa site 014/015
+// atau overhead 905).
+function suggestKaryawanTypeFromDivisi() {
+  const sel = document.getElementById('karyawanType');
+  const divisi = document.getElementById('karyawanDivisi')?.value || '';
+  if (!sel || sel.value || !divisi) return;
+  const sameDivisi = karyawanProjectList.filter(p => p.status !== 'CLOSED' && String(p.divisi || '').trim() === divisi);
+  if (sameDivisi.length === 1 && sameDivisi[0].projectType === 'INTERNAL') sel.value = sameDivisi[0].code;
 }
 function karyawanProjectLabel(code) {
   if (code === '001') return '001 · HO / Kantor';
@@ -1338,7 +1365,8 @@ function editKaryawan(id) {
   ensureSelectHasValue(kualSelect, row.kualifikasi);
   handleKaryawanKualifikasiChange();
 
-  document.getElementById('karyawanType').value = row.type || '';
+  document.getElementById('karyawanType').value = '';
+  ensureSelectHasValue(document.getElementById('karyawanType'), String(row.type || '').trim());
   document.getElementById('karyawanStatusNikah').value = row.statuspernikahan || '';
   document.getElementById('karyawanJumlahAnak').value = row.jumlahanak || '';
   document.getElementById('karyawanAuthor').value = row.author || '';
@@ -3633,7 +3661,11 @@ function prefillKaryawanFromRequest(reqId) {
   ensureSelectHasValue(deptEl, req.departemen);
   handleKaryawanDepartemenChange();
   ensureSelectHasValue(kualEl, req.posisijabatan);
-  if (typeEl) typeEl.value = req.projectcode || req.lokasisite || 'Project';
+  if (typeEl) {
+    typeEl.value = '';
+    ensureSelectHasValue(typeEl, String(req.projectcode || '').trim());
+    suggestKaryawanTypeFromDivisi();
+  }
   if (tglEl) tglEl.value = req.tanggaldibutuhkan || getTodayDateString();
   if (passEl) passEl.value = '12345'; // Password default 12345
 
