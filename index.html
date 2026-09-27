@@ -341,6 +341,10 @@
         <div style="padding:0 4px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
           <input type="text" id="karyawanSearch" placeholder="Cari nama / QrCodeId..." oninput="renderKaryawanTable()"
             style="flex:1 1 220px;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
+          <select id="karyawanFilterProject" onchange="renderKaryawanTable()" aria-label="Filter project"
+            style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:170px;">
+            <option value="">Semua Project</option>
+          </select>
           <select id="karyawanFilterDivisi" onchange="onKaryawanDivisiFilterChange()" aria-label="Filter divisi"
             style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:170px;">
             <option value="">Semua Divisi</option>

@@ -1066,10 +1066,41 @@ function fillKaryawanSelect(el, values, allLabel) {
   el.innerHTML = `<option value="">${allLabel}</option>` + values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
   el.value = values.includes(current) ? current : '';
 }
+// Filter Project = kolom Type karyawan (penugasan project: 001 HO, 014, 015, ...). Nama project
+// diambil dari daftar project Operational (RPC publik op_list_projects_public) kalau kodenya cocok.
+let karyawanProjectNames = null;
+async function loadKaryawanProjectNames() {
+  if (karyawanProjectNames) return;
+  try {
+    const { data, error } = await supabaseClient.rpc('op_list_projects_public');
+    if (error) throw error;
+    karyawanProjectNames = Object.fromEntries((data || []).map(p => [String(p.code).trim(), p.name]));
+  } catch (err) {
+    console.warn('Gagal memuat nama project:', err.message);
+    karyawanProjectNames = {};
+  }
+}
+function karyawanProjectLabel(code) {
+  if (code === '001') return '001 · HO / Kantor';
+  const name = karyawanProjectNames && karyawanProjectNames[code];
+  return name ? `${code} · ${name}` : code;
+}
 function populateKaryawanFilters() {
   const rows = karyawanState.rows || [];
+  const projEl = document.getElementById('karyawanFilterProject');
+  if (projEl) {
+    const current = projEl.value;
+    const codes = karyawanDistinct(rows, 'type');
+    const hasBlank = rows.some(r => !String(r.type || '').trim());
+    projEl.innerHTML = '<option value="">Semua Project</option>' +
+      codes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(karyawanProjectLabel(c))}</option>`).join('') +
+      (hasBlank ? '<option value="__none__">(Belum ada project)</option>' : '');
+    projEl.value = [...projEl.options].some(o => o.value === current) ? current : '';
+  }
   fillKaryawanSelect(document.getElementById('karyawanFilterDivisi'), karyawanDistinct(rows, 'divisi'), 'Semua Divisi');
   populateKaryawanDeptFilter();
+  // Nama project dimuat sekali di belakang, lalu label opsi diperbarui.
+  if (!karyawanProjectNames) loadKaryawanProjectNames().then(() => { if (karyawanState.rows === rows) populateKaryawanFilters(); });
 }
 function populateKaryawanDeptFilter() {
   const divisi = document.getElementById('karyawanFilterDivisi')?.value || '';
@@ -1081,7 +1112,7 @@ function onKaryawanDivisiFilterChange() {
   renderKaryawanTable();
 }
 function resetKaryawanFilters() {
-  ['karyawanSearch', 'karyawanFilterDivisi', 'karyawanFilterDept'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['karyawanSearch', 'karyawanFilterProject', 'karyawanFilterDivisi', 'karyawanFilterDept'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const noAuth = document.getElementById('karyawanFilterNoAuth');
   if (noAuth) noAuth.checked = false;
   populateKaryawanDeptFilter();
@@ -1094,6 +1125,7 @@ function renderKaryawanTable() {
   if (!tbody) return;
 
   const keyword = (document.getElementById('karyawanSearch')?.value || '').toLowerCase().trim();
+  const project = document.getElementById('karyawanFilterProject')?.value || '';
   const divisi = document.getElementById('karyawanFilterDivisi')?.value || '';
   const dept = document.getElementById('karyawanFilterDept')?.value || '';
   const noAuthOnly = !!document.getElementById('karyawanFilterNoAuth')?.checked;
@@ -1102,6 +1134,7 @@ function renderKaryawanTable() {
     (!keyword ||
       String(r.namapersonnel || '').toLowerCase().includes(keyword) ||
       String(r.qrcodeid || '').toLowerCase().includes(keyword)) &&
+    (!project || (project === '__none__' ? !String(r.type || '').trim() : String(r.type || '').trim() === project)) &&
     (!divisi || String(r.divisi || '').trim() === divisi) &&
     (!dept || String(r.departemen || '').trim() === dept) &&
     (!noAuthOnly || !r.authorizedbyid));
