@@ -338,9 +338,21 @@
           </div>
           <span class="badge-count" id="karyawanCount">0 Karyawan</span>
         </div>
-        <div style="padding:0 4px 12px;">
+        <div style="padding:0 4px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
           <input type="text" id="karyawanSearch" placeholder="Cari nama / QrCodeId..." oninput="renderKaryawanTable()"
-            style="width:100%;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
+            style="flex:1 1 220px;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
+          <select id="karyawanFilterDivisi" onchange="onKaryawanDivisiFilterChange()" aria-label="Filter divisi"
+            style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:170px;">
+            <option value="">Semua Divisi</option>
+          </select>
+          <select id="karyawanFilterDept" onchange="renderKaryawanTable()" aria-label="Filter departemen"
+            style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:210px;">
+            <option value="">Semua Departemen</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#555;cursor:pointer;">
+            <input type="checkbox" id="karyawanFilterNoAuth" onchange="renderKaryawanTable()"> Belum ada atasan
+          </label>
+          <button type="button" class="btn-logout-card" style="padding:6px 10px;" onclick="resetKaryawanFilters()">Reset filter</button>
         </div>
         <div class="table-responsive">
           <table>

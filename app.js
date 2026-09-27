@@ -962,6 +962,7 @@ async function loadKaryawanPage() {
     const { data, error } = await supabaseClient.rpc('list_karyawan_all');
     if (error) throw error;
     karyawanState.rows = data || [];
+    populateKaryawanFilters();
     renderKaryawanTable();
     setupKaryawanAuthorizedBySearch();
   } catch (err) {
@@ -1053,17 +1054,59 @@ function setupKaryawanAuthorizedBySearch() {
   });
 }
 
+// Filter Divisi & Departemen di Daftar Karyawan -- opsi diambil dari data yang udah dimuat, jadi
+// divisi/departemen baru otomatis muncul. Pilihan Departemen ikut menyempit sesuai Divisi terpilih.
+// Nilai filter dipertahankan saat data dimuat ulang (mis. sesudah edit karyawan).
+function karyawanDistinct(rows, key) {
+  return [...new Set(rows.map(r => String(r[key] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+function fillKaryawanSelect(el, values, allLabel) {
+  if (!el) return;
+  const current = el.value;
+  el.innerHTML = `<option value="">${allLabel}</option>` + values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  el.value = values.includes(current) ? current : '';
+}
+function populateKaryawanFilters() {
+  const rows = karyawanState.rows || [];
+  fillKaryawanSelect(document.getElementById('karyawanFilterDivisi'), karyawanDistinct(rows, 'divisi'), 'Semua Divisi');
+  populateKaryawanDeptFilter();
+}
+function populateKaryawanDeptFilter() {
+  const divisi = document.getElementById('karyawanFilterDivisi')?.value || '';
+  const rows = (karyawanState.rows || []).filter(r => !divisi || String(r.divisi || '').trim() === divisi);
+  fillKaryawanSelect(document.getElementById('karyawanFilterDept'), karyawanDistinct(rows, 'departemen'), 'Semua Departemen');
+}
+function onKaryawanDivisiFilterChange() {
+  populateKaryawanDeptFilter();
+  renderKaryawanTable();
+}
+function resetKaryawanFilters() {
+  ['karyawanSearch', 'karyawanFilterDivisi', 'karyawanFilterDept'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const noAuth = document.getElementById('karyawanFilterNoAuth');
+  if (noAuth) noAuth.checked = false;
+  populateKaryawanDeptFilter();
+  renderKaryawanTable();
+}
+
 function renderKaryawanTable() {
   const tbody = document.getElementById('karyawanTableBody');
   const countEl = document.getElementById('karyawanCount');
   if (!tbody) return;
 
   const keyword = (document.getElementById('karyawanSearch')?.value || '').toLowerCase().trim();
-  const filtered = (karyawanState.rows || []).filter(r => !keyword ||
-    String(r.namapersonnel || '').toLowerCase().includes(keyword) ||
-    String(r.qrcodeid || '').toLowerCase().includes(keyword));
+  const divisi = document.getElementById('karyawanFilterDivisi')?.value || '';
+  const dept = document.getElementById('karyawanFilterDept')?.value || '';
+  const noAuthOnly = !!document.getElementById('karyawanFilterNoAuth')?.checked;
+  const allRows = karyawanState.rows || [];
+  const filtered = allRows.filter(r =>
+    (!keyword ||
+      String(r.namapersonnel || '').toLowerCase().includes(keyword) ||
+      String(r.qrcodeid || '').toLowerCase().includes(keyword)) &&
+    (!divisi || String(r.divisi || '').trim() === divisi) &&
+    (!dept || String(r.departemen || '').trim() === dept) &&
+    (!noAuthOnly || !r.authorizedbyid));
 
-  if (countEl) countEl.textContent = `${filtered.length} Karyawan`;
+  if (countEl) countEl.textContent = filtered.length === allRows.length ? `${filtered.length} Karyawan` : `${filtered.length} dari ${allRows.length} Karyawan`;
 
   if (filtered.length === 0) {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">Belum ada data.</td></tr>';
