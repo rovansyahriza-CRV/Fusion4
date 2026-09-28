@@ -23,8 +23,9 @@ body{font-size:clamp(12px,1.05vw,22px)}
 .screen{height:100vh;display:flex;flex-direction:column;gap:1.1vh;padding:1.6vh 1.6vw}
 header{display:flex;align-items:center;justify-content:space-between;gap:1vw}
 .brand{display:flex;align-items:center;gap:.9vw}
-.brand .logo{background:#fff;border-radius:.6vw;padding:.35vw;display:flex}
-.brand img{height:4.2vh;width:auto;display:block}
+.brand .logo{display:flex}
+/* Logo transparan tanpa kotak putih; glow tipis ngikutin bentuk logo biar kebaca di latar gelap. */
+.brand img{height:6.4vh;width:auto;display:block;filter:drop-shadow(0 0 .25vh rgba(255,255,255,.9)) drop-shadow(0 0 .9vh rgba(255,255,255,.35))}
 .brand h1{font-size:1.6em;font-weight:700;letter-spacing:.02em}
 .clock{text-align:right}
 .clock .time{font-size:2.1em;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
