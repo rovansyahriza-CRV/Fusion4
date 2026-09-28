@@ -419,6 +419,12 @@ async function loadMonitoringPage(category, btnEl) {
     dateEl.style.display = category === 'attendance' ? '' : 'none';
     if (category === 'attendance' && !dateEl.value) dateEl.value = getTodayDateString();
   }
+  // Filter Sudah/Belum Enroll cuma relevan di tab Status Enroll.
+  const enrollEl = document.getElementById('monitoringEnrollFilter');
+  if (enrollEl) {
+    enrollEl.style.display = category === 'attendance' ? 'none' : '';
+    if (category === 'attendance') enrollEl.value = '';
+  }
 
   const tbody = document.getElementById('monitoringTableBody');
   const thead = document.getElementById('monitoringTableHead');
@@ -504,12 +510,26 @@ function renderMonitoringTable() {
   thead.innerHTML = `<tr>${columns.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
 
   const keyword = (document.getElementById('monitoringSearch')?.value || '').toLowerCase().trim();
+  const hasEnroll = columns.includes('Status Enroll');
+  const enrollFilter = hasEnroll ? (document.getElementById('monitoringEnrollFilter')?.value || '') : '';
+  const isEnrolled = r => String(r['Status Enroll'] || '').includes('Sudah');
+  // Jumlah di opsi filter enroll ikut data yang dimuat (sebelum filter).
+  if (hasEnroll) {
+    const enrollEl = document.getElementById('monitoringEnrollFilter');
+    const sudah = (rows || []).filter(isEnrolled).length, belum = (rows || []).length - sudah;
+    if (enrollEl) {
+      enrollEl.options[1].textContent = `✅ Sudah Enroll (${sudah})`;
+      enrollEl.options[2].textContent = `❌ Belum Enroll (${belum})`;
+    }
+  }
   const filtered = (rows || []).filter(r => {
+    if (enrollFilter === 'SUDAH' && !isEnrolled(r)) return false;
+    if (enrollFilter === 'BELUM' && isEnrolled(r)) return false;
     if (!keyword) return true;
     return columns.some(c => String(r[c] ?? '').toLowerCase().includes(keyword));
   });
 
-  if (countEl) countEl.textContent = `${filtered.length} Data`;
+  if (countEl) countEl.textContent = filtered.length === (rows || []).length ? `${filtered.length} Data` : `${filtered.length} dari ${(rows || []).length} Data`;
 
   if (filtered.length === 0) {
     tbody.innerHTML = `<tr><td colspan="${columns.length || 1}" style="text-align:center;color:#777;">Belum ada data.</td></tr>`;

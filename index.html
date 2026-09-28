@@ -151,6 +151,12 @@
             style="flex:1;min-width:180px;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
           <input type="date" id="monitoringDateFilter" onchange="loadMonitoringPage('attendance')"
             style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
+          <select id="monitoringEnrollFilter" onchange="renderMonitoringTable()" aria-label="Filter status enroll"
+            style="display:none;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:190px;">
+            <option value="">Semua Status Enroll</option>
+            <option value="SUDAH">✅ Sudah Enroll</option>
+            <option value="BELUM">❌ Belum Enroll</option>
+          </select>
         </div>
 
         <div class="table-responsive">
