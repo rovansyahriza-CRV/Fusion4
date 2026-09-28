@@ -1308,7 +1308,7 @@ async function submitPin() {
         });
       }
 
-      // 0. Render Permintaan Karyawan (AER / APER)
+      // 0. Render Permintaan Karyawan (AER / PER / APER)
       if (hasEmpReq) {
         empReqData.forEach(item => {
           const row = document.createElement('div');
@@ -1355,12 +1355,18 @@ async function submitPin() {
               Target: ${item.tanggaldibutuhkan || '-'} • ${item.durasikerja || '-'} • <em>"${item.alasanpermintaan || '-'}"</em>
             </div>
             <div style="display:flex; gap:8px;">
+              ${item.stage === 'PER' ? `
+              <button class="btnApproveEmpReq" data-id="${item.id}" data-action="HRD_PROCEED_BOD" data-stage="PER" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:#7c3aed; color:#fff; cursor:pointer;">
+                📤 Ajukan ke Direksi (APER)
+              </button>
+              ` : `
               <button class="btnApproveEmpReq" data-id="${item.id}" data-action="${item.stage === 'AER' ? 'AER_APPROVE' : 'APER_APPROVE'}" data-stage="${item.stage}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:#16a34a; color:#fff; cursor:pointer;">
                 ✅ Setujui (${item.stage})
               </button>
               <button class="btnRejectEmpReq" data-id="${item.id}" data-action="${item.stage === 'AER' ? 'AER_REJECT' : 'APER_REJECT'}" data-stage="${item.stage}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--danger, #D9312E); cursor:pointer;">
                 ❌ Tolak
               </button>
+              `}
             </div>
           `;
           box.appendChild(row);
@@ -1894,8 +1900,11 @@ async function submitPin() {
   }
 
   async function handleEmpReqApprovalDecision(id, action, qrId, stage) {
-    const isApprove = action.includes('APPROVE');
-    const confirmMsg = isApprove ? `Setujui permintaan karyawan ini (${stage})?` : `Tolak permintaan karyawan ini (${stage})?`;
+    const isProceedBod = action === 'HRD_PROCEED_BOD';
+    const isApprove = isProceedBod || action.includes('APPROVE');
+    const confirmMsg = isProceedBod
+      ? 'Ajukan permintaan karyawan ini ke Direksi (APER) untuk persetujuan final?'
+      : (isApprove ? `Setujui permintaan karyawan ini (${stage})?` : `Tolak permintaan karyawan ini (${stage})?`);
     if (!confirm(confirmMsg)) return;
 
     let notes = '';
