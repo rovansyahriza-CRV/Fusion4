@@ -11,7 +11,8 @@
   - tv  (tv.html)                      -> rotasi semua project (014 -> 015 -> ... -> HO), ganti tiap 20 detik
   - tv?project=014                     -> tetap di 1 project (TV di site). ?project=HO untuk kantor.
   Project = kolom Type karyawan. HO = 001, 901-905, atau kosong (digabung).
-  Hadir = sudah absen masuk hari ini (tanda: istirahat / pulang / ijin pulang).
+  Hadir = sudah absen masuk hari ini (tanda: istirahat / pulang / ijin pulang) + lokasi scan terakhir
+  (Pulang -> Masuk2 -> Istirahat -> Masuk1), karena orang bisa pindah titik absen di siang hari.
   Ijin/Cuti/Sakit = pengajuan APPROVED yang berlaku hari ini & belum absen masuk.
   Belum absen = karyawan aktif selain dua kelompok di atas. Data dimuat ulang tiap 60 detik.
 -->
@@ -51,7 +52,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:1vw}
 .tile .n{font-size:2.3em;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
 .tile .n small{font-size:.45em;font-weight:500;opacity:.85}
 .t-ok{background:var(--ok-bg);color:#7fe0ad}.t-gray{background:var(--gray-bg);color:#c6d2e6}.t-info{background:var(--info-bg);color:#a9ccff}.t-warn{background:var(--warn-bg);color:#ffd98a}
-.cols{flex:1;min-height:0;display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:.8vw}
+.cols{flex:1;min-height:0;display:grid;grid-template-columns:1.9fr 1fr 1fr;gap:.8vw}
 .col{background:var(--panel);border-radius:.7vw;display:flex;flex-direction:column;min-height:0}
 .col h3{font-size:1em;font-weight:600;color:var(--muted);padding:.9vh .9vw .6vh;border-bottom:1px solid var(--line)}
 .col h3 b{color:var(--text)}
@@ -60,6 +61,9 @@ header{display:flex;align-items:center;justify-content:space-between;gap:1vw}
 .row .t{color:var(--muted);font-variant-numeric:tabular-nums;min-width:3.4em}
 .row .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .row .d{color:var(--muted);font-size:.85em;white-space:nowrap;max-width:40%;overflow:hidden;text-overflow:ellipsis}
+.row .loc{font-size:.8em;padding:.1em .55em;border-radius:.4em;background:#16304a;color:#9fd0ff;white-space:nowrap;max-width:34%;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+#lHadir .row .loc{background:none;padding:0;border-radius:0;width:30%;max-width:30%;font-size:.85em}
+#lHadir .row .d{width:21%;max-width:21%;text-align:right}
 .tag{font-size:.75em;padding:.1em .5em;border-radius:.4em;white-space:nowrap}
 .tag.ist{background:var(--gray-bg);color:#c6d2e6}.tag.plg{background:#2a2140;color:#cbb6ff}.tag.ijn{background:var(--info-bg);color:#a9ccff}
 .empty{color:var(--muted);padding:1.2vh 0}
@@ -115,7 +119,7 @@ async function loadData() {
   const tgl = todayWita();
   const [kar, abs, ijn, proj] = await Promise.all([
     sb.from('karyawanTbl').select('NamaPersonnel, QrCodeId, Kualifikasi, Departemen, Type, IsActive').eq('IsActive', true),
-    sb.from('absensiTbl').select('QrCodeId, JamMasuk1, JamIstirahat, JamMasuk2, JamPulang, Status').eq('Tanggal', tgl),
+    sb.from('absensiTbl').select('QrCodeId, JamMasuk1, JamIstirahat, JamMasuk2, JamPulang, Status, LokasiMasuk1, LokasiIstirahat, LokasiMasuk2, LokasiPulang').eq('Tanggal', tgl),
     sb.from('pengajuan_ijin_lembur_tbl').select('qrcodeid, tipe, jenis_cuti, tanggal, tanggal_mulai, tanggal_selesai, status').in('tipe', ['IJIN', 'CUTI']).eq('status', 'APPROVED'),
     sb.rpc('op_list_projects_public')
   ]);
@@ -147,7 +151,8 @@ async function loadData() {
       let tag = '';
       if (a.JamPulang) { tag = String(a.Status || '').startsWith('IJIN') ? 'ijin pulang' : 'pulang'; G.pulang++; }
       else if (a.JamIstirahat && !a.JamMasuk2) { tag = 'istirahat'; G.ist++; }
-      G.hadir.push({ ...person, masuk: a.JamMasuk1, tag });
+      const lokasi = a.LokasiPulang || a.LokasiMasuk2 || a.LokasiIstirahat || a.LokasiMasuk1 || '';
+      G.hadir.push({ ...person, masuk: a.JamMasuk1, tag, lokasi });
     } else if (leave) {
       G.ijin.push({ ...person, jenis: leave });
     } else {
@@ -192,7 +197,7 @@ function renderDetail() {
   ].map(([l, n, c, extra]) => `<div class="tile ${c}"><div class="l">${l}</div><div class="n">${n}${extra}</div></div>`).join('');
   $('cHadir').textContent = G.hadir.length; $('cIjin').textContent = G.ijin.length; $('cBelum').textContent = G.belum.length;
   const tagCls = { istirahat: 'ist', pulang: 'plg', 'ijin pulang': 'ijn' };
-  $('lHadir').innerHTML = G.hadir.map(p => `<div class="row"><span class="t">${jam(p.masuk)}</span><span class="n">${esc(p.nama)}</span>${p.tag ? `<span class="tag ${tagCls[p.tag]}">${p.tag}</span>` : ''}<span class="d">${esc(p.dept)}</span></div>`).join('') || '<div class="empty">Belum ada yang absen masuk.</div>';
+  $('lHadir').innerHTML = G.hadir.map(p => `<div class="row"><span class="t">${jam(p.masuk)}</span><span class="n">${esc(p.nama)}</span>${p.tag ? `<span class="tag ${tagCls[p.tag]}">${p.tag}</span>` : ''}${p.lokasi ? `<span class="loc">📍 ${esc(p.lokasi)}</span>` : ''}<span class="d">${esc(p.dept)}</span></div>`).join('') || '<div class="empty">Belum ada yang absen masuk.</div>';
   $('lIjin').innerHTML = G.ijin.map(p => `<div class="row"><span class="n">${esc(p.nama)}</span><span class="tag ijn">${esc(p.jenis)}</span></div>`).join('') || '<div class="empty">Tidak ada.</div>';
   $('lBelum').innerHTML = G.belum.map(p => `<div class="row"><span class="n">${esc(p.nama)}</span><span class="d">${esc(p.dept)}</span></div>`).join('') || '<div class="empty">Semua sudah absen.</div>';
   ['lHadir', 'lIjin', 'lBelum'].forEach(id => { $(id).scrollTop = 0; });
