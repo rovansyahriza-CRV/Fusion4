@@ -132,28 +132,35 @@ async function fetchKaryawanAuthor(id) {
   }
 }
 
+// Token akses = kode UTUH dipisah koma, dicocokkan persis (bukan "mengandung teks"). Dulu pakai
+// includes() di string mentah: "Management Walkthrough" dianggap punya HR, "Project Admin" dianggap
+// super admin; dan akun dengan PIC & Author kosong dapat akses semua menu. Sekarang kosong = tanpa akses.
+function accessTokens(raw) { return String(raw || '').toUpperCase().split(',').map(t => t.trim()).filter(Boolean); }
+function isAccessSuperAdmin() {
+  if (!currentUser) return false;
+  const p = accessTokens(currentUser.pic), a = accessTokens(currentUser.author);
+  return p.includes('ALL') || p.includes('*') || a.includes('ALL') || a.includes('*') || a.includes('ADMIN');
+}
+
 function hasSectionAccess(key) {
   if (!currentUser) return false;
-  const picRaw = String(currentUser.pic || '').toUpperCase();
-  const authorRaw = String(currentUser.author || '').toUpperCase();
+  if (isAccessSuperAdmin()) return true;
 
-  if (!picRaw && !authorRaw) return true; // Default akses semua jika belum diset
-  if (picRaw.includes('ALL') || picRaw.includes('*') || authorRaw.includes('ALL') || authorRaw.includes('ADMIN')) return true;
-
-  const picTokens = picRaw.split(',').map(t => t.trim()).filter(Boolean);
-  const authTokens = authorRaw.split(',').map(t => t.trim()).filter(Boolean);
+  const picTokens = accessTokens(currentUser.pic);
+  const authTokens = accessTokens(currentUser.author);
+  if (!picTokens.length && !authTokens.length) return false;
 
   if (key === 'ER') {
     return (
-      picTokens.some(t => t.startsWith('ER') || t === 'PER' || t === 'HR') ||
-      authTokens.some(t => t.startsWith('AER') || t === 'APER' || t === 'HR' || t === 'BOD' || t === 'LEAD')
+      picTokens.some(t => t === 'ER' || t.startsWith('ER-') || t === 'PER' || t === 'HR') ||
+      authTokens.some(t => t === 'AER' || t.startsWith('AER-') || t === 'APER' || t === 'HR' || t === 'BOD' || t === 'LEAD')
     );
   }
 
   if (key === 'OIL') {
     return (
       picTokens.some(t => t === 'OIL') ||
-      authTokens.some(t => t.startsWith('AR') || t.startsWith('ASV') || t.startsWith('APO') || t.includes('APPROV') || t.includes('REVIEW'))
+      authTokens.some(t => t === 'AR' || t.startsWith('AR-') || t === 'RR' || t.startsWith('RR-') || t.startsWith('ASV') || t.startsWith('APO') || t.startsWith('APPROVAL ') || t.startsWith('REVIEW '))
     );
   }
 
@@ -3115,26 +3122,21 @@ let empReqState = {
 
 function canUserSubmitEmpReq(projectCode = '') {
   if (!currentUser) return false;
-  const pic = String(currentUser.pic || '').toUpperCase();
-  const auth = String(currentUser.author || '').toUpperCase();
-  if (pic.includes('ALL') || auth.includes('ALL') || auth.includes('ADMIN')) return true;
-  const picTokens = pic.split(',').map(t => t.trim()).filter(Boolean);
+  if (isAccessSuperAdmin()) return true;
+  const picTokens = accessTokens(currentUser.pic);
   if (picTokens.includes('ER') || picTokens.includes('PER') || picTokens.includes('ER-ALL')) return true;
   if (projectCode) {
     const projClean = String(projectCode).toUpperCase().replace(/\s+/g, '');
-    return picTokens.includes(`ER-${projClean}`);
+    return picTokens.includes(`ER-${projClean}`) || picTokens.includes(`ER-${projClean.replace(/^0+/, '')}`);
   }
-  return picTokens.some(t => t.startsWith('ER'));
+  return picTokens.some(t => t.startsWith('ER-'));
 }
 
 function canUserApproveAer(projectCode = '') {
   if (!currentUser) return false;
-  const auth = String(currentUser.author || '').toUpperCase();
-  if (!auth) return false;
-
-  if (auth.includes('ALL') || auth.includes('ADMIN')) return true;
-
-  const tokens = auth.split(',').map(t => t.trim()).filter(Boolean);
+  if (isAccessSuperAdmin()) return true;
+  const tokens = accessTokens(currentUser.author);
+  if (!tokens.length) return false;
 
   // Jika author memiliki 'AER' atau 'AER-ALL' (akses approval semua proyek)
   if (tokens.includes('AER') || tokens.includes('AER-ALL') || tokens.some(t => t === 'AER' || t.startsWith('AER-ALL'))) {
@@ -3144,32 +3146,31 @@ function canUserApproveAer(projectCode = '') {
   // Jika projectCode diberikan (misal '015', '101')
   if (projectCode) {
     const projClean = String(projectCode).toUpperCase().replace(/\s+/g, '');
-    return tokens.includes(`AER-${projClean}`) || tokens.some(t => t === `AER-${projClean}` || t.endsWith(`-${projClean}`));
+    return tokens.includes(`AER-${projClean}`) || tokens.includes(`AER-${projClean.replace(/^0+/, '')}`);
   }
 
-  return tokens.some(t => t.startsWith('AER'));
+  return tokens.some(t => t.startsWith('AER-'));
 }
 
 function canUserProcessHrd() {
   if (!currentUser) return false;
-  const pic = String(currentUser.pic || '').toUpperCase();
-  const auth = String(currentUser.author || '').toUpperCase();
-  return pic.includes('PER') || pic.includes('HR') || pic.includes('ALL') || auth.includes('ALL') || auth.includes('ADMIN') || auth.includes('HR');
+  const pic = accessTokens(currentUser.pic), auth = accessTokens(currentUser.author);
+  return isAccessSuperAdmin() || pic.includes('PER') || pic.includes('HR') || auth.includes('HR');
 }
 
 function canUserApproveAper() {
   if (!currentUser) return false;
-  const auth = String(currentUser.author || '').toUpperCase();
-  return auth.includes('APER') || auth.includes('BOD') || auth.includes('DIR') || auth.includes('ALL') || auth.includes('ADMIN');
+  const auth = accessTokens(currentUser.author);
+  return isAccessSuperAdmin() || auth.includes('APER') || auth.includes('BOD') || auth.includes('DIR');
 }
 
 function hasEmployeeRequestAuthor() {
   if (!currentUser) return false;
-  const auth = String(currentUser.author || '').toUpperCase();
-  const pic = String(currentUser.pic || '').toUpperCase();
+  const auth = accessTokens(currentUser.author), pic = accessTokens(currentUser.pic);
   return (
-    auth.includes('AER') || auth.includes('APER') || auth.includes('ALL') || auth.includes('ADMIN') ||
-    auth.includes('HR') || auth.includes('LEAD') || pic.includes('PER') || pic.includes('ER') || pic.includes('ALL')
+    isAccessSuperAdmin() ||
+    auth.some(t => t === 'AER' || t.startsWith('AER-') || t === 'APER' || t === 'HR' || t === 'LEAD' || t === 'BOD') ||
+    pic.some(t => t === 'PER' || t === 'ER' || t.startsWith('ER-') || t === 'HR')
   );
 }
 
