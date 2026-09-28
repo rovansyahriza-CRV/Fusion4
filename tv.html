@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attendance TV — BIMA</title>
+<link rel="icon" href="BimaLogo.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!--
+  Layar TV attendance (read-only, tanpa login, tanpa tombol).
+  - tv  (tv.html)                      -> rotasi semua project (014 -> 015 -> ... -> HO), ganti tiap 20 detik
+  - tv?project=014                     -> tetap di 1 project (TV di site). ?project=HO untuk kantor.
+  Project = kolom Type karyawan. HO = 001, 901-905, atau kosong (digabung).
+  Hadir = sudah absen masuk hari ini (tanda: istirahat / pulang / ijin pulang).
+  Ijin/Cuti/Sakit = pengajuan APPROVED yang berlaku hari ini & belum absen masuk.
+  Belum absen = karyawan aktif selain dua kelompok di atas. Data dimuat ulang tiap 60 detik.
+-->
+<style>
+:root{--bg:#0d1526;--panel:#141f36;--line:#243352;--text:#eef2f8;--muted:#8fa0bd;--accent:#e2582f;--ok:#2fb06f;--ok-bg:#12382a;--info:#5aa2ff;--info-bg:#14305a;--warn:#f0b43c;--warn-bg:#3e2f12;--gray-bg:#1b2742}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',-apple-system,'Segoe UI',Roboto,sans-serif;overflow:hidden}
+body{font-size:clamp(12px,1.05vw,22px)}
+.screen{height:100vh;display:flex;flex-direction:column;gap:1.1vh;padding:1.6vh 1.6vw}
+header{display:flex;align-items:center;justify-content:space-between;gap:1vw}
+.brand{display:flex;align-items:center;gap:.9vw}
+.brand .logo{background:#fff;border-radius:.6vw;padding:.35vw;display:flex}
+.brand img{height:4.2vh;width:auto;display:block}
+.brand h1{font-size:1.6em;font-weight:700;letter-spacing:.02em}
+.clock{text-align:right}
+.clock .time{font-size:2.1em;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.clock .date{color:var(--muted);font-size:.95em}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:.8vw}
+.pcard{background:var(--panel);border:2px solid transparent;border-radius:.7vw;padding:.9vh .8vw}
+.pcard.active{border-color:var(--accent)}
+.pcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:.5vw}
+.pcard .code{font-weight:700;font-size:1.15em}
+.pcard .num{color:var(--muted);font-variant-numeric:tabular-nums}
+.pcard .num b{color:var(--text);font-size:1.15em}
+.bar{height:.8vh;background:var(--gray-bg);border-radius:.4vh;margin-top:.7vh;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok);border-radius:.4vh;transition:width .6s}
+.phead{display:flex;justify-content:space-between;align-items:center}
+.phead h2{font-size:1.45em;font-weight:700}
+.phead h2 span{color:var(--muted);font-weight:500}
+.dots{display:flex;gap:.3vw;align-items:center;color:var(--muted);font-size:.85em}
+.dots i{display:inline-block;height:.7vh;width:.7vh;border-radius:.35vh;background:var(--line)}
+.dots i.on{width:2vh;background:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.8vw}
+.tile{border-radius:.7vw;padding:.8vh .9vw}
+.tile .l{font-size:.95em}
+.tile .n{font-size:2.3em;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile .n small{font-size:.45em;font-weight:500;opacity:.85}
+.t-ok{background:var(--ok-bg);color:#7fe0ad}.t-gray{background:var(--gray-bg);color:#c6d2e6}.t-info{background:var(--info-bg);color:#a9ccff}.t-warn{background:var(--warn-bg);color:#ffd98a}
+.cols{flex:1;min-height:0;display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:.8vw}
+.col{background:var(--panel);border-radius:.7vw;display:flex;flex-direction:column;min-height:0}
+.col h3{font-size:1em;font-weight:600;color:var(--muted);padding:.9vh .9vw .6vh;border-bottom:1px solid var(--line)}
+.col h3 b{color:var(--text)}
+.list{flex:1;min-height:0;overflow:hidden;padding:0 .9vw}
+.row{display:flex;align-items:center;gap:.7vw;padding:.55vh 0;border-bottom:1px solid var(--line)}
+.row .t{color:var(--muted);font-variant-numeric:tabular-nums;min-width:3.4em}
+.row .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.row .d{color:var(--muted);font-size:.85em;white-space:nowrap;max-width:40%;overflow:hidden;text-overflow:ellipsis}
+.tag{font-size:.75em;padding:.1em .5em;border-radius:.4em;white-space:nowrap}
+.tag.ist{background:var(--gray-bg);color:#c6d2e6}.tag.plg{background:#2a2140;color:#cbb6ff}.tag.ijn{background:var(--info-bg);color:#a9ccff}
+.empty{color:var(--muted);padding:1.2vh 0}
+.foot{display:flex;justify-content:space-between;color:var(--muted);font-size:.8em}
+.foot .err{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="screen">
+  <header>
+    <div class="brand">
+      <div class="logo"><img src="BimaLogo.png" alt="BIMA"></div>
+      <h1>Attendance hari ini</h1>
+    </div>
+    <div class="clock"><div class="time" id="time">--:--</div><div class="date" id="date"></div></div>
+  </header>
+  <div class="strip" id="strip"></div>
+  <div class="phead"><h2 id="ptitle">Memuat data…</h2><div class="dots" id="dots"></div></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="cols">
+    <div class="col"><h3>Hadir <b id="cHadir">0</b> · terbaru di atas</h3><div class="list" id="lHadir"></div></div>
+    <div class="col"><h3>Ijin / Cuti / Sakit <b id="cIjin">0</b></h3><div class="list" id="lIjin"></div></div>
+    <div class="col"><h3>Belum absen <b id="cBelum">0</b></h3><div class="list" id="lBelum"></div></div>
+  </div>
+  <div class="foot"><span id="updated"></span><span>Klik layar untuk layar penuh</span></div>
+</div>
+<script>
+const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const TZ = 'Asia/Makassar';
+const ROTATE_MS = 20000, REFRESH_MS = 60000;
+const FIXED = (new URLSearchParams(location.search).get('project') || '').trim().toUpperCase();
+const HO_CODES = new Set(['', '001', '901', '902', '903', '904', '905', 'HO']);
+const JENIS_LABEL = { CUTI_TAHUNAN: 'Cuti', CUTI_KHUSUS: 'Cuti khusus', SAKIT: 'Sakit', CUTI_SAKIT: 'Sakit' };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const todayWita = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+const jam = ts => ts ? new Intl.DateTimeFormat('id-ID', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }).format(new Date(ts)).replace('.', ':') : '';
+const qr = v => String(v || '').trim().toUpperCase();
+const groupOf = type => { const t = String(type || '').trim().toUpperCase(); return HO_CODES.has(t) ? 'HO' : t; };
+
+let groups = [], cur = 0, projectNames = {};
+
+function tickClock() {
+  const now = new Date();
+  $('time').textContent = new Intl.DateTimeFormat('id-ID', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }).format(now).replace('.', ':') + ' WITA';
+  $('date').textContent = new Intl.DateTimeFormat('id-ID', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(now);
+}
+
+async function loadData() {
+  const tgl = todayWita();
+  const [kar, abs, ijn, proj] = await Promise.all([
+    sb.from('karyawanTbl').select('NamaPersonnel, QrCodeId, Kualifikasi, Departemen, Type, IsActive').eq('IsActive', true),
+    sb.from('absensiTbl').select('QrCodeId, JamMasuk1, JamIstirahat, JamMasuk2, JamPulang, Status').eq('Tanggal', tgl),
+    sb.from('pengajuan_ijin_lembur_tbl').select('qrcodeid, tipe, jenis_cuti, tanggal, tanggal_mulai, tanggal_selesai, status').in('tipe', ['IJIN', 'CUTI']).eq('status', 'APPROVED'),
+    sb.rpc('op_list_projects_public')
+  ]);
+  for (const r of [kar, abs, ijn]) if (r.error) throw r.error;
+  if (!proj.error) projectNames = Object.fromEntries((proj.data || []).map(p => [String(p.code).trim().toUpperCase(), p.name]));
+
+  const absMap = new Map();
+  (abs.data || []).forEach(a => {
+    const k = qr(a.QrCodeId);
+    // Kalau ada >1 baris di hari yang sama, pakai yang punya jam masuk paling awal.
+    const prev = absMap.get(k);
+    if (!prev || (a.JamMasuk1 && (!prev.JamMasuk1 || a.JamMasuk1 < prev.JamMasuk1))) absMap.set(k, a);
+  });
+  const leaveMap = new Map();
+  (ijn.data || []).forEach(p => {
+    const mulai = p.tanggal_mulai || p.tanggal, selesai = p.tanggal_selesai || p.tanggal || p.tanggal_mulai;
+    if (mulai && selesai && mulai <= tgl && tgl <= selesai) {
+      leaveMap.set(qr(p.qrcodeid), p.tipe === 'CUTI' ? (JENIS_LABEL[p.jenis_cuti] || 'Cuti') : (p.jenis_cuti === 'SAKIT' ? 'Sakit' : 'Ijin'));
+    }
+  });
+
+  const byGroup = new Map();
+  (kar.data || []).forEach(k => {
+    const g = groupOf(k.Type);
+    if (!byGroup.has(g)) byGroup.set(g, { code: g, hadir: [], ijin: [], belum: [], ist: 0, pulang: 0 });
+    const G = byGroup.get(g), key = qr(k.QrCodeId), a = absMap.get(key), leave = leaveMap.get(key);
+    const person = { nama: k.NamaPersonnel || k.QrCodeId, dept: k.Departemen || k.Kualifikasi || '' };
+    if (a && a.JamMasuk1) {
+      let tag = '';
+      if (a.JamPulang) { tag = String(a.Status || '').startsWith('IJIN') ? 'ijin pulang' : 'pulang'; G.pulang++; }
+      else if (a.JamIstirahat && !a.JamMasuk2) { tag = 'istirahat'; G.ist++; }
+      G.hadir.push({ ...person, masuk: a.JamMasuk1, tag });
+    } else if (leave) {
+      G.ijin.push({ ...person, jenis: leave });
+    } else {
+      G.belum.push(person);
+    }
+  });
+  const order = g => g.code === 'HO' ? 'ZZZ' : g.code;
+  groups = [...byGroup.values()].sort((a, b) => order(a).localeCompare(order(b)));
+  groups.forEach(G => {
+    G.total = G.hadir.length + G.ijin.length + G.belum.length;
+    G.hadir.sort((a, b) => String(b.masuk).localeCompare(String(a.masuk)));
+    G.ijin.sort((a, b) => a.nama.localeCompare(b.nama));
+    G.belum.sort((a, b) => a.nama.localeCompare(b.nama));
+    G.name = G.code === 'HO' ? 'Head Office' : (projectNames[G.code] || 'Project ' + G.code);
+  });
+  if (FIXED) {
+    const i = groups.findIndex(G => G.code === FIXED);
+    cur = i >= 0 ? i : 0;
+  } else if (cur >= groups.length) cur = 0;
+  $('updated').textContent = 'Diperbarui ' + jam(new Date().toISOString()) + ' WITA';
+  $('updated').className = '';
+}
+
+function renderStrip() {
+  const shown = FIXED ? groups.filter((_, i) => i === cur) : groups;
+  $('strip').innerHTML = shown.map(G => {
+    const pct = G.total ? Math.round(G.hadir.length / G.total * 100) : 0;
+    return `<div class="pcard${G === groups[cur] ? ' active' : ''}"><div class="top"><span class="code">${esc(G.code)}</span><span class="num"><b>${G.hadir.length}</b> / ${G.total} hadir</span></div><div class="bar"><i style="width:${pct}%"></i></div></div>`;
+  }).join('');
+}
+function renderDetail() {
+  const G = groups[cur];
+  if (!G) { $('ptitle').textContent = 'Belum ada data karyawan.'; return; }
+  $('ptitle').innerHTML = `${esc(G.code === 'HO' ? 'HO' : 'Project ' + G.code)} <span>— ${esc(G.name)}</span>`;
+  $('dots').innerHTML = FIXED ? '' : groups.map((_, i) => `<i class="${i === cur ? 'on' : ''}"></i>`).join('') + '<span style="margin-left:.4vw">berganti tiap 20 dtk</span>';
+  $('tiles').innerHTML = [
+    ['Hadir', G.hadir.length, 't-ok', ` <small>/ ${G.total}</small>`],
+    ['Istirahat', G.ist, 't-gray', ''],
+    ['Pulang', G.pulang, 't-gray', ''],
+    ['Ijin / Cuti / Sakit', G.ijin.length, 't-info', ''],
+    ['Belum absen', G.belum.length, 't-warn', '']
+  ].map(([l, n, c, extra]) => `<div class="tile ${c}"><div class="l">${l}</div><div class="n">${n}${extra}</div></div>`).join('');
+  $('cHadir').textContent = G.hadir.length; $('cIjin').textContent = G.ijin.length; $('cBelum').textContent = G.belum.length;
+  const tagCls = { istirahat: 'ist', pulang: 'plg', 'ijin pulang': 'ijn' };
+  $('lHadir').innerHTML = G.hadir.map(p => `<div class="row"><span class="t">${jam(p.masuk)}</span><span class="n">${esc(p.nama)}</span>${p.tag ? `<span class="tag ${tagCls[p.tag]}">${p.tag}</span>` : ''}<span class="d">${esc(p.dept)}</span></div>`).join('') || '<div class="empty">Belum ada yang absen masuk.</div>';
+  $('lIjin').innerHTML = G.ijin.map(p => `<div class="row"><span class="n">${esc(p.nama)}</span><span class="tag ijn">${esc(p.jenis)}</span></div>`).join('') || '<div class="empty">Tidak ada.</div>';
+  $('lBelum').innerHTML = G.belum.map(p => `<div class="row"><span class="n">${esc(p.nama)}</span><span class="d">${esc(p.dept)}</span></div>`).join('') || '<div class="empty">Semua sudah absen.</div>';
+  ['lHadir', 'lIjin', 'lBelum'].forEach(id => { $(id).scrollTop = 0; });
+}
+function render() { renderStrip(); renderDetail(); }
+
+// Daftar panjang scroll pelan otomatis, berhenti sebentar di atas & bawah.
+function autoScroll(el) {
+  let pauseUntil = Date.now() + 3000;
+  setInterval(() => {
+    if (Date.now() < pauseUntil || el.scrollHeight <= el.clientHeight + 2) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) {
+      pauseUntil = Date.now() + 3000;
+      setTimeout(() => { el.scrollTop = 0; pauseUntil = Date.now() + 3000; }, 3000);
+      return;
+    }
+    el.scrollTop += 1;
+  }, 45);
+}
+
+async function refresh() {
+  try { await loadData(); render(); }
+  catch (err) { $('updated').textContent = 'Gagal memuat data (' + (err.message || err) + '), coba lagi otomatis…'; $('updated').className = 'err'; }
+}
+
+tickClock(); setInterval(tickClock, 1000);
+['lHadir', 'lIjin', 'lBelum'].forEach(id => autoScroll($(id)));
+refresh(); setInterval(refresh, REFRESH_MS);
+if (!FIXED) setInterval(() => { if (groups.length > 1) { cur = (cur + 1) % groups.length; render(); } }, ROTATE_MS);
+// Cegah layar TV tidur (kalau browser mendukung) & layar penuh saat diklik.
+async function keepAwake() { try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch (e) {} }
+keepAwake(); document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
+document.addEventListener('click', () => { if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); });
+</script>
+</body>
+</html>
