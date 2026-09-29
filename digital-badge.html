@@ -189,7 +189,7 @@
     <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">ID Voucher:<br><span id="voucherLemburId" style="font-size:13px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
     <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">Sisa Kuota:<br><span id="sisaCutiVal" style="font-size:13px; font-weight:700; color:#2B6CB0; font-family:monospace;">12 Hari</span></div>
   </div>
-  <div style="margin:8px 16px 0;">
+  <div style="margin:8px 16px 0; display:none;">
     <button id="btnAjukanOff" style="width:100%; padding:11px 4px; font-size:13px; font-weight:700; border:1.5px solid #0F766E; border-radius:12px; background:#fff; color:#0F766E; cursor:pointer;">🌴 AJUKAN OFF (Rotasi / Periode)</button>
   </div>
 
@@ -331,6 +331,28 @@
     <button id="btnSubmitOff" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#0F766E; color:#fff; cursor:pointer;">Ajukan Off ke Atasan</button>
     <button id="btnCancelOff" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
     <div id="offMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
+  </div>
+</div>
+
+<div id="ubahTglOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:110; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px; box-sizing:border-box;">
+    <h3 style="margin:0 0 6px; font-size:17px; color:var(--charcoal);">✏️ Ubah Tanggal Pengajuan</h3>
+    <p style="margin:0 0 14px; font-size:12px; color:var(--text-muted);">Tanggal asli dari karyawan tetap tercatat. Setelah disimpan, lanjutkan approval seperti biasa.</p>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Mulai</label>
+        <input type="date" id="ubahTglMulai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Selesai</label>
+        <input type="date" id="ubahTglSelesai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+    </div>
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Alasan perubahan (wajib)</label>
+    <textarea id="ubahTglCatatan" rows="2" placeholder="Contoh: disesuaikan jadwal shift project" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box; margin-bottom:12px;"></textarea>
+    <button id="btnSimpanUbahTgl" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#0F766E; color:#fff; cursor:pointer;">Simpan Tanggal Baru</button>
+    <button id="btnBatalUbahTgl" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
+    <div id="ubahTglMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
   </div>
 </div>
 
@@ -1005,6 +1027,12 @@ async function submitPin() {
       infoEl.style.background = '#F0FDFA';
       infoEl.innerText = '🌴 Total: ' + hari + ' hari' + (isPeriode ? ' (Off Periode dikunci 14 hari)' : '');
     }
+    const hak = window.hakOff || {};
+    if (!isPeriode && hak.kuotaOffRotasi != null) {
+      const terpakai = Number(hak.terpakaiBulanIni || 0), kuota = Number(hak.kuotaOffRotasi);
+      infoEl.style.display = 'block';
+      infoEl.innerText += '\n📊 Jatah Off Rotasi bulan ini: terpakai ' + terpakai + ' dari ' + kuota + ' hari (sisa ' + Math.max(0, kuota - terpakai) + ').';
+    }
   }
 
   document.getElementById('offJenis').onchange = updateOffDurasi;
@@ -1013,7 +1041,7 @@ async function submitPin() {
 
   document.getElementById('btnAjukanOff').onclick = () => {
     const today = new Date().toISOString().split('T')[0];
-    document.getElementById('offJenis').value = 'OFF_ROTASI';
+    document.getElementById('offJenis').value = window.hakOffDefault || 'OFF_ROTASI';
     document.getElementById('offTglMulai').value = today;
     document.getElementById('offTglSelesai').value = today;
     document.getElementById('offAlasan').value = '';
@@ -1072,6 +1100,57 @@ async function submitPin() {
 
     btn.disabled = false;
     btn.innerText = "Ajukan Off ke Atasan";
+  };
+
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // UBAH TANGGAL (approver, Cuti & Off) -- Off Periode cuma geser mulai, tetap 14 hari
+  let ubahTglState = null;
+  function openUbahTanggal(ds, qrId) {
+    ubahTglState = { id: Number(ds.id), qrId, periode: ds.periode === '1' };
+    document.getElementById('ubahTglMulai').value = ds.mulai;
+    document.getElementById('ubahTglSelesai').value = ds.selesai;
+    document.getElementById('ubahTglSelesai').disabled = ubahTglState.periode;
+    document.getElementById('ubahTglCatatan').value = '';
+    document.getElementById('ubahTglMsg').style.display = 'none';
+    document.getElementById('ubahTglOverlay').style.display = 'flex';
+  }
+  document.getElementById('ubahTglMulai').onchange = () => {
+    if (ubahTglState && ubahTglState.periode && document.getElementById('ubahTglMulai').value) {
+      document.getElementById('ubahTglSelesai').value = addDays(document.getElementById('ubahTglMulai').value, 13);
+    }
+  };
+  document.getElementById('btnBatalUbahTgl').onclick = () => {
+    document.getElementById('ubahTglOverlay').style.display = 'none';
+  };
+  document.getElementById('btnSimpanUbahTgl').onclick = async () => {
+    if (!ubahTglState) return;
+    const msgEl = document.getElementById('ubahTglMsg');
+    const btn = document.getElementById('btnSimpanUbahTgl');
+    btn.disabled = true;
+    try {
+      const { data: res, error } = await supabaseClient.rpc('ubah_tanggal_pengajuan', {
+        p_request_id: ubahTglState.id,
+        p_user_qrcode: ubahTglState.qrId,
+        p_tgl_mulai: document.getElementById('ubahTglMulai').value || null,
+        p_tgl_selesai: document.getElementById('ubahTglSelesai').value || null,
+        p_catatan: document.getElementById('ubahTglCatatan').value.trim()
+      });
+      if (error) throw error;
+      if (!res || res.status !== 'SUCCESS') throw new Error((res && res.message) || 'Gagal mengubah tanggal.');
+      msgEl.style.color = "var(--green, #178A4C)";
+      msgEl.innerText = "✅ " + res.message;
+      msgEl.style.display = "block";
+      loadApprovalIssues(ubahTglState.qrId);
+      setTimeout(() => { document.getElementById('ubahTglOverlay').style.display = 'none'; }, 1800);
+    } catch (e) {
+      msgEl.style.color = "var(--danger, #D9312E)";
+      msgEl.innerText = "⚠️ " + e.message;
+      msgEl.style.display = "block";
+    }
+    btn.disabled = false;
   };
 
   async function handleIjinLemburDecision(requestId, action, qrId) {
@@ -1567,7 +1646,10 @@ async function submitPin() {
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
               📅 ${(item.tipe === 'CUTI' || item.tipe === 'OFF') && item.tanggal_selesai ? (item.tanggal_mulai + ' s/d ' + item.tanggal_selesai) : (item.tanggal || '-')} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}<br>
               📝 <em>"${item.alasan || '-'}"</em>
+              ${item.tanggal_mulai_awal ? `<br><span style="color:#B45309;">✏️ Diubah dari ${item.tanggal_mulai_awal} s/d ${item.tanggal_selesai_awal} oleh ${escHtml(item.tanggal_diubah_oleh || '-')}: "${escHtml(item.tanggal_diubah_catatan || '')}"</span>` : ''}
+              ${item.peringatan_kuota ? `<br><span style="color:#D9312E; font-weight:600;">⚠️ ${escHtml(item.peringatan_kuota)}</span>` : ''}
             </div>
+            ${(item.tipe === 'CUTI' || item.tipe === 'OFF') ? `<button class="btnUbahTanggal" data-id="${item.id}" data-mulai="${item.tanggal_mulai || ''}" data-selesai="${item.tanggal_selesai || ''}" data-periode="${item.jenis_cuti === 'OFF_PERIODE' ? '1' : ''}" style="width:100%; margin-bottom:8px; padding:8px; font-size:12px; font-weight:700; border:1.5px dashed #0F766E; border-radius:8px; background:#fff; color:#0F766E; cursor:pointer;">✏️ Ubah Tanggal</button>` : ''}
             <div style="display:flex; gap:8px;">
               <button class="btnApproveIjinLembur" data-id="${item.id}" data-action="${act}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:${btnBg}; color:#fff; cursor:pointer;">${btnLabel}</button>
               <button class="btnRejectIjinLembur" data-id="${item.id}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:1.5px solid var(--border); border-radius:8px; background:#fff; color:var(--danger, #D9312E); cursor:pointer;">❌ Tolak</button>
@@ -1581,6 +1663,9 @@ async function submitPin() {
         });
         box.querySelectorAll('.btnRejectIjinLembur').forEach(btn => {
           btn.onclick = () => handleIjinLemburDecision(btn.dataset.id, 'REJECT', qrId);
+        });
+        box.querySelectorAll('.btnUbahTanggal').forEach(btn => {
+          btn.onclick = () => openUbahTanggal(btn.dataset, qrId);
         });
       }
 
@@ -1715,6 +1800,22 @@ async function submitPin() {
         }
       } catch (e) {
         console.warn("get_sisa_cuti error:", e);
+      }
+
+      // Hak Off dari Pola Kerja kontrak aktif: tombol & pilihan jenis cuma yang berhak
+      try {
+        const { data: hakOff } = await supabaseClient.rpc('get_hak_off', { p_qrcode: qrId });
+        const rotasi = !!(hakOff && hakOff.offRotasi), periode = !!(hakOff && hakOff.offPeriode);
+        document.getElementById('btnAjukanOff').parentElement.style.display = (rotasi || periode) ? 'block' : 'none';
+        const optRotasi = document.querySelector('#offJenis option[value="OFF_ROTASI"]');
+        const optPeriode = document.querySelector('#offJenis option[value="OFF_PERIODE"]');
+        optRotasi.hidden = optRotasi.disabled = !rotasi;
+        optPeriode.hidden = optPeriode.disabled = !periode;
+        window.hakOffDefault = rotasi ? 'OFF_ROTASI' : 'OFF_PERIODE';
+        window.hakOff = hakOff || {};
+      } catch (e) {
+        console.warn("get_hak_off error:", e);
+        document.getElementById('btnAjukanOff').parentElement.style.display = 'none';
       }
 
       const btnIjin = document.getElementById('btnAjukanIjin');

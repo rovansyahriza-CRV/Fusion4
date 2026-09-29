@@ -2467,7 +2467,7 @@ function renderOtorisasiTable() {
         : item.tipe === 'CUTI'
         ? `<span style="color:#0369A1; font-weight:700;">🏖️ Cuti</span>`
         : item.tipe === 'OFF'
-        ? `<span style="color:#0F766E; font-weight:700;">🌴 ${offLabel(item)}</span>`
+        ? `<span style="color:#0F766E; font-weight:700;">🌴 ${offLabel(item)}</span>${item.peringatan_kuota ? `<br><small style="color:#dc2626; font-weight:600;">⚠️ Melebihi jatah</small>` : ''}`
         : `<span style="color:#2563EB; font-weight:700;">⏱️ Lembur (SPKL)</span>`;
 
       const action = item.required_action || 'APPROVE';
@@ -2820,11 +2820,53 @@ function openModalApprovalAction(requestId, actionName, reqJsonStr) {
         <strong>Progress:</strong> <span>${item.current_level === 0 ? 'Menunggu Cek HR Admin' : `Level ${item.current_level} dari total ${item.total_levels} Level`}</span>
         ${item.kode_ijin ? `<strong>Kode Ijin:</strong> <span class="voucher-code-tag voucher-active">${escapeHtml(item.kode_ijin)}</span>` : ''}
         ${item.voucher_pin ? `<strong>PIN Lembur:</strong> <span class="voucher-code-tag voucher-active">${escapeHtml(item.voucher_pin)}</span>` : ''}
+        ${item.tanggal_mulai_awal ? `<strong>Diubah:</strong> <span style="color:#B45309;">dari ${formatTglIndo(item.tanggal_mulai_awal)} s/d ${formatTglIndo(item.tanggal_selesai_awal)} oleh ${escapeHtml(item.tanggal_diubah_oleh || '-')} -- "${escapeHtml(item.tanggal_diubah_catatan || '')}"</span>` : ''}
+        ${item.peringatan_kuota ? `<strong>Jatah Off:</strong> <span style="color:#dc2626; font-weight:600;">⚠️ ${escapeHtml(item.peringatan_kuota)}</span>` : ''}
       </div>
+      ${(item.tipe === 'CUTI' || item.tipe === 'OFF') && actionName !== 'VIEW' ? `
+      <div style="margin-top:12px; padding-top:10px; border-top:1px dashed #cbd5e1;">
+        <strong style="font-size:12px;">✏️ Ubah tanggal sebelum menyetujui (opsional)</strong>
+        <div style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap;">
+          <input type="date" id="ubahTglAdminMulai" value="${item.tanggal_mulai || ''}" style="flex:1; min-width:130px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+          <input type="date" id="ubahTglAdminSelesai" value="${item.tanggal_selesai || ''}" ${item.jenis_cuti === 'OFF_PERIODE' ? 'disabled title="Off Periode tetap 14 hari"' : ''} style="flex:1; min-width:130px; padding:6px; border-radius:6px; border:1px solid #ccc;">
+          <button type="button" class="btn-secondary" style="padding:6px 12px;" onclick="simpanUbahTanggalAdmin()">Simpan Tanggal</button>
+        </div>
+        <span style="font-size:11px; color:#64748b;">Alasan perubahan diisi di kolom Catatan di bawah (wajib). Tanggal asli karyawan tetap tercatat.</span>
+      </div>` : ''}
     `;
   }
 
   modal.style.display = 'flex';
+}
+
+async function simpanUbahTanggalAdmin() {
+  if (!activeApprovalItem) return;
+  const catatan = (document.getElementById('modalApprovalNotes')?.value || '').trim();
+  if (!catatan) { showToast('Isi alasan perubahan tanggal di kolom Catatan dulu.', 'error'); return; }
+
+  let currentQr = '';
+  if (currentUser && currentUser.id) {
+    const { data: userData } = await supabaseClient.from('karyawanTbl').select('QrCodeId').eq('Id', currentUser.id).maybeSingle();
+    if (userData && userData.QrCodeId) currentQr = userData.QrCodeId;
+  }
+  if (!currentQr) { showToast('Identitas QR Code akun Anda tidak ditemukan.', 'error'); return; }
+
+  try {
+    const { data, error } = await supabaseClient.rpc('ubah_tanggal_pengajuan', {
+      p_request_id: activeApprovalItem.id,
+      p_user_qrcode: currentQr,
+      p_tgl_mulai: document.getElementById('ubahTglAdminMulai')?.value || null,
+      p_tgl_selesai: document.getElementById('ubahTglAdminSelesai')?.value || null,
+      p_catatan: catatan
+    });
+    if (error) throw error;
+    if (!data || data.status !== 'SUCCESS') throw new Error(data?.message || 'Gagal mengubah tanggal.');
+    showToast(data.message, 'success');
+    closeModalApprovalAction();
+    loadOtorisasiPage(currentOtorisasiTab);
+  } catch (err) {
+    showToast('Gagal mengubah tanggal: ' + err.message, 'error');
+  }
 }
 
 function closeModalApprovalAction() {
@@ -5058,6 +5100,9 @@ function renderKbPolaTable() {
       </select></td>
       <td><input type="number" step="0.01" class="kb-pola-mult-off" value="${p.MultiplierHariOff ?? ''}" placeholder="Contoh: 2" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
       <td><input type="number" step="1" class="kb-pola-pembagi-hari" value="${p.PembagiHariKerja ?? ''}" placeholder="21 / 25" style="width:80px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td style="text-align:center;"><input type="checkbox" class="kb-pola-off-rotasi" ${p.BolehOffRotasi ? 'checked' : ''} style="width:18px;height:18px;"></td>
+      <td><input type="number" step="1" min="0" max="31" class="kb-pola-kuota-off" value="${p.KuotaOffRotasiBulan ?? ''}" placeholder="6 / 10 / 14" style="width:80px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td style="text-align:center;"><input type="checkbox" class="kb-pola-off-periode" ${p.BolehOffPeriode ? 'checked' : ''} style="width:18px;height:18px;"></td>
     </tr>`).join('');
 }
 
@@ -5086,7 +5131,10 @@ async function simpanSemuaKbPola() {
         p_libur_nasional_berlaku: liburNasional,
         p_multiplier_lembur_lanjut: multLanjutV === '' ? null : Number(multLanjutV),
         p_mode_lembur_off: modeOff,
-        p_pembagi_hari: pembagiHariV === '' ? null : Number(pembagiHariV)
+        p_pembagi_hari: pembagiHariV === '' ? null : Number(pembagiHariV),
+        p_boleh_off_rotasi: tr.querySelector('.kb-pola-off-rotasi').checked,
+        p_boleh_off_periode: tr.querySelector('.kb-pola-off-periode').checked,
+        p_kuota_off_rotasi: tr.querySelector('.kb-pola-kuota-off').value.trim() === '' ? null : parseInt(tr.querySelector('.kb-pola-kuota-off').value, 10)
       });
       if (error || (data && data.status === 'ERROR')) failed++; else success++;
     } catch (e) { failed++; }

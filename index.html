@@ -943,7 +943,7 @@
           <div class="table-responsive">
             <table>
               <thead>
-                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Sabtu-Minggu OFF?</th><th>Libur Nasional Berlaku?</th><th>Pembagi Jam Kerja</th><th>Hari Kerja: Jam ke-1</th><th>Hari Kerja: Jam ke-2 dst</th><th>Lembur Hari OFF</th><th>Multiplier Hari OFF</th><th>Pembagi Hari (upah harian)</th></tr>
+                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Sabtu-Minggu OFF?</th><th>Libur Nasional Berlaku?</th><th>Pembagi Jam Kerja</th><th>Hari Kerja: Jam ke-1</th><th>Hari Kerja: Jam ke-2 dst</th><th>Lembur Hari OFF</th><th>Multiplier Hari OFF</th><th>Pembagi Hari (upah harian)</th><th>Boleh Off Rotasi?</th><th>Jatah Off Rotasi (hari/bulan)</th><th>Boleh Off Periode (2 mgg)?</th></tr>
               </thead>
               <tbody id="kbPolaTableBody"></tbody>
             </table>
@@ -951,7 +951,9 @@
           <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Formula: <strong>Tarif Lembur/Jam = (Gaji + Tunjangan Tetap ÷ Pembagi Jam Kerja) × Multiplier.</strong> Otomatis nyesuaiin ke gaji masing-masing karyawan, bukan angka Rupiah flat sama rata.<br>
             Hari kerja dihitung per hari: jam lembur ke-1 × Multiplier Jam ke-1, jam ke-2 dst × Multiplier Jam ke-2 dst (PP 35/2021: 1,5 dan 2).
             Hari OFF <em>Per Jam</em> = jam × tarif/jam × Multiplier OFF; <em>Per Hari</em> = tiap hari dipanggil masuk × (Gaji + Tunjangan Tetap ÷ Pembagi Hari) × Multiplier OFF.
-            Kategori <strong>Pekerja Lapangan Lumpsum</strong>: lembur hari kerja tidak dibayar (all-in), cuma lembur hari OFF.</p>
+            Kategori <strong>Pekerja Lapangan Lumpsum</strong>: lembur hari kerja tidak dibayar (all-in), cuma lembur hari OFF.<br>
+            <strong>Boleh Off Rotasi / Off Periode</strong>: karyawan dengan kontrak aktif di pola ini bisa mengajukan Off lewat Digital Badge. Tanpa kontrak / tanpa Pola Kerja = tidak bisa.
+            <strong>Jatah Off Rotasi</strong> dihitung per bulan kalender; kalau terlampaui pengajuan tetap masuk dengan peringatan ke approver.</p>
           <div style="padding:12px 4px 4px;">
             <button type="button" class="btn-primary" onclick="simpanSemuaKbPola()">💾 Simpan Semua Perubahan</button>
           </div>
