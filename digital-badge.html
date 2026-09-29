@@ -239,6 +239,22 @@
         <option value="">-- Pilih Lokasi --</option>
       </select>
     </div>
+    <div id="requestKategoriIjinContainer" style="display:none; margin-bottom:10px;">
+      <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Jenis Ijin</label>
+      <select id="requestKategoriIjin" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+        <option value="PRIBADI">Keperluan pribadi (potong 1 hari cuti)</option>
+        <option value="SAKIT">Sakit, dengan surat dokter</option>
+        <option value="NIKAH">Menikah</option>
+        <option value="NIKAHKAN_ANAK">Menikahkan anak</option>
+        <option value="KHITAN_BAPTIS">Mengkhitankan / membaptiskan anak</option>
+        <option value="ISTRI_MELAHIRKAN">Istri melahirkan / keguguran</option>
+        <option value="DUKA_INTI">Suami/istri, orang tua/mertua, anak/menantu meninggal</option>
+        <option value="DUKA_SERUMAH">Anggota keluarga serumah meninggal</option>
+        <option value="KEWAJIBAN_NEGARA">Menjalankan kewajiban negara</option>
+        <option value="IBADAH">Menjalankan ibadah agama</option>
+      </select>
+      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Selain "Keperluan pribadi", ijin ini hak karyawan sesuai UU dan tidak memotong cuti.</div>
+    </div>
     <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Alasan / Keterangan</label>
     <textarea id="requestAlasan" rows="4" placeholder="Tulis alasan..." style="width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box;"></textarea>
     <button id="btnSubmitRequest" style="width:100%; margin-top:14px; padding:13px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">Kirim Pengajuan</button>
@@ -743,6 +759,8 @@ async function submitPin() {
     currentRequestType = type;
     document.getElementById('requestTitle').innerText = type === "IJIN" ? "Ajukan Ijin Keluar" : "Ajukan Lembur (SPKL)";
     document.getElementById('requestAreaContainer').style.display = type === "LEMBUR" ? "block" : "none";
+    document.getElementById('requestKategoriIjinContainer').style.display = type === "IJIN" ? "block" : "none";
+    document.getElementById('requestKategoriIjin').value = "PRIBADI";
     document.getElementById('requestAlasan').value = "";
     document.getElementById('requestMsg').style.display = "none";
     if (type === "LEMBUR") {
@@ -792,7 +810,8 @@ async function submitPin() {
         p_tanggal: today,
         p_alasan: alasan,
         p_durasi_jam: durasi,
-        p_lokasi: area
+        p_lokasi: area,
+        p_kategori_ijin: currentRequestType === "IJIN" ? document.getElementById('requestKategoriIjin').value : null
       });
       if (error) throw error;
 
@@ -1387,6 +1406,11 @@ async function submitPin() {
           row.style.cssText = "border:1.5px solid var(--orange); border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#fff;";
           
           let typeTitle = '🚪 Ijin Pulang';
+          if (item.tipe === 'IJIN' && item.kategori_ijin) {
+            typeTitle += item.kategori_ijin === 'PRIBADI'
+              ? ' <span style="font-size:11px; color:#B45309;">(pribadi, potong 1 hari cuti)</span>'
+              : ' <span style="font-size:11px; color:#0F766E;">(hak UU: ' + (document.querySelector('#requestKategoriIjin option[value="' + item.kategori_ijin + '"]')?.textContent || item.kategori_ijin) + ')</span>';
+          }
           if (item.tipe === 'LEMBUR') typeTitle = '⏱️ SPKL Lembur';
           else if (item.tipe === 'CUTI') typeTitle = '🏖️ Pengajuan Cuti (' + (item.jumlah_hari || 1) + ' Hari)';
           const act = item.required_action || 'APPROVE';

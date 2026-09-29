@@ -643,6 +643,7 @@
               <option value="">-- Pilih Kategori --</option>
               <option value="Staff/PMT">Staff / PMT (Lumpsum)</option>
               <option value="Pekerja Lapangan">Pekerja Lapangan (Project)</option>
+              <option value="Pekerja Lapangan Lumpsum">Pekerja Lapangan (Project) - Lumpsum</option>
             </select>
           </div>
           <div class="input-group" id="kontrakPolaWrap">
@@ -665,11 +666,34 @@
           </div>
           <div class="input-group">
             <label for="kontrakTjTransport">Tunjangan Transport (Rp)</label>
-            <input type="text" inputmode="numeric" id="kontrakTjTransport" oninput="formatRupiahInput(this)" placeholder="0">
+            <div style="display:flex; gap:6px;">
+              <input type="text" inputmode="numeric" id="kontrakTjTransport" oninput="formatRupiahInput(this)" placeholder="0" style="flex:1; min-width:0;">
+              <select id="kontrakModeTjTransport" aria-label="Periode Tunjangan Transport" style="width:auto;">
+                <option value="BULANAN">/ bulan</option>
+                <option value="HARIAN">/ hari hadir</option>
+              </select>
+            </div>
           </div>
           <div class="input-group">
             <label for="kontrakTjMakan">Tunjangan Makan (Rp)</label>
-            <input type="text" inputmode="numeric" id="kontrakTjMakan" oninput="formatRupiahInput(this)" placeholder="0">
+            <div style="display:flex; gap:6px;">
+              <input type="text" inputmode="numeric" id="kontrakTjMakan" oninput="formatRupiahInput(this)" placeholder="0" style="flex:1; min-width:0;">
+              <select id="kontrakModeTjMakan" aria-label="Periode Tunjangan Makan" style="width:auto;">
+                <option value="BULANAN">/ bulan</option>
+                <option value="HARIAN">/ hari hadir</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="kontrakTjKehadiran">Tunjangan Kehadiran (Rp)</label>
+            <div style="display:flex; gap:6px;">
+              <input type="text" inputmode="numeric" id="kontrakTjKehadiran" oninput="formatRupiahInput(this)" placeholder="0" style="flex:1; min-width:0;">
+              <select id="kontrakModeTjKehadiran" aria-label="Periode Tunjangan Kehadiran" style="width:auto;">
+                <option value="BULANAN">/ bulan</option>
+                <option value="HARIAN">/ hari hadir</option>
+              </select>
+            </div>
+            <span style="font-size:11px; color:#8a94a3;">"/ hari hadir" = nominal x jumlah hari scan masuk sebulan (hari cuti tidak dihitung).</span>
           </div>
           <div class="input-group">
             <label for="kontrakTjLain">Tunjangan Lain (Rp)</label>
@@ -683,6 +707,13 @@
             <label for="kontrakBerakhir">Tanggal Berakhir</label>
             <input type="date" id="kontrakBerakhir">
             <span id="kontrakBerakhirHint" style="font-size:11px; color:#8a94a3; display:none;">PKWTT bersifat permanen, tidak ada tanggal berakhir.</span>
+          </div>
+          <div class="input-group" id="kontrakKompensasiWrap">
+            <label for="kontrakThpKompensasi" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <input type="checkbox" id="kontrakThpKompensasi" style="width:18px; height:18px;">
+              THP per bulan include Uang Kompensasi PKWT
+            </label>
+            <span style="font-size:11px; color:#8a94a3;">Tiap bulan dibayar 1/12 x upah (gaji pokok + tunjangan tetap) bersama gaji, jadi tidak ditagih lagi di akhir kontrak.</span>
           </div>
           <div class="input-group">
             <label for="kontrakFile">Upload File Kontrak (PDF)</label>
@@ -870,7 +901,18 @@
               <label>Tunjangan Lain (Rp)</label>
               <input type="text" inputmode="numeric" id="simTjLain" oninput="formatRupiahInput(this)" placeholder="0">
             </div>
+            <div class="input-group">
+              <label>Tunjangan Kehadiran (Rp)</label>
+              <input type="text" inputmode="numeric" id="simTjKehadiran" oninput="formatRupiahInput(this)" placeholder="0">
+            </div>
+            <div class="input-group">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" id="simKompensasi" style="width:18px; height:18px;">
+                THP include Uang Kompensasi PKWT (1/12)
+              </label>
+            </div>
           </div>
+          <p style="font-size:11px; color:#8a94a3; margin-top:6px;">Semua nominal per bulan. Tunjangan harian dari kontrak diisi otomatis sebagai estimasi sebulan penuh (nominal x Pembagi Hari pola kerja).</p>
           <button type="button" class="btn-primary" style="margin-top:14px;" onclick="hitungSimulatorPayroll()">🧮 Hitung Payroll</button>
         </div>
 
@@ -901,12 +943,15 @@
           <div class="table-responsive">
             <table>
               <thead>
-                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Sabtu-Minggu OFF?</th><th>Libur Nasional Berlaku?</th><th>Pembagi Jam Kerja</th><th>Multiplier Hari Kerja</th><th>Multiplier Hari OFF</th></tr>
+                <tr><th>Kategori</th><th>Pola Kerja</th><th>Jam Normal/Hari</th><th>Lembur Otomatis/Hari</th><th>Sabtu-Minggu OFF?</th><th>Libur Nasional Berlaku?</th><th>Pembagi Jam Kerja</th><th>Hari Kerja: Jam ke-1</th><th>Hari Kerja: Jam ke-2 dst</th><th>Lembur Hari OFF</th><th>Multiplier Hari OFF</th><th>Pembagi Hari (upah harian)</th></tr>
               </thead>
               <tbody id="kbPolaTableBody"></tbody>
             </table>
           </div>
-          <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Formula: <strong>Tarif Lembur/Jam = (Gaji + Tunjangan Tetap ÷ Pembagi Jam Kerja) × Multiplier.</strong> Otomatis nyesuaiin ke gaji masing-masing karyawan, bukan angka Rupiah flat sama rata.</p>
+          <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Formula: <strong>Tarif Lembur/Jam = (Gaji + Tunjangan Tetap ÷ Pembagi Jam Kerja) × Multiplier.</strong> Otomatis nyesuaiin ke gaji masing-masing karyawan, bukan angka Rupiah flat sama rata.<br>
+            Hari kerja dihitung per hari: jam lembur ke-1 × Multiplier Jam ke-1, jam ke-2 dst × Multiplier Jam ke-2 dst (PP 35/2021: 1,5 dan 2).
+            Hari OFF <em>Per Jam</em> = jam × tarif/jam × Multiplier OFF; <em>Per Hari</em> = tiap hari dipanggil masuk × (Gaji + Tunjangan Tetap ÷ Pembagi Hari) × Multiplier OFF.
+            Kategori <strong>Pekerja Lapangan Lumpsum</strong>: lembur hari kerja tidak dibayar (all-in), cuma lembur hari OFF.</p>
           <div style="padding:12px 4px 4px;">
             <button type="button" class="btn-primary" onclick="simpanSemuaKbPola()">💾 Simpan Semua Perubahan</button>
           </div>
@@ -1367,6 +1412,22 @@
         <div class="input-group" style="margin-top: 12px;">
           <label for="pengajuanTanggal">Tanggal Pelaksanaan</label>
           <input type="date" id="pengajuanTanggal" required onchange="autoDeteksiJenisHari()" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+        </div>
+        <div class="input-group" id="groupPengajuanKategoriIjin" style="margin-top: 12px;">
+          <label for="pengajuanKategoriIjin">Jenis Ijin</label>
+          <select id="pengajuanKategoriIjin" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+            <option value="PRIBADI">Keperluan pribadi (potong 1 hari cuti)</option>
+            <option value="SAKIT">Sakit, dengan surat dokter</option>
+            <option value="NIKAH">Menikah</option>
+            <option value="NIKAHKAN_ANAK">Menikahkan anak</option>
+            <option value="KHITAN_BAPTIS">Mengkhitankan / membaptiskan anak</option>
+            <option value="ISTRI_MELAHIRKAN">Istri melahirkan / keguguran</option>
+            <option value="DUKA_INTI">Suami/istri, orang tua/mertua, anak/menantu meninggal</option>
+            <option value="DUKA_SERUMAH">Anggota keluarga serumah meninggal</option>
+            <option value="KEWAJIBAN_NEGARA">Menjalankan kewajiban negara</option>
+            <option value="IBADAH">Menjalankan ibadah agama</option>
+          </select>
+          <span style="font-size: 11px; color: #8a94a3;">Selain "Keperluan pribadi", ijin ini hak karyawan sesuai UU dan tidak memotong cuti.</span>
         </div>
         <div id="groupPengajuanLemburExtra" style="display: none; margin-top: 12px;">
           <div class="input-group">

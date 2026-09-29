@@ -1950,10 +1950,14 @@ function handleKontrakJenisChange() {
     }
   }
 
-  // Kategori & Pola Kerja cuma relevan buat PKWT
+  // Kategori, Pola Kerja & Uang Kompensasi cuma relevan buat PKWT
   if (kategoriWrap) kategoriWrap.style.display = jenis === 'PKWT' ? 'block' : 'none';
   if (polaWrap) polaWrap.style.display = jenis === 'PKWT' ? 'block' : 'none';
+  const kompensasiWrap = document.getElementById('kontrakKompensasiWrap');
+  if (kompensasiWrap) kompensasiWrap.style.display = jenis === 'PKWT' ? 'block' : 'none';
   if (jenis !== 'PKWT') {
+    const kompensasiCb = document.getElementById('kontrakThpKompensasi');
+    if (kompensasiCb) kompensasiCb.checked = false;
     const kategoriSel = document.getElementById('kontrakKategori');
     if (kategoriSel) kategoriSel.value = '';
     const polaSel = document.getElementById('kontrakPolaKerja');
@@ -2112,6 +2116,11 @@ function editKontrak(id) {
   document.getElementById('kontrakTjTransport').value = row.tunjangantransport != null ? Number(row.tunjangantransport).toLocaleString('id-ID') : '';
   document.getElementById('kontrakTjMakan').value = row.tunjanganmakan != null ? Number(row.tunjanganmakan).toLocaleString('id-ID') : '';
   document.getElementById('kontrakTjLain').value = row.tunjanganlain != null ? Number(row.tunjanganlain).toLocaleString('id-ID') : '';
+  document.getElementById('kontrakTjKehadiran').value = row.tunjangankehadiran != null ? Number(row.tunjangankehadiran).toLocaleString('id-ID') : '';
+  document.getElementById('kontrakModeTjTransport').value = row.modetjtransport || 'BULANAN';
+  document.getElementById('kontrakModeTjMakan').value = row.modetjmakan || 'BULANAN';
+  document.getElementById('kontrakModeTjKehadiran').value = row.modetjkehadiran || 'BULANAN';
+  document.getElementById('kontrakThpKompensasi').checked = !!row.thpincludekompensasi;
   document.getElementById('kontrakMulai').value = row.tanggalmulai || '';
   document.getElementById('kontrakBerakhir').value = row.tanggalberakhir || '';
   document.getElementById('kontrakFile').value = '';
@@ -2146,6 +2155,11 @@ async function submitKontrak() {
   const tjTransport = parseRupiahInput(document.getElementById('kontrakTjTransport'));
   const tjMakan = parseRupiahInput(document.getElementById('kontrakTjMakan'));
   const tjLain = parseRupiahInput(document.getElementById('kontrakTjLain'));
+  const tjKehadiran = parseRupiahInput(document.getElementById('kontrakTjKehadiran'));
+  const modeTjTransport = document.getElementById('kontrakModeTjTransport')?.value || 'BULANAN';
+  const modeTjMakan = document.getElementById('kontrakModeTjMakan')?.value || 'BULANAN';
+  const modeTjKehadiran = document.getElementById('kontrakModeTjKehadiran')?.value || 'BULANAN';
+  const thpIncludeKompensasi = jenis === 'PKWT' && !!document.getElementById('kontrakThpKompensasi')?.checked;
   const polaKerjaId = document.getElementById('kontrakPolaKerja')?.value || null;
   const mulai = document.getElementById('kontrakMulai')?.value || null;
   const berakhir = document.getElementById('kontrakBerakhir')?.value || null;
@@ -2204,6 +2218,9 @@ async function submitKontrak() {
         p_tunjangan_jabatan: tjJabatan, p_tunjangan_transport: tjTransport,
         p_tunjangan_makan: tjMakan, p_tunjangan_lain: tjLain,
         p_pola_kerja_id: polaKerjaId ? parseInt(polaKerjaId, 10) : null,
+        p_tunjangan_kehadiran: tjKehadiran,
+        p_mode_tj_transport: modeTjTransport, p_mode_tj_makan: modeTjMakan, p_mode_tj_kehadiran: modeTjKehadiran,
+        p_thp_include_kompensasi: thpIncludeKompensasi,
       });
       if (error) throw error;
       showToast('Kontrak berhasil diperbarui.', 'success');
@@ -2215,6 +2232,9 @@ async function submitKontrak() {
         p_tunjangan_jabatan: tjJabatan, p_tunjangan_transport: tjTransport,
         p_tunjangan_makan: tjMakan, p_tunjangan_lain: tjLain,
         p_pola_kerja_id: polaKerjaId ? parseInt(polaKerjaId, 10) : null,
+        p_tunjangan_kehadiran: tjKehadiran,
+        p_mode_tj_transport: modeTjTransport, p_mode_tj_makan: modeTjMakan, p_mode_tj_kehadiran: modeTjKehadiran,
+        p_thp_include_kompensasi: thpIncludeKompensasi,
       });
       if (error) throw error;
       showToast('Kontrak baru berhasil ditambahkan.' + (karyawanBaruDigitalpin ? ' Data karyawan baru juga otomatis dibuat.' : ''), 'success');
@@ -2272,6 +2292,11 @@ function resetKontrakForm() {
   document.getElementById('kontrakTjTransport').value = '';
   document.getElementById('kontrakTjMakan').value = '';
   document.getElementById('kontrakTjLain').value = '';
+  document.getElementById('kontrakTjKehadiran').value = '';
+  document.getElementById('kontrakModeTjTransport').value = 'BULANAN';
+  document.getElementById('kontrakModeTjMakan').value = 'BULANAN';
+  document.getElementById('kontrakModeTjKehadiran').value = 'BULANAN';
+  document.getElementById('kontrakThpKompensasi').checked = false;
   document.getElementById('kontrakMulai').value = '';
   document.getElementById('kontrakBerakhir').value = '';
   document.getElementById('kontrakFile').value = '';
@@ -2280,6 +2305,27 @@ function resetKontrakForm() {
 // =====================================================================================
 // OTORISASI IJIN & LEMBUR (WORKFLOW APPROVAL BERJENJANG 1-3 LEVEL)
 // =====================================================================================
+// Jenis ijin: PRIBADI potong 1 hari cuti, sisanya hak karyawan sesuai UU (gak potong cuti).
+const KATEGORI_IJIN_LABEL = {
+  PRIBADI: 'Keperluan pribadi (potong 1 hari cuti)',
+  SAKIT: 'Sakit, surat dokter',
+  NIKAH: 'Menikah',
+  NIKAHKAN_ANAK: 'Menikahkan anak',
+  KHITAN_BAPTIS: 'Khitan / baptis anak',
+  ISTRI_MELAHIRKAN: 'Istri melahirkan / keguguran',
+  DUKA_INTI: 'Keluarga inti meninggal',
+  DUKA_SERUMAH: 'Keluarga serumah meninggal',
+  KEWAJIBAN_NEGARA: 'Kewajiban negara',
+  IBADAH: 'Ibadah agama',
+};
+
+function kategoriIjinBadge(item) {
+  if (item.tipe !== 'IJIN' || !item.kategori_ijin) return '';
+  const label = KATEGORI_IJIN_LABEL[item.kategori_ijin] || item.kategori_ijin;
+  const color = item.kategori_ijin === 'PRIBADI' ? '#b45309' : '#0f766e';
+  return `<small style="display:block; color:${color}; font-weight:600;">${escapeHtml(label)}${item.kategori_ijin === 'PRIBADI' ? '' : ' - tidak potong cuti'}</small>`;
+}
+
 let currentOtorisasiTab = 'queue';
 let otorisasiRawData = [];
 let activeApprovalItem = null;
@@ -2439,7 +2485,7 @@ function renderOtorisasiTable() {
             ${escapeHtml(item.lokasi || '-')}
             ${item.durasi_jam ? `<br><small style="color:#64748B;">${item.durasi_jam} Jam</small>` : ''}
           </td>
-          <td style="max-width:240px; white-space:normal;">${escapeHtml(item.alasan || '-')}</td>
+          <td style="max-width:240px; white-space:normal;">${kategoriIjinBadge(item)}${escapeHtml(item.alasan || '-')}</td>
           <td>
             <div class="step-tracker-mini">
               <span>${item.current_level === 0 ? 'Cek HR Admin' : `Level ${item.current_level} dari ${item.total_levels}`}</span>
@@ -2509,7 +2555,7 @@ function renderOtorisasiTable() {
             <small style="color:#64748B;">${escapeHtml(item.kualifikasi || item.qrcodeid)}</small>
           </td>
           <td>${formatTglIndo(item.tanggal)}</td>
-          <td style="max-width:200px; white-space:normal;">${escapeHtml(item.alasan || '-')}</td>
+          <td style="max-width:200px; white-space:normal;">${kategoriIjinBadge(item)}${escapeHtml(item.alasan || '-')}</td>
           <td>
             ${statusBadge}<br>
             <small style="color:#64748B;">Level: ${item.current_level === 0 ? 'HR' : item.current_level}/${item.total_levels}</small>
@@ -2654,6 +2700,8 @@ function togglePengajuanTipeFields(tipe) {
   if (extraGroup) {
     extraGroup.style.display = tipe === 'LEMBUR' ? 'block' : 'none';
   }
+  const kategoriIjinGroup = document.getElementById('groupPengajuanKategoriIjin');
+  if (kategoriIjinGroup) kategoriIjinGroup.style.display = tipe === 'IJIN' ? 'block' : 'none';
 }
 
 async function submitFormPengajuanBaru() {
@@ -2681,7 +2729,8 @@ async function submitFormPengajuanBaru() {
       p_alasan: alasan,
       p_durasi_jam: durasi,
       p_lokasi: lokasi,
-      p_jenis_hari: jenisHari
+      p_jenis_hari: jenisHari,
+      p_kategori_ijin: tipe === 'IJIN' ? (document.getElementById('pengajuanKategoriIjin')?.value || 'PRIBADI') : null
     });
 
     if (error) throw error;
@@ -2753,6 +2802,7 @@ function openModalApprovalAction(requestId, actionName, reqJsonStr) {
         <strong>Tanggal:</strong> <span>${formatTglIndo(item.tanggal)}</span>
         ${item.lokasi ? `<strong>Lokasi:</strong> <span>${escapeHtml(item.lokasi)}</span>` : ''}
         ${item.durasi_jam ? `<strong>Durasi:</strong> <span>${item.durasi_jam} Jam</span>` : ''}
+        ${item.tipe === 'IJIN' && item.kategori_ijin ? `<strong>Jenis Ijin:</strong> <span>${kategoriIjinBadge(item)}</span>` : ''}
         <strong>Alasan:</strong> <span style="white-space:pre-wrap;">${escapeHtml(item.alasan || '-')}</span>
         <strong>Progress:</strong> <span>${item.current_level === 0 ? 'Menunggu Cek HR Admin' : `Level ${item.current_level} dari total ${item.total_levels} Level`}</span>
         ${item.kode_ijin ? `<strong>Kode Ijin:</strong> <span class="voucher-code-tag voucher-active">${escapeHtml(item.kode_ijin)}</span>` : ''}
@@ -3158,10 +3208,12 @@ function canUserProcessHrd() {
   return isAccessSuperAdmin() || pic.includes('PER') || pic.includes('HR') || auth.includes('HR');
 }
 
+// Sengaja tanpa isAccessSuperAdmin(): ALL di PIC buka semua menu, tapi approve final
+// Direksi cuma lewat Author APER/BOD/DIR (dicek ulang di server).
 function canUserApproveAper() {
   if (!currentUser) return false;
   const auth = accessTokens(currentUser.author);
-  return isAccessSuperAdmin() || auth.includes('APER') || auth.includes('BOD') || auth.includes('DIR');
+  return auth.includes('APER') || auth.includes('BOD') || auth.includes('DIR');
 }
 
 function hasEmployeeRequestAuthor() {
@@ -4396,12 +4448,11 @@ async function executeEmpReqStep(action) {
 
   const reqId = empReqState.selectedRequest.id;
   const notes = (document.getElementById('empReqActionNotes')?.value || '').trim();
-  const actor = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'System';
 
   try {
-    const { data, error } = await supabaseClient.rpc('process_employee_request_step', {
+    // Nama aktor & otorisasi tahap ditentukan server dari session login, bukan dari browser.
+    const { data, error } = await fusionAdminRpc('process_employee_request_step', {
       p_id: reqId,
-      p_actor_name: actor,
       p_step_action: action,
       p_notes: notes
     });
@@ -4554,11 +4605,23 @@ function handleSimKaryawanChange() {
   const kontrak = kontrakList[0];
 
   const setVal = (elId, num) => { const el = document.getElementById(elId); if (el) el.value = num != null ? Number(num).toLocaleString('id-ID') : ''; };
+  // Tunjangan harian -> estimasi sebulan penuh (nominal x Pembagi Hari pola kerja); ditandai
+  // biar gak ikut dasar BPJS/kompensasi, sama seperti proses payroll.
+  const pola = polaKerjaState.find(p => String(p.Id) === String(kontrak.polakerjaid));
+  const hariEstimasi = Number(pola?.PembagiHariKerja) || 25;
+  simTunjanganHarian = new Set();
+  const setTj = (elId, key, nominal, mode) => {
+    if (mode === 'HARIAN') { simTunjanganHarian.add(key); setVal(elId, nominal != null ? Number(nominal) * hariEstimasi : null); }
+    else setVal(elId, nominal);
+  };
   setVal('simGajiPokok', kontrak.gajipokok);
   setVal('simTjJabatan', kontrak.tunjanganjabatan);
-  setVal('simTjTransport', kontrak.tunjangantransport);
-  setVal('simTjMakan', kontrak.tunjanganmakan);
+  setTj('simTjTransport', 'transport', kontrak.tunjangantransport, kontrak.modetjtransport);
+  setTj('simTjMakan', 'makan', kontrak.tunjanganmakan, kontrak.modetjmakan);
+  setTj('simTjKehadiran', 'kehadiran', kontrak.tunjangankehadiran, kontrak.modetjkehadiran);
   setVal('simTjLain', kontrak.tunjanganlain);
+  const simKompensasiEl = document.getElementById('simKompensasi');
+  if (simKompensasiEl) simKompensasiEl.checked = !!kontrak.thpincludekompensasi;
 
   // Masa kerja dihitung otomatis dari TglMasuk karyawan (bukan tanggal mulai kontrak ini doang --
   // masa kerja itu akumulasi total sejak awal kerja, bukan sejak kontrak terbaru diteken)
@@ -4570,7 +4633,7 @@ function handleSimKaryawanChange() {
     masaKerjaEl.value = Math.max(tahun, 0);
   }
 
-  showToast(`${row.namapersonnel}: Gaji & Tunjangan diambil dari Kontrak ${kontrak.nomorkontrak || ''} (${kontrak.jeniskontrak || ''})${row.statuspernikahan ? ', PTKP ' + deriveStatusPTKP(row.statuspernikahan, row.jumlahanak) : ''}${row.tglmasuk ? ', Masa Kerja dihitung dari TglMasuk ' + row.tglmasuk : ''}.`, 'success');
+  showToast(`${row.namapersonnel}: Gaji & Tunjangan diambil dari Kontrak ${kontrak.nomorkontrak || ''} (${kontrak.jeniskontrak || ''})${simTunjanganHarian.size ? `, tunjangan harian diestimasi ${hariEstimasi} hari` : ''}${row.statuspernikahan ? ', PTKP ' + deriveStatusPTKP(row.statuspernikahan, row.jumlahanak) : ''}${row.tglmasuk ? ', Masa Kerja dihitung dari TglMasuk ' + row.tglmasuk : ''}.`, 'success');
 }
 
 function handleSimJabatanChange() {
@@ -4579,6 +4642,7 @@ function handleSimJabatanChange() {
   const row = kbState.gaji.find(r => String(r.Id) === String(id));
   if (!row) return;
   const setVal = (elId, num) => { const el = document.getElementById(elId); if (el) el.value = num != null ? Number(num).toLocaleString('id-ID') : ''; };
+  simTunjanganHarian = new Set();
   setVal('simGajiPokok', row.RangeGajiMin);
   setVal('simTjJabatan', row.TunjanganJabatan);
   setVal('simTjTransport', row.TunjanganTransport);
@@ -4607,24 +4671,36 @@ function fmtRp(n) {
   return 'Rp ' + Math.round(n).toLocaleString('id-ID');
 }
 
+// Tunjangan yang di kontraknya HARIAN (diisi otomatis dari kontrak) -- gak ikut upah tetap.
+let simTunjanganHarian = new Set();
+
 function hitungSimulatorPayroll() {
   const gajiPokok = parseRupiahInput(document.getElementById('simGajiPokok')) || 0;
   const tjJabatan = parseRupiahInput(document.getElementById('simTjJabatan')) || 0;
   const tjTransport = parseRupiahInput(document.getElementById('simTjTransport')) || 0;
   const tjMakan = parseRupiahInput(document.getElementById('simTjMakan')) || 0;
+  const tjKehadiran = parseRupiahInput(document.getElementById('simTjKehadiran')) || 0;
   const tjLain = parseRupiahInput(document.getElementById('simTjLain')) || 0;
   const ptkpStatus = document.getElementById('simPtkp').value;
   const masaKerja = Number(document.getElementById('simMasaKerja').value) || 0;
+  const includeKompensasi = !!document.getElementById('simKompensasi')?.checked;
 
-  const bruto = gajiPokok + tjJabatan + tjTransport + tjMakan + tjLain;
+  const bruto = gajiPokok + tjJabatan + tjTransport + tjMakan + tjKehadiran + tjLain;
 
   if (bruto <= 0) { showToast('Isi Gaji Pokok atau pilih Jabatan dulu.', 'error'); return; }
+
+  // Upah tetap = dasar BPJS & Uang Kompensasi (tunjangan harian tidak ikut)
+  const upahTetap = bruto
+    - (simTunjanganHarian.has('transport') ? tjTransport : 0)
+    - (simTunjanganHarian.has('makan') ? tjMakan : 0)
+    - (simTunjanganHarian.has('kehadiran') ? tjKehadiran : 0);
+  const kompensasi = includeKompensasi ? upahTetap / 12 : 0;
 
   // -- BPJS: generalisasi dari baris yang "Aktif" di bpjsTbl --
   const aktifRows = kbState.bpjs.filter(r => r.IsAktif);
   let totalBpjsKaryawan = 0, totalBpjsPerusahaan = 0;
   const bpjsDetailRows = aktifRows.map(r => {
-    const base = r.BatasUpahMax != null ? Math.min(bruto, Number(r.BatasUpahMax)) : bruto;
+    const base = r.BatasUpahMax != null ? Math.min(upahTetap, Number(r.BatasUpahMax)) : upahTetap;
     const karyawan = base * (Number(r.PersenKaryawan) / 100);
     const perusahaan = base * (Number(r.PersenPerusahaan) / 100);
     totalBpjsKaryawan += karyawan;
@@ -4638,8 +4714,8 @@ function hitungSimulatorPayroll() {
   const pph21 = bruto * (tarifTer / 100);
 
   const totalPotonganKaryawan = totalBpjsKaryawan + pph21;
-  const thp = bruto - totalPotonganKaryawan;
-  const totalBiayaPerusahaan = bruto + totalBpjsPerusahaan;
+  const thp = bruto - totalPotonganKaryawan + kompensasi;
+  const totalBiayaPerusahaan = bruto + totalBpjsPerusahaan + kompensasi;
 
   // -- THR (prorata kalau masa kerja < 1 tahun) --
   const masaKerjaBulan = masaKerja * 12;
@@ -4658,6 +4734,7 @@ function hitungSimulatorPayroll() {
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
       <div class="summary-tile"><div class="num" style="font-size:16px;">${fmtRp(bruto)}</div><div class="lbl">Penghasilan Bruto</div></div>
       <div class="summary-tile"><div class="num" style="font-size:16px; color:#c0392b;">- ${fmtRp(totalPotonganKaryawan)}</div><div class="lbl">Total Potongan Karyawan</div></div>
+      ${kompensasi > 0 ? `<div class="summary-tile"><div class="num" style="font-size:16px;">+ ${fmtRp(kompensasi)}</div><div class="lbl">Uang Kompensasi PKWT (1/12)</div></div>` : ''}
       <div class="summary-tile"><div class="num" style="font-size:18px; color:#178a4c;">${fmtRp(thp)}</div><div class="lbl">Take Home Pay (THP)</div></div>
     </div>
     <p style="font-size:11px; color:#8a94a3; margin-top:8px;">PPh 21 dihitung pakai Tarif Efektif Rata-rata (TER) Kategori ${kategori} (${tarifTer}%) sesuai status PTKP ${ptkpStatus}. Rekonsiliasi tarif progresif tahunan dilakukan di masa pajak Desember.</p>
@@ -4958,8 +5035,16 @@ function renderKbPolaTable() {
       <td style="text-align:center;"><input type="checkbox" class="kb-pola-weekend-off" ${p.SabtuMingguOff ? 'checked' : ''} style="width:18px;height:18px;"></td>
       <td style="text-align:center;"><input type="checkbox" class="kb-pola-libur-nasional" ${p.LiburNasionalBerlaku ? 'checked' : ''} style="width:18px;height:18px;"></td>
       <td><input type="number" step="0.01" class="kb-pola-pembagi" value="${p.PembagiJamKerja ?? ''}" placeholder="Contoh: 173" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="number" step="0.01" class="kb-pola-mult-kerja" value="${p.MultiplierHariKerja ?? ''}" placeholder="Contoh: 1.5" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
-      <td><input type="number" step="0.01" class="kb-pola-mult-off" value="${p.MultiplierHariOff ?? ''}" placeholder="Contoh: 2" style="width:100px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      ${p.LemburHariKerjaDibayar === false
+        ? `<td colspan="2" style="font-size:11px;color:#8a94a3;">Lumpsum -- tidak dibayar<input type="hidden" class="kb-pola-mult-kerja" value="${p.MultiplierHariKerja ?? ''}"><input type="hidden" class="kb-pola-mult-lanjut" value="${p.MultiplierLemburLanjut ?? ''}"></td>`
+        : `<td><input type="number" step="0.01" class="kb-pola-mult-kerja" value="${p.MultiplierHariKerja ?? ''}" placeholder="Contoh: 1.5" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" step="0.01" class="kb-pola-mult-lanjut" value="${p.MultiplierLemburLanjut ?? ''}" placeholder="Contoh: 2" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>`}
+      <td><select class="kb-pola-mode-off" style="padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;">
+        <option value="PER_JAM" ${p.ModeLemburOff !== 'PER_HARI' ? 'selected' : ''}>Per Jam</option>
+        <option value="PER_HARI" ${p.ModeLemburOff === 'PER_HARI' ? 'selected' : ''}>Per Hari</option>
+      </select></td>
+      <td><input type="number" step="0.01" class="kb-pola-mult-off" value="${p.MultiplierHariOff ?? ''}" placeholder="Contoh: 2" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
+      <td><input type="number" step="1" class="kb-pola-pembagi-hari" value="${p.PembagiHariKerja ?? ''}" placeholder="21 / 25" style="width:80px;padding:4px 6px;border-radius:6px;border:1px solid #e6ded9;"></td>
     </tr>`).join('');
 }
 
@@ -4972,7 +5057,10 @@ async function simpanSemuaKbPola() {
     const id = tr.dataset.kbId;
     const pembagiV = tr.querySelector('.kb-pola-pembagi').value.trim();
     const multKerjaV = tr.querySelector('.kb-pola-mult-kerja').value.trim();
+    const multLanjutV = tr.querySelector('.kb-pola-mult-lanjut').value.trim();
     const multOffV = tr.querySelector('.kb-pola-mult-off').value.trim();
+    const modeOff = tr.querySelector('.kb-pola-mode-off').value;
+    const pembagiHariV = tr.querySelector('.kb-pola-pembagi-hari').value.trim();
     const weekendOff = tr.querySelector('.kb-pola-weekend-off').checked;
     const liburNasional = tr.querySelector('.kb-pola-libur-nasional').checked;
     try {
@@ -4982,7 +5070,10 @@ async function simpanSemuaKbPola() {
         p_multiplier_hari_kerja: multKerjaV === '' ? null : Number(multKerjaV),
         p_multiplier_hari_off: multOffV === '' ? null : Number(multOffV),
         p_sabtu_minggu_off: weekendOff,
-        p_libur_nasional_berlaku: liburNasional
+        p_libur_nasional_berlaku: liburNasional,
+        p_multiplier_lembur_lanjut: multLanjutV === '' ? null : Number(multLanjutV),
+        p_mode_lembur_off: modeOff,
+        p_pembagi_hari: pembagiHariV === '' ? null : Number(pembagiHariV)
       });
       if (error || (data && data.status === 'ERROR')) failed++; else success++;
     } catch (e) { failed++; }
@@ -5198,6 +5289,7 @@ const FINANCE_DETAIL_COLUMNS = [
   { key: 'TunjanganJabatan', label: 'Tunj. Jabatan', numeric: true },
   { key: 'TunjanganTransport', label: 'Tunj. Transport', numeric: true },
   { key: 'TunjanganMakan', label: 'Tunj. Makan', numeric: true },
+  { key: 'TunjanganKehadiran', label: 'Tunj. Kehadiran', numeric: true },
   { key: 'TunjanganLain', label: 'Tunj. Lain', numeric: true },
   { key: 'NilaiLembur', label: 'Lembur', numeric: true },
   { key: 'PenghasilanBruto', label: 'Bruto', numeric: true },
@@ -5208,6 +5300,7 @@ const FINANCE_DETAIL_COLUMNS = [
   { key: 'TotalBpjsPerusahaan', label: 'Total BPJS Perusahaan', numeric: true },
   { key: 'Pph21', label: 'PPh 21', numeric: true },
   { key: 'TotalPotongan', label: 'Total Potongan', numeric: true },
+  { key: 'UangKompensasiPkwt', label: 'Kompensasi PKWT (1/12)', numeric: true },
   { key: 'TakeHomePay', label: 'Take Home Pay', numeric: true },
 ];
 
@@ -5685,6 +5778,7 @@ async function generateSlipPdf(payrollId) {
       ['Tunjangan Jabatan', rp(row.TunjanganJabatan)],
       ['Tunjangan Transport', rp(row.TunjanganTransport)],
       ['Tunjangan Makan', rp(row.TunjanganMakan)],
+      ['Tunjangan Kehadiran', rp(row.TunjanganKehadiran)],
       ['Tunjangan Lain', rp(row.TunjanganLain)],
       ['Nilai Lembur', rp(row.NilaiLembur)],
     ];
@@ -5718,6 +5812,11 @@ async function generateSlipPdf(payrollId) {
     y += 6.5;
     doc.text('Total Potongan', marginX, y);
     doc.text(rp(row.TotalPotongan), pageW - marginX, y, { align: 'right' });
+    if (Number(row.UangKompensasiPkwt) > 0) {
+      y += 6.5;
+      doc.text('Uang Kompensasi PKWT (1/12 upah, dibayar bulanan)', marginX, y);
+      doc.text(rp(row.UangKompensasiPkwt), pageW - marginX, y, { align: 'right' });
+    }
     y += 10;
 
     doc.setFillColor(...SLIP_GREEN_BG); doc.setDrawColor(...SLIP_GREEN); doc.setLineWidth(0.4);
@@ -5746,11 +5845,6 @@ async function generateSlipPdf(payrollId) {
       const totalJam = sumTimesheetJam(timesheetData);
       const polaRef = (timesheetData[0] && timesheetData[0].polaKerjaRef) || {};
       const pembagi = Number(polaRef.pembagiJamKerja) || 173;
-      const multKerja = Number(polaRef.multiplierHariKerja) || 1.5;
-      const multOff = Number(polaRef.multiplierHariOff) || 2;
-      const tarifPerJam = Number(row.GajiPokok || 0) / pembagi;
-      const rpLemburReguler = tarifPerJam * (totalJam.lemburRegulerMenit / 60) * multKerja;
-      const rpLemburOff = tarifPerJam * (totalJam.lemburOffMenit / 60) * multOff;
 
       doc.setDrawColor(...SLIP_ORANGE); doc.setFillColor(...SLIP_ORANGE);
       doc.rect(marginX, y - 3.5, 1.2, 4.5, 'F');
@@ -5760,8 +5854,8 @@ async function generateSlipPdf(payrollId) {
 
       const jamRows = [
         ['Jam Regular', formatJamMenit(totalJam.regularMenit) + ' jam', null, null],
-        ['Jam Lembur Reguler (otomatis, x' + multKerja + ')', formatJamMenit(totalJam.lemburRegulerMenit) + ' jam', rp(rpLemburReguler), null],
-        ['Jam Lembur Hari Off/Libur (x' + multOff + ')', formatJamMenit(totalJam.lemburOffMenit) + ' jam', rp(rpLemburOff), null],
+        ['Jam Lembur Reguler (otomatis)', formatJamMenit(totalJam.lemburRegulerMenit) + ' jam', null, null],
+        ['Jam Lembur Hari Off/Libur', formatJamMenit(totalJam.lemburOffMenit) + ' jam', null, null],
       ];
 
       // ---- Estimasi Potongan Jam Kurang (cuma Pekerja Lapangan 8/10/12 Jam) ----
@@ -5791,7 +5885,7 @@ async function generateSlipPdf(payrollId) {
       // Pakai splitTextToSize + y dinamis (bukan y += angka tetap) buat ngukur beneran berapa baris
       // yang kepakai -- soalnya panjang teksnya bisa berubah-ubah (ex: klausa prorata di bawah),
       // jadi spasi fixed gampang numpuk/overlap kalau teksnya jadi lebih panjang dari perkiraan.
-      const catatanRupiahLines = doc.splitTextToSize('Estimasi Rupiah lembur di atas dihitung dari Gaji Pokok / Pembagi Jam Kerja x jam x multiplier Pola Kerja, buat cross-check HR -- bukan pengganti field Nilai Lembur di atas.', contentW);
+      const catatanRupiahLines = doc.splitTextToSize('Rupiah lembur ada di field Nilai Lembur: dihitung per hari dari (Gaji + Tunjangan Tetap) / Pembagi Jam Kerja, jam ke-1 dan jam berikutnya pakai multiplier masing-masing sesuai Pola Kerja; lembur hari off per jam atau per hari sesuai Pola Kerja.', contentW);
       doc.text(catatanRupiahLines, marginX, y);
       y += catatanRupiahLines.length * 3.4 + 2;
       if (potonganJamKurang) {
