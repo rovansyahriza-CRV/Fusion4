@@ -13,7 +13,7 @@
   Project = kolom Type karyawan. HO = 001, 901-905, atau kosong (digabung).
   Hadir = sudah absen masuk hari ini (tanda: istirahat / pulang / ijin pulang) + lokasi scan terakhir
   (Pulang -> Masuk2 -> Istirahat -> Masuk1), karena orang bisa pindah titik absen di siang hari.
-  Ijin/Cuti/Sakit = pengajuan APPROVED yang berlaku hari ini & belum absen masuk.
+  Ijin/Cuti/Sakit/Off = pengajuan APPROVED yang berlaku hari ini & belum absen masuk.
   Belum absen = karyawan aktif selain dua kelompok di atas. Data dimuat ulang tiap 60 detik.
 -->
 <style>
@@ -85,7 +85,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:1vw}
   <div class="tiles" id="tiles"></div>
   <div class="cols">
     <div class="col"><h3>Hadir <b id="cHadir">0</b> · terbaru di atas</h3><div class="list" id="lHadir"></div></div>
-    <div class="col"><h3>Ijin / Cuti / Sakit <b id="cIjin">0</b></h3><div class="list" id="lIjin"></div></div>
+    <div class="col"><h3>Ijin / Cuti / Sakit / Off <b id="cIjin">0</b></h3><div class="list" id="lIjin"></div></div>
     <div class="col"><h3>Belum absen <b id="cBelum">0</b></h3><div class="list" id="lBelum"></div></div>
   </div>
   <div class="foot"><span id="updated"></span><span>Klik layar untuk layar penuh</span></div>
@@ -98,7 +98,7 @@ const TZ = 'Asia/Makassar';
 const ROTATE_MS = 20000, REFRESH_MS = 60000;
 const FIXED = (new URLSearchParams(location.search).get('project') || '').trim().toUpperCase();
 const HO_CODES = new Set(['', '001', '901', '902', '903', '904', '905', 'HO']);
-const JENIS_LABEL = { CUTI_TAHUNAN: 'Cuti', CUTI_KHUSUS: 'Cuti khusus', SAKIT: 'Sakit', CUTI_SAKIT: 'Sakit' };
+const JENIS_LABEL = { CUTI_TAHUNAN: 'Cuti', CUTI_KHUSUS: 'Cuti khusus', SAKIT: 'Sakit', CUTI_SAKIT: 'Sakit', OFF_ROTASI: 'Off rotasi', OFF_PERIODE: 'Off periode' };
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -120,7 +120,7 @@ async function loadData() {
   const [kar, abs, ijn, proj] = await Promise.all([
     sb.from('karyawanTbl').select('NamaPersonnel, QrCodeId, Kualifikasi, Departemen, Type, IsActive').eq('IsActive', true),
     sb.from('absensiTbl').select('QrCodeId, JamMasuk1, JamIstirahat, JamMasuk2, JamPulang, Status, LokasiMasuk1, LokasiIstirahat, LokasiMasuk2, LokasiPulang').eq('Tanggal', tgl),
-    sb.from('pengajuan_ijin_lembur_tbl').select('qrcodeid, tipe, jenis_cuti, tanggal, tanggal_mulai, tanggal_selesai, status').in('tipe', ['IJIN', 'CUTI']).eq('status', 'APPROVED'),
+    sb.from('pengajuan_ijin_lembur_tbl').select('qrcodeid, tipe, jenis_cuti, tanggal, tanggal_mulai, tanggal_selesai, status').in('tipe', ['IJIN', 'CUTI', 'OFF']).eq('status', 'APPROVED'),
     sb.rpc('op_list_projects_public')
   ]);
   for (const r of [kar, abs, ijn]) if (r.error) throw r.error;
@@ -137,7 +137,7 @@ async function loadData() {
   (ijn.data || []).forEach(p => {
     const mulai = p.tanggal_mulai || p.tanggal, selesai = p.tanggal_selesai || p.tanggal || p.tanggal_mulai;
     if (mulai && selesai && mulai <= tgl && tgl <= selesai) {
-      leaveMap.set(qr(p.qrcodeid), p.tipe === 'CUTI' ? (JENIS_LABEL[p.jenis_cuti] || 'Cuti') : (p.jenis_cuti === 'SAKIT' ? 'Sakit' : 'Ijin'));
+      leaveMap.set(qr(p.qrcodeid), p.tipe === 'CUTI' ? (JENIS_LABEL[p.jenis_cuti] || 'Cuti') : p.tipe === 'OFF' ? (JENIS_LABEL[p.jenis_cuti] || 'Off') : (p.jenis_cuti === 'SAKIT' ? 'Sakit' : 'Ijin'));
     }
   });
 
@@ -192,7 +192,7 @@ function renderDetail() {
     ['Hadir', G.hadir.length, 't-ok', ` <small>/ ${G.total}</small>`],
     ['Istirahat', G.ist, 't-gray', ''],
     ['Pulang', G.pulang, 't-gray', ''],
-    ['Ijin / Cuti / Sakit', G.ijin.length, 't-info', ''],
+    ['Ijin / Cuti / Off', G.ijin.length, 't-info', ''],
     ['Belum absen', G.belum.length, 't-warn', '']
   ].map(([l, n, c, extra]) => `<div class="tile ${c}"><div class="l">${l}</div><div class="n">${n}${extra}</div></div>`).join('');
   $('cHadir').textContent = G.hadir.length; $('cIjin').textContent = G.ijin.length; $('cBelum').textContent = G.belum.length;

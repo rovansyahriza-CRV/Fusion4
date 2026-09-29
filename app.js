@@ -563,6 +563,9 @@ function renderMonitoringTable() {
         } else if (uVal.includes('CUTI')) {
           bg = '#E0F2FE'; color = '#0369A1'; border = '#BAE6FD';
           displayVal = '🏖️ ' + escapeHtml(val);
+        } else if (uVal === 'OFF') {
+          bg = '#CCFBF1'; color = '#0F766E'; border = '#99F6E4';
+          displayVal = '🌴 ' + escapeHtml(val);
         } else if (uVal.includes('SAKIT')) {
           bg = '#FEF3C7'; color = '#B45309'; border = '#FDE68A';
           displayVal = '🏥 ' + escapeHtml(val);
@@ -2319,6 +2322,10 @@ const KATEGORI_IJIN_LABEL = {
   IBADAH: 'Ibadah agama',
 };
 
+function offLabel(item) {
+  return item.jenis_cuti === 'OFF_PERIODE' ? 'Off Periode' : 'Off Rotasi';
+}
+
 function kategoriIjinBadge(item) {
   if (item.tipe !== 'IJIN' || !item.kategori_ijin) return '';
   const label = KATEGORI_IJIN_LABEL[item.kategori_ijin] || item.kategori_ijin;
@@ -2459,6 +2466,8 @@ function renderOtorisasiTable() {
         ? `<span style="color:#D97706; font-weight:700;">🚪 Ijin Pulang</span>`
         : item.tipe === 'CUTI'
         ? `<span style="color:#0369A1; font-weight:700;">🏖️ Cuti</span>`
+        : item.tipe === 'OFF'
+        ? `<span style="color:#0F766E; font-weight:700;">🌴 ${offLabel(item)}</span>`
         : `<span style="color:#2563EB; font-weight:700;">⏱️ Lembur (SPKL)</span>`;
 
       const action = item.required_action || 'APPROVE';
@@ -2522,6 +2531,8 @@ function renderOtorisasiTable() {
         ? `<span style="color:#D97706; font-weight:700;">🚪 IJIN</span>`
         : item.tipe === 'CUTI'
         ? `<span style="color:#0369A1; font-weight:700;">🏖️ CUTI</span>`
+        : item.tipe === 'OFF'
+        ? `<span style="color:#0F766E; font-weight:700;">🌴 ${offLabel(item).toUpperCase()}</span>`
         : `<span style="color:#2563EB; font-weight:700;">⏱️ LEMBUR</span>`;
 
       let statusBadge = '';
@@ -2797,9 +2808,11 @@ function openModalApprovalAction(requestId, actionName, reqJsonStr) {
   if (bodyEl) {
     bodyEl.innerHTML = `
       <div style="display:grid; grid-template-columns:110px 1fr; gap:6px;">
-        <strong>Tipe:</strong> <span>${item.tipe === 'IJIN' ? '🚪 Ijin Pulang' : item.tipe === 'CUTI' ? '🏖️ Cuti' : '⏱️ Lembur (SPKL)'}</span>
+        <strong>Tipe:</strong> <span>${item.tipe === 'IJIN' ? '🚪 Ijin Pulang' : item.tipe === 'CUTI' ? '🏖️ Cuti' : item.tipe === 'OFF' ? '🌴 ' + offLabel(item) : '⏱️ Lembur (SPKL)'}</span>
         <strong>Pemohon:</strong> <span>${escapeHtml(item.nama_pemohon || item.qrcodeid)} (${escapeHtml(item.kualifikasi || '-')})</span>
-        <strong>Tanggal:</strong> <span>${formatTglIndo(item.tanggal)}</span>
+        <strong>Tanggal:</strong> <span>${item.tanggal_mulai && item.tanggal_selesai && (item.tipe === 'CUTI' || item.tipe === 'OFF')
+          ? `${formatTglIndo(item.tanggal_mulai)} s/d ${formatTglIndo(item.tanggal_selesai)} (${item.jumlah_hari || 1} hari)`
+          : formatTglIndo(item.tanggal)}</span>
         ${item.lokasi ? `<strong>Lokasi:</strong> <span>${escapeHtml(item.lokasi)}</span>` : ''}
         ${item.durasi_jam ? `<strong>Durasi:</strong> <span>${item.durasi_jam} Jam</span>` : ''}
         ${item.tipe === 'IJIN' && item.kategori_ijin ? `<strong>Jenis Ijin:</strong> <span>${kategoriIjinBadge(item)}</span>` : ''}

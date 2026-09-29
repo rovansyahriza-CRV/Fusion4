@@ -189,6 +189,9 @@
     <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">ID Voucher:<br><span id="voucherLemburId" style="font-size:13px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
     <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">Sisa Kuota:<br><span id="sisaCutiVal" style="font-size:13px; font-weight:700; color:#2B6CB0; font-family:monospace;">12 Hari</span></div>
   </div>
+  <div style="margin:8px 16px 0;">
+    <button id="btnAjukanOff" style="width:100%; padding:11px 4px; font-size:13px; font-weight:700; border:1.5px solid #0F766E; border-radius:12px; background:#fff; color:#0F766E; cursor:pointer;">🌴 AJUKAN OFF (Rotasi / Periode)</button>
+  </div>
 
   <div style="background:#fff; border-radius:20px; margin:0 16px 16px; padding:20px; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
     <p class="card-label">Approval Issues</p>
@@ -295,6 +298,39 @@
     <button id="btnSubmitCuti" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#2B6CB0; color:#fff; cursor:pointer;">Ajukan Cuti ke Atasan</button>
     <button id="btnCancelCuti" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
     <div id="cutiMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
+  </div>
+</div>
+
+<div id="offOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px; box-sizing:border-box;">
+    <h3 style="margin:0 0 6px; font-size:17px; color:var(--charcoal);">🌴 Form Pengajuan Off</h3>
+    <p style="margin:0 0 14px; font-size:12px; color:var(--text-muted);">Off tidak memotong saldo cuti. Disetujui berjenjang seperti cuti.</p>
+
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Jenis Off</label>
+    <select id="offJenis" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box; margin-bottom:10px;">
+      <option value="OFF_ROTASI">Off Rotasi</option>
+      <option value="OFF_PERIODE">Off Periode (2 minggu, setelah 3 bulan kerja)</option>
+    </select>
+
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Mulai</label>
+        <input type="date" id="offTglMulai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Selesai</label>
+        <input type="date" id="offTglSelesai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+    </div>
+
+    <div id="offDurasiInfo" style="font-size:12px; font-weight:600; color:#0F766E; margin-bottom:10px; padding:8px 10px; background:#F0FDFA; border-radius:8px; display:none;"></div>
+
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Keterangan (opsional)</label>
+    <textarea id="offAlasan" rows="2" placeholder="Contoh: jadwal off rotasi minggu ini" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box; margin-bottom:12px;"></textarea>
+
+    <button id="btnSubmitOff" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#0F766E; color:#fff; cursor:pointer;">Ajukan Off ke Atasan</button>
+    <button id="btnCancelOff" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
+    <div id="offMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
   </div>
 </div>
 
@@ -811,6 +847,7 @@ async function submitPin() {
         p_alasan: alasan,
         p_durasi_jam: durasi,
         p_lokasi: area,
+        p_jenis_hari: null, // server deteksi hari kerja / OFF (termasuk Off yang disetujui)
         p_kategori_ijin: currentRequestType === "IJIN" ? document.getElementById('requestKategoriIjin').value : null
       });
       if (error) throw error;
@@ -939,6 +976,102 @@ async function submitPin() {
 
     btn.disabled = false;
     btn.innerText = "Ajukan Cuti ke Atasan";
+  };
+
+  // OFF MODAL LOGIC -- Off Periode dikunci 14 hari (tanggal selesai otomatis, dicek ulang di server)
+  function addDays(tgl, n) {
+    const d = new Date(tgl + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function updateOffDurasi() {
+    const jenis = document.getElementById('offJenis').value;
+    const mulaiEl = document.getElementById('offTglMulai');
+    const selesaiEl = document.getElementById('offTglSelesai');
+    const infoEl = document.getElementById('offDurasiInfo');
+    const isPeriode = jenis === 'OFF_PERIODE';
+    selesaiEl.disabled = isPeriode;
+    if (isPeriode && mulaiEl.value) selesaiEl.value = addDays(mulaiEl.value, 13);
+    if (!mulaiEl.value || !selesaiEl.value) { infoEl.style.display = 'none'; return; }
+    const hari = Math.round((new Date(selesaiEl.value) - new Date(mulaiEl.value)) / 86400000) + 1;
+    infoEl.style.display = 'block';
+    if (hari <= 0) {
+      infoEl.style.color = 'var(--danger)';
+      infoEl.style.background = 'var(--danger-bg)';
+      infoEl.innerText = '⚠️ Tanggal selesai harus sama atau setelah tanggal mulai.';
+    } else {
+      infoEl.style.color = '#0F766E';
+      infoEl.style.background = '#F0FDFA';
+      infoEl.innerText = '🌴 Total: ' + hari + ' hari' + (isPeriode ? ' (Off Periode dikunci 14 hari)' : '');
+    }
+  }
+
+  document.getElementById('offJenis').onchange = updateOffDurasi;
+  document.getElementById('offTglMulai').onchange = updateOffDurasi;
+  document.getElementById('offTglSelesai').onchange = updateOffDurasi;
+
+  document.getElementById('btnAjukanOff').onclick = () => {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('offJenis').value = 'OFF_ROTASI';
+    document.getElementById('offTglMulai').value = today;
+    document.getElementById('offTglSelesai').value = today;
+    document.getElementById('offAlasan').value = '';
+    document.getElementById('offMsg').style.display = 'none';
+    updateOffDurasi();
+    document.getElementById('offOverlay').style.display = "flex";
+  };
+
+  document.getElementById('btnCancelOff').onclick = () => {
+    document.getElementById('offOverlay').style.display = "none";
+  };
+
+  document.getElementById('btnSubmitOff').onclick = async () => {
+    const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+    const jenis = document.getElementById('offJenis').value;
+    const tglM = document.getElementById('offTglMulai').value;
+    const tglS = document.getElementById('offTglSelesai').value;
+    const msgEl = document.getElementById('offMsg');
+
+    if (!tglM || !tglS || tglS < tglM) {
+      msgEl.style.color = "var(--danger)";
+      msgEl.innerText = "⚠️ Isi tanggal mulai & selesai dengan benar.";
+      msgEl.style.display = "block";
+      return;
+    }
+
+    const btn = document.getElementById('btnSubmitOff');
+    btn.disabled = true;
+    btn.innerText = "Mengirim Pengajuan...";
+    msgEl.style.display = "none";
+
+    try {
+      const { data: res, error } = await supabaseClient.rpc('submit_pengajuan_off', {
+        p_qrcode: qrId,
+        p_jenis_off: jenis,
+        p_tgl_mulai: tglM,
+        p_tgl_selesai: tglS,
+        p_alasan: document.getElementById('offAlasan').value.trim()
+      });
+      if (error) throw error;
+
+      if (res && res.status === 'SUCCESS') {
+        msgEl.style.color = "var(--green, #178A4C)";
+        msgEl.innerText = "✅ " + res.message;
+        msgEl.style.display = "block";
+        loadApprovalIssues(qrId);
+        setTimeout(() => { document.getElementById('offOverlay').style.display = "none"; }, 1800);
+      } else {
+        throw new Error((res && res.message) || 'Gagal mengajukan off.');
+      }
+    } catch (e) {
+      msgEl.style.color = "var(--danger, #D9312E)";
+      msgEl.innerText = "⚠️ " + e.message;
+      msgEl.style.display = "block";
+    }
+
+    btn.disabled = false;
+    btn.innerText = "Ajukan Off ke Atasan";
   };
 
   async function handleIjinLemburDecision(requestId, action, qrId) {
@@ -1413,6 +1546,7 @@ async function submitPin() {
           }
           if (item.tipe === 'LEMBUR') typeTitle = '⏱️ SPKL Lembur';
           else if (item.tipe === 'CUTI') typeTitle = '🏖️ Pengajuan Cuti (' + (item.jumlah_hari || 1) + ' Hari)';
+          else if (item.tipe === 'OFF') typeTitle = '🌴 ' + (item.jenis_cuti === 'OFF_PERIODE' ? 'Off Periode' : 'Off Rotasi') + ' (' + (item.jumlah_hari || 1) + ' Hari)';
           const act = item.required_action || 'APPROVE';
           let btnLabel = '✅ Setujui (Approve)';
           let btnBg = 'var(--orange)';
@@ -1431,7 +1565,7 @@ async function submitPin() {
             </div>
             <div style="font-size:12px; font-weight:600; color:var(--charcoal); margin-bottom:2px;">${item.nama_pemohon || item.qrcodeid} <span style="font-weight:400; color:var(--text-muted);">(${item.kualifikasi || '-'})</span></div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
-              📅 ${item.tipe === 'CUTI' && item.tanggal_selesai ? (item.tanggal_mulai + ' s/d ' + item.tanggal_selesai) : (item.tanggal || '-')} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}<br>
+              📅 ${(item.tipe === 'CUTI' || item.tipe === 'OFF') && item.tanggal_selesai ? (item.tanggal_mulai + ' s/d ' + item.tanggal_selesai) : (item.tanggal || '-')} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}<br>
               📝 <em>"${item.alasan || '-'}"</em>
             </div>
             <div style="display:flex; gap:8px;">
