@@ -17,6 +17,7 @@
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="offline-absen.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -218,7 +219,8 @@ const FACE_MATCH_THRESHOLD = 0.45; // diperketat dari 0.55 -- kurangi resiko sal
 // submit absensi reguler+lembur, CHECK_IJIN_PENDING, SUBMIT_IJIN_KELUAR, SUBMIT_LEMBUR.
 const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Kalau library Supabase gagal dimuat (blank spot & belum ke-cache), halaman tetap jalan -- mode offline.
+const supabaseClient = (typeof supabase !== "undefined") ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 const params = new URLSearchParams(window.location.search);
 let qrCodeId = (params.get('QrCodeId') || params.get('qrCodeId') || params.get('qrcodeid') || "").trim().toUpperCase();
@@ -249,19 +251,9 @@ let pendingPindahReminder = null;
 let isOfflineMode = false;
 let offlineGPS = null;
 
-const CACHE_KEY_FACES = "fusion4_cached_faces";
-async function getCachedFaces() {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY_FACES);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) { return []; }
-}
-async function syncFaceCache() {
-  try {
-    const { data, error } = await supabaseClient.rpc('get_all_face_data');
-    if (!error && data) localStorage.setItem(CACHE_KEY_FACES, JSON.stringify(data));
-  } catch (e) { console.warn("Sync cache wajah gagal:", e.message); }
-}
+// Versi lama nyimpen wajah SEMUA karyawan di localStorage -- sekarang offline cuma pakai
+// wajah pemilik HP (IndexedDB, lewat offline-absen.js). Bersihkan sisa cache lama.
+try { localStorage.removeItem("fusion4_cached_faces"); } catch (e) {}
 
 const locBanner = document.getElementById('locBanner');
 const resultBanner = document.getElementById('resultBanner');
@@ -495,18 +487,98 @@ async function initGPS() {
   const lng = pos.coords.longitude;
   offlineGPS = { lat, lng };
 
+  if (navigator.onLine === false || !supabaseClient) {
+    startOfflineFlow(lat, lng);
+    return;
+  }
+
   showBanner(locBanner, "🟢 GPS terkunci. Menyelaraskan dengan server...", "info");
+  let result;
   try {
-    const result = await callApi("FIND_NEAREST_LOCATION", { lat: lat, lng: lng });
-    handleLocationResult(result);
+    result = await withTimeout(callApi("FIND_NEAREST_LOCATION", { lat: lat, lng: lng }), 10000, "Server tidak merespon (10 detik).");
   } catch (e) {
     console.warn("Gagal hubungi server lokasi, aktifkan mode offline:", e.message);
-    isOfflineMode = true;
-    showBanner(locBanner, "⚠️ Server tidak merespon. Mode offline aktif -- lanjut Scan Wajah.", "warn");
-    setStatus("Pilih cara absen di bawah ini.", "info");
-    document.getElementById('entryCard').style.display = "block";
-    document.getElementById('btnShowQrOption').style.display = "none";
+    startOfflineFlow(lat, lng);
+    return;
   }
+  handleLocationResult(result);
+}
+
+// ============ 1b. MODE OFFLINE (HP pribadi, wajah sendiri, geofence lokal) ============
+// Syarat: HP ini pernah buka Digital Badge / Absen saat online (paket offline tersimpan).
+// Lembur/SPKL, voucher ijin, pindah lokasi, & karyawan AuthCheck tetap wajib online.
+async function startOfflineFlow(lat, lng) {
+  isOfflineMode = true;
+  const profile = typeof getOfflineProfile === "function" ? await getOfflineProfile() : null;
+  const gagal = (pesan) => {
+    showBanner(locBanner, "📴 " + pesan, "fail");
+    showRetry();
+  };
+
+  if (!profile || (qrCodeId && profile.qrCodeId !== qrCodeId)) {
+    return gagal("Tidak ada internet. HP ini belum disiapkan untuk absen offline -- buka Digital Badge sekali saat ada sinyal, lalu coba lagi.");
+  }
+  if (profile.needAuth) {
+    return gagal("Tidak ada internet. Akun Anda memakai password otorisasi, jadi absen wajib online.");
+  }
+  if (!Array.isArray(profile.descriptor) || profile.descriptor.length === 0) {
+    return gagal("Tidak ada internet. Wajah Anda belum di-enroll, hubungi admin.");
+  }
+
+  const loc = findNearestOfflineLocation(lat, lng, profile.lokasi);
+  if (!loc) {
+    return gagal("Tidak ada internet. Daftar lokasi offline kosong -- buka Digital Badge saat ada sinyal.");
+  }
+  if (!loc.inside) {
+    return gagal("Di luar area absensi (" + loc.nama + " - Jarak: " + loc.distance + "m, Radius: " + loc.radius + "m)");
+  }
+
+  qrCodeId = profile.qrCodeId;
+  activeLocation = loc.nama;
+  currentPerson = { nama: profile.nama, qrCodeId: profile.qrCodeId };
+  refDescriptor = profile.descriptor;
+
+  let info = "📴 MODE OFFLINE · Kelompok: " + activeLocation + " | Jarak: " + loc.distance + "m | Radius: " + loc.radius + "m";
+  const selisihMenit = Math.round(Math.abs(profile.clockOffsetMs || 0) / 60000);
+  if (selisihMenit >= 5) {
+    info += "\n⚠️ Jam HP selisih ±" + selisihMenit + " menit dari server. Aktifkan jam otomatis di HP supaya absen tidak ditolak.";
+  }
+  showBanner(locBanner, info, "warn");
+  startFaceVerification();
+}
+
+async function queueAbsenOfflineDanTampilkan() {
+  const record = await queueOfflineAbsen({
+    qrCodeId: qrCodeId,
+    nama: (currentPerson && currentPerson.nama) || qrCodeId,
+    gps: offlineGPS,
+    lokasi: activeLocation
+  });
+  const jumlahPending = await countPendingQueue();
+  const jam = new Date(record.timestampOffline).toLocaleTimeString('id-ID', { timeZone: 'Asia/Makassar', hour: '2-digit', minute: '2-digit', hour12: false });
+  statusEl.style.display = "none";
+  showResultCard(
+    `📴 Absen OFFLINE ${escOffline(record.nama)} tercatat jam ${jam} WITA di ${escOffline(activeLocation)}.<br>` +
+    `${jumlahPending} data menunggu sinkron -- otomatis terkirim saat ada sinyal. Slot (Masuk/Istirahat/Pulang) ditentukan server saat sinkron, dan wajib tersinkron di hari yang sama.`,
+    "ok"
+  );
+}
+
+function escOffline(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Sinyal putus DI TENGAH absen online (lokasi & wajah sudah lolos): simpan ke antrian offline
+// kalau HP ini memang HP pribadi karyawan tsb.
+async function cobaQueueSetelahSinyalPutus(err) {
+  const pesan = String((err && err.message) || err || "");
+  const masalahJaringan = navigator.onLine === false || /fetch|network|load failed|timeout/i.test(pesan);
+  if (!masalahJaringan || !fromBadge || !offlineGPS || !activeLocation || typeof getOfflineProfile !== "function") return false;
+  const profile = await getOfflineProfile();
+  if (!profile || profile.qrCodeId !== qrCodeId || profile.needAuth) return false;
+  isOfflineMode = true;
+  await queueAbsenOfflineDanTampilkan();
+  return true;
 }
   
 function handleLocationResult(result) {
@@ -663,11 +735,7 @@ async function startFaceOnlyCapture() {
 
   setStatus("Mengambil data wajah karyawan...", "info");
   try {
-    if (isOfflineMode) {
-      allFaceData = await getCachedFaces();
-    } else {
-      allFaceData = await callApi("GET_ALL_FACE_DATA", {});
-    }
+    allFaceData = await callApi("GET_ALL_FACE_DATA", {});
   } catch (e) {
     setStatus("❌ Gagal ambil data wajah: " + e.message, "fail");
     showRetry();
@@ -701,19 +769,22 @@ async function startFaceVerification() {
   try {
     await withTimeout(loadFaceModelsWithBackendFix(), 15000, "Timeout memuat model (15 detik). Coba refresh halaman.");
   } catch (e) {
-    setStatus("❌ Gagal memuat model wajah: " + e.message, "fail");
+    setStatus("❌ Gagal memuat model wajah: " + e.message +
+      (isOfflineMode ? " -- model wajah belum tersimpan di HP. Buka Digital Badge saat ada sinyal sampai muncul '✅ Siap Offline'." : ""), "fail");
     showRetry();
     return;
   }
 
-  setStatus("Mengambil data referensi wajah...", "info");
-  const refResult = await callApi("GET_FACE_DESCRIPTOR", { qrCodeId: qrCodeId });
-  if (!refResult || !refResult.found) {
-    setStatus("❌ " + (refResult ? refResult.message : "Wajah belum terdaftar.") + " Hubungi admin untuk enroll wajah.", "fail");
-    showRetry();
-    return;
+  if (!isOfflineMode) {
+    setStatus("Mengambil data referensi wajah...", "info");
+    const refResult = await callApi("GET_FACE_DESCRIPTOR", { qrCodeId: qrCodeId });
+    if (!refResult || !refResult.found) {
+      setStatus("❌ " + (refResult ? refResult.message : "Wajah belum terdaftar.") + " Hubungi admin untuk enroll wajah.", "fail");
+      showRetry();
+      return;
+    }
+    refDescriptor = refResult.descriptor;
   }
-  refDescriptor = refResult.descriptor;
 
   try {
     await ensureCameraStream(currentFacingModeFace);
@@ -852,15 +923,6 @@ btnScanFace.onclick = async () => {
     stopCamera();
     faceVerified = true;
 
-    if (isOfflineMode) {
-      const namaKaryawan = best.nama || qrCodeId;
-      await queueOfflineAbsen({ qrCodeId: qrCodeId, nama: namaKaryawan, gps: offlineGPS });
-      const jumlahPending = await countPendingQueue();
-      statusEl.style.display = "none";
-      showResultCard(`${namaKaryawan} tercatat (offline). ${jumlahPending} data menunggu sinkronisasi saat online.`, "ok");
-      return;
-    }
-
     try {
       const paketData = await callApi("GET_PERSON_DATA", { qrCodeId: qrCodeId });
       if (!paketData || paketData.status === "NOT_FOUND" || paketData.status === "REJECTED" || !paketData.person) {
@@ -903,6 +965,17 @@ btnScanFace.onclick = async () => {
   const matchInfoEl1to1 = document.getElementById('matchInfo');
   matchInfoEl1to1.style.display = "block";
   matchInfoEl1to1.innerText = `✅ Terdeteksi: ${namaTampil1to1} (${qrCodeId})`;
+
+  if (isOfflineMode) {
+    // Pindah lokasi / ijin / password butuh server -- offline langsung masuk antrian.
+    try {
+      await queueAbsenOfflineDanTampilkan();
+    } catch (e) {
+      setStatus("❌ Gagal simpan absen offline di HP: " + e.message, "fail");
+      showRetry();
+    }
+    return;
+  }
 
   checkSpecialFlowsThenProceed();
 };
@@ -1031,6 +1104,7 @@ async function doSubmitAbsensi(password) {
     const response = await submitAbsensiCall(qrCodeId, activeLocation, password);
     handleAbsensiResponse(response);
   } catch (e) {
+    if (!password && await cobaQueueSetelahSinyalPutus(e).catch(() => false)) return;
     setStatus("❌ Gagal submit absensi: " + e.message, "fail");
     showRetry();
   }
@@ -1226,8 +1300,9 @@ async function scanQRLoop() {
 // GPS selalu dikunci duluan (baik lewat redirect QR fisik maupun buka langsung).
 // Setelah lokasi valid, handleLocationResult() yang nentuin lanjut otomatis
 // (kalau qrCodeId sudah ada dari URL) atau munculin pilihan Face-First/QR.
-if (navigator.onLine) {
-  syncFaceCache().catch(err => console.warn("Sync cache wajah gagal:", err));
+// Dibuka dari Digital Badge = HP pribadi -> segarkan paket offline (wajah sendiri + lokasi).
+if (navigator.onLine && fromBadge && qrCodeId && typeof prepareOfflinePack === "function") {
+  prepareOfflinePack(qrCodeId).catch(err => console.warn("Paket offline gagal diperbarui:", err.message));
 }
 initGPS();
 </script>

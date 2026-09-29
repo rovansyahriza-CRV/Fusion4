@@ -18,6 +18,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="offline-absen.js"></script>
 <script src="driveBridge.js"></script>
 <script src="reportPdf.js"></script>
 <style>
@@ -173,6 +174,11 @@
     <div class="divider"></div>
     <div class="badge-id" id="badgeId">-</div>
     <button id="btnAbsenSekarang" class="btn-block" style="display:block; width:100%; padding:14px; margin-top:16px; font-size:15px; font-weight:700; letter-spacing:0.5px; border:none; border-radius:12px; background:linear-gradient(135deg, var(--orange), var(--orange-dark)); color:#fff; cursor:pointer; box-shadow:0 8px 20px rgba(232,86,44,0.38); position:relative; z-index:1;">ABSEN</button>
+    <div id="offlineReadyBox" style="display:none; margin-top:10px; font-size:11px; line-height:1.5; text-align:center; color:var(--text-muted);"></div>
+  </div>
+
+  <div id="offlineModeBanner" style="display:none; margin:10px 16px 0; padding:10px 12px; border-radius:12px; background:#FBF3DC; color:#8A6508; font-size:12px; line-height:1.5; border-left:3px solid #B8860B;">
+    📴 <b>Mode Offline</b> — cuma <b>Absen</b> yang bisa dipakai. Pengajuan Ijin/Lembur/Cuti/Off &amp; approval butuh internet. Absen offline otomatis terkirim begitu ada sinyal.
   </div>
 
   <div id="attendanceStatusBox" style="margin:10px 16px 0; display:none;"></div>
@@ -366,7 +372,8 @@ const HO_EMAIL = "rovan.syahriza@gmail.com";
   
 const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Kalau library Supabase gagal dimuat (blank spot), badge tetap bisa dibuka dari paket offline.
+const supabaseClient = (typeof supabase !== 'undefined') ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 async function uploadBase64ToDrive(subfolder, filename, mimeType, base64Data) {
   const payload = {
@@ -474,6 +481,128 @@ if (pinWrapper) {
 
 let currentBadgeQrId = null;
 
+// ============ ABSEN OFFLINE (HP pribadi) ============
+// Paket offline (wajah sendiri + lokasi + library) disiapkan tiap badge dibuka online.
+// Tanpa sinyal, badge dibuka dari paket itu (PIN dicocokkan ke hash yang tersimpan di HP).
+function isBadgeOffline() {
+  return navigator.onLine === false || !supabaseClient;
+}
+
+function escOffline(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function tryOfflinePinLogin(pin) {
+  if (typeof getOfflineProfile !== 'function') return false;
+  const profile = await getOfflineProfile().catch(() => null);
+  if (!profile || !profile.pinHash) return false;
+  if (await sha256Hex(profile.qrCodeId + ":" + pin) !== profile.pinHash) return false;
+  renderBadgeOffline(profile);
+  return true;
+}
+
+function renderBadgeOffline(profile) {
+  const qrId = profile.qrCodeId;
+  window.currentBadgeData = { valid: true, qrCodeId: qrId, nama: profile.nama, kualifikasi: profile.kualifikasi, offline: true };
+  currentBadgeQrId = qrId;
+
+  if (pageContent) pageContent.style.display = "flex";
+  if (pinOverlay) pinOverlay.style.display = "none";
+  if (btnSubmitPin) {
+    btnSubmitPin.disabled = false;
+    btnSubmitPin.innerText = "Tampilkan Badge";
+  }
+
+  document.getElementById('badgeNama').innerText = profile.nama || "-";
+  document.getElementById('badgeJabatan').innerText = profile.kualifikasi || "-";
+  document.getElementById('badgeId').innerText = qrId;
+  const qrbox = document.getElementById('qrbox');
+  if (qrbox && typeof QRCode !== 'undefined') {
+    qrbox.innerHTML = '';
+    new QRCode(qrbox, { text: qrId, width: 115, height: 115, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+  }
+  const fallbackEl = document.getElementById('badgeFotoFallback');
+  if (fallbackEl) {
+    fallbackEl.style.display = "flex";
+    fallbackEl.innerText = (profile.nama || "?").trim().charAt(0).toUpperCase();
+  }
+  applyFotoPribadiLokal(qrId);
+
+  // Fitur yang butuh server disembunyikan selama offline.
+  document.getElementById('offlineModeBanner').style.display = "block";
+  [
+    document.getElementById('btnAjukanIjin').parentElement,
+    document.getElementById('voucherIjinId').parentElement.parentElement,
+    document.getElementById('btnAjukanOff').parentElement,
+    document.getElementById('approvalIssuesBox').parentElement,
+    document.getElementById('attendanceStatusBox'),
+    document.getElementById('payrollSlipBox')
+  ].forEach(el => { if (el) el.style.display = "none"; });
+
+  refreshOfflineReadyBox(qrId);
+}
+
+function formatJamOffline(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleString('id-ID', { timeZone: 'Asia/Makassar', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+async function refreshOfflineReadyBox(qrId, loadingText) {
+  const box = document.getElementById('offlineReadyBox');
+  if (!box || typeof getOfflineReadiness !== 'function') return;
+  box.style.display = "block";
+  if (loadingText) {
+    box.innerText = loadingText;
+    return;
+  }
+
+  const r = await getOfflineReadiness(qrId).catch(() => null);
+  if (!r) { box.style.display = "none"; return; }
+
+  let html;
+  if (r.ready) {
+    html = `<span style="color:#178A4C; font-weight:700;">✅ Siap Offline</span> · update terakhir ${formatJamOffline(r.profile.updatedAt)}`;
+  } else if (r.profile && r.profile.needAuth) {
+    html = "🔒 Akun Anda memakai password otorisasi — absen wajib online.";
+  } else if (r.profile && !r.hasFace) {
+    html = "⚠️ Belum siap offline: wajah belum di-enroll. Hubungi admin.";
+  } else if (r.profile && r.lokasiCount === 0) {
+    html = "⚠️ Belum siap offline: daftar lokasi kosong.";
+  } else if (r.profile && !r.assetsReady) {
+    html = "⚠️ Belum siap offline: file aplikasi belum terunduh penuh. Buka lagi saat sinyal bagus.";
+  } else {
+    html = "⚠️ Belum siap offline. Buka Badge ini saat ada sinyal.";
+  }
+
+  if (r.pending > 0) {
+    html += `<br><b>📴 ${r.pending} absen offline menunggu sinkron</b>`;
+  }
+
+  // Hasil sinkron 3 hari terakhir (terutama yang ditolak, biar karyawan tau).
+  const batas = Date.now() - 3 * 24 * 3600 * 1000;
+  const hist = (await getSyncHistory(5).catch(() => [])).filter(h => Date.parse(h.syncedAt) >= batas).slice(0, 3);
+  hist.forEach(h => {
+    const ok = String(h.status || "").startsWith("DITERIMA");
+    html += `<br><span style="color:${ok ? '#178A4C' : '#D9312E'};">${ok ? '✅' : '❌'} Absen offline ${formatJamOffline(h.timestampOffline)}` +
+      (ok ? ` terkirim${h.slot ? ' (' + escOffline(h.slot) + ')' : ''}` : ` ditolak: ${escOffline(h.message || '-')}`) + `</span>`;
+  });
+
+  box.innerHTML = html;
+}
+
+window.addEventListener('fusion4-offline-synced', () => {
+  if (currentBadgeQrId) refreshOfflineReadyBox(currentBadgeQrId);
+});
+
+// Sinyal balik saat badge dibuka offline -> muat ulang versi online.
+window.addEventListener('online', () => {
+  const d = window.currentBadgeData;
+  if (d && d.offline) {
+    setTimeout(() => { location.href = "digital-badge.html?QrCodeId=" + encodeURIComponent(d.qrCodeId); }, 3000);
+  }
+});
+
 function fotoPribadiKey(qrId) {
   return `fusion4_foto_pribadi_${String(qrId || '').trim().toUpperCase()}`;
 }
@@ -542,6 +671,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const pinParam = urlParams.get('pin');
   const qrParam = urlParams.get('qr') || urlParams.get('QrCodeId') || urlParams.get('qrcodeid');
 
+  // Offline + dibuka dengan ?QrCodeId= (mis. tombol "Kembali ke Badge" dari Absen): pakai paket offline.
+  if (isBadgeOffline() && qrParam && !pinParam) {
+    const profile = await getOfflineProfile().catch(() => null);
+    if (profile && profile.qrCodeId === qrParam.trim().toUpperCase()) {
+      renderBadgeOffline(profile);
+      return;
+    }
+  }
+
   if (pinParam && pinParam.length === 6) {
     if (realPinInput) {
       realPinInput.value = pinParam;
@@ -592,16 +730,34 @@ async function submitPin() {
       btnSubmitPin.innerText = "Memeriksa...";
     }
 
+    if (isBadgeOffline()) {
+      if (await tryOfflinePinLogin(pin)) return;
+      if (pinMsg) {
+        pinMsg.innerText = "📴 Tidak ada internet. PIN tidak cocok dengan badge yang tersimpan di HP ini (atau HP belum disiapkan offline).";
+        pinMsg.style.display = "block";
+      }
+      if (btnSubmitPin) {
+        btnSubmitPin.disabled = false;
+        btnSubmitPin.innerText = "Tampilkan Badge";
+      }
+      clearPinBoxes();
+      return;
+    }
+
     try {
       let hasil = null;
+      let adaErrorJaringan = false;
+      const cekJaringan = (err) => { if (err && /fetch|network|load failed/i.test(String(err.message || err))) adaErrorJaringan = true; };
 
       // 1. Coba lewat RPC get_digital_badge_by_pin
       try {
         const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('get_digital_badge_by_pin', { p_pin: pin });
+        cekJaringan(rpcErr);
         if (!rpcErr && rpcData && rpcData.valid) {
           hasil = rpcData;
         }
       } catch (e) {
+        cekJaringan(e);
         console.warn('RPC get_digital_badge_by_pin error, trying direct query:', e);
       }
 
@@ -615,6 +771,7 @@ async function submitPin() {
           query = query.or(`DigitalPin.eq.${pin},QrCodeId.eq.${pin}`);
         }
         const { data: karRows, error: karErr } = await query;
+        cekJaringan(karErr);
         if (!karErr && karRows && karRows.length > 0) {
           const k = karRows[0];
           hasil = {
@@ -627,6 +784,8 @@ async function submitPin() {
           };
         }
       }
+
+      if ((!hasil || !hasil.valid) && adaErrorJaringan && await tryOfflinePinLogin(pin)) return; // sinyal lemot / server gak kejangkau
 
       if (!hasil || !hasil.valid) {
         if (pinMsg) {
@@ -741,8 +900,15 @@ async function submitPin() {
       try { loadApprovalIssues(qrId); } catch (e) { console.warn("loadApprovalIssues error:", e); }
       try { loadMyVouchers(qrId); } catch (e) { console.warn("loadMyVouchers error:", e); }
 
+      // Siapkan / segarkan paket Absen Offline (wajah sendiri + lokasi + library & model wajah).
+      refreshOfflineReadyBox(qrId, "⏳ Menyiapkan mode offline...");
+      prepareOfflinePack(qrId, pin)
+        .catch(e => console.warn("Paket offline gagal:", e.message))
+        .finally(() => refreshOfflineReadyBox(qrId));
+
     } catch (e) {
       console.error("Error submitPin:", e);
+      if (await tryOfflinePinLogin(pin)) return;
       if (pinMsg) {
         pinMsg.innerText = "⚠️ Gagal koneksi: " + e.message;
         pinMsg.style.display = "block";
@@ -2703,7 +2869,17 @@ async function toggleWalletRequestDetail(refno, toggleEl) {
     toggleEl.innerText = '▾ Sembunyikan Detail';
   }
 }
-  
+
+</script>
+
+<script>
+  // Service worker: bikin Badge + halaman Absen bisa dibuka tanpa sinyal (site blank spot).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/Fusion4/service-worker.js')
+        .catch((err) => console.error('SmartGate PWA gagal:', err));
+    });
+  }
 </script>
 </body>
 </html>

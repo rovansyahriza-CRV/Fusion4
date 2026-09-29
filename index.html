@@ -135,6 +135,7 @@
       <div class="category-tabs" id="monitoringTabs">
         <button type="button" class="tab-btn active" data-monitor-cat="attendance" onclick="loadMonitoringPage('attendance', this)">📋 Attendance</button>
         <button type="button" class="tab-btn" data-monitor-cat="enroll" onclick="loadMonitoringPage('enroll', this)">🧑‍💼 Status Enroll</button>
+        <button type="button" class="tab-btn" data-monitor-cat="offline" onclick="loadMonitoringPage('offline', this)">📴 Log Offline</button>
       </div>
 
       <div class="card table-card" style="margin-top:14px;">
@@ -149,7 +150,7 @@
         <div style="padding:0 4px 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
           <input type="text" id="monitoringSearch" placeholder="Cari..." oninput="renderMonitoringTable()"
             style="flex:1;min-width:180px;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
-          <input type="date" id="monitoringDateFilter" onchange="loadMonitoringPage('attendance')"
+          <input type="date" id="monitoringDateFilter" onchange="loadMonitoringPage(monitoringState.category)"
             style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
           <select id="monitoringEnrollFilter" onchange="renderMonitoringTable()" aria-label="Filter status enroll"
             style="display:none;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:190px;">

@@ -423,14 +423,14 @@ async function loadMonitoringPage(category, btnEl) {
 
   const dateEl = document.getElementById('monitoringDateFilter');
   if (dateEl) {
-    dateEl.style.display = category === 'attendance' ? '' : 'none';
+    dateEl.style.display = category === 'enroll' ? 'none' : '';
     if (category === 'attendance' && !dateEl.value) dateEl.value = getTodayDateString();
   }
   // Filter Sudah/Belum Enroll cuma relevan di tab Status Enroll.
   const enrollEl = document.getElementById('monitoringEnrollFilter');
   if (enrollEl) {
-    enrollEl.style.display = category === 'attendance' ? 'none' : '';
-    if (category === 'attendance') enrollEl.value = '';
+    enrollEl.style.display = category === 'enroll' ? '' : 'none';
+    if (category !== 'enroll') enrollEl.value = '';
   }
 
   const tbody = document.getElementById('monitoringTableBody');
@@ -444,12 +444,21 @@ async function loadMonitoringPage(category, btnEl) {
       if (titleEl) titleEl.textContent = '📋 Data Attendance';
       if (subtitleEl) subtitleEl.textContent = `Log absensi tanggal ${tglFilter}.`;
 
-      const [{ data, error }, { data: karyawanRows, error: karErr }] = await Promise.all([
+      const [{ data, error }, { data: karyawanRows, error: karErr }, { data: offlineRows }] = await Promise.all([
         supabaseClient.from('absensiTbl').select('*').eq('Tanggal', tglFilter).order('Id', { ascending: false }).limit(500),
         supabaseClient.from('karyawanTbl').select('QrCodeId, NamaPersonnel'),
+        fusionAdminRpc('list_absensi_offline_log', { p_tanggal: tglFilter }),
       ]);
       if (error) throw error;
       if (karErr) throw karErr;
+
+      // Slot yang masuk lewat sync Absen Offline (diterima / diterima manual HR) -> tandai OFFLINE.
+      const offlineSlotMap = {};
+      (Array.isArray(offlineRows) ? offlineRows : []).forEach(o => {
+        if (!String(o.status || '').startsWith('DITERIMA')) return;
+        const key = String(o.qrcodeid || '').trim().toUpperCase();
+        (offlineSlotMap[key] = offlineSlotMap[key] || []).push(o.slot || '-');
+      });
 
       // Join manual ke karyawanTbl -- absensiTbl cuma nyimpen QrCodeId, gak ada Nama.
       const namaMap = {};
@@ -471,12 +480,41 @@ async function loadMonitoringPage(category, btnEl) {
           'JamPulang (WITA)': formatJamWita(r.JamPulang),
           Lokasi: lokasiUnik,
           Status: r.Status,
+          Sumber: offlineSlotMap[String(r.QrCodeId || '').trim().toUpperCase()]
+            ? '📴 OFFLINE: ' + offlineSlotMap[String(r.QrCodeId || '').trim().toUpperCase()].join(', ')
+            : 'Online',
         };
       });
 
-      const columns = ['Nama', 'QrCodeId', 'Tanggal', 'JamMasuk1 (WITA)', 'JamIstirahat (WITA)', 'JamMasuk2 (WITA)', 'JamPulang (WITA)', 'Lokasi', 'Status'];
+      const columns = ['Nama', 'QrCodeId', 'Tanggal', 'JamMasuk1 (WITA)', 'JamIstirahat (WITA)', 'JamMasuk2 (WITA)', 'JamPulang (WITA)', 'Lokasi', 'Status', 'Sumber'];
 
       monitoringState = { category, columns, rows };
+    } else if (category === 'offline') {
+      const tglFilter = (dateEl && dateEl.value) || null;
+      if (titleEl) titleEl.textContent = '📴 Log Absen Offline';
+      if (subtitleEl) subtitleEl.textContent = (tglFilter ? `Absen offline tanggal ${tglFilter}.` : 'Absen offline semua tanggal (500 terbaru).') +
+        ' Yang ditolak karena beda hari bisa di-Terima Manual. Kosongkan tanggal untuk lihat semua.';
+
+      const { data, error } = await fusionAdminRpc('list_absensi_offline_log', { p_tanggal: tglFilter });
+      if (error) throw error;
+
+      const hasilLabel = { DITERIMA: '✅ Diterima', DITERIMA_MANUAL: '✅ Diterima Manual', DITOLAK: '❌ Ditolak' };
+      const rows = (data || []).map(o => ({
+        Nama: o.nama || o.qrcodeid,
+        QrCodeId: o.qrcodeid,
+        Tanggal: o.tanggal,
+        'Jam HP (WITA)': formatJamWita(o.waktu_hp),
+        'Jam Sync': o.waktu_sync ? `${formatTglIndo(o.waktu_sync)} ${formatJamWita(o.waktu_sync)}` : '-',
+        Lokasi: o.lokasi ? `${o.lokasi}${o.jarak_m != null ? ` (${o.jarak_m}m)` : ''}` : '-',
+        Hasil: hasilLabel[o.status] || o.status,
+        Keterangan: [o.slot, o.pesan].filter(Boolean).join(' — ') +
+          (o.diproses_oleh_nama ? ` (diproses ${o.diproses_oleh_nama})` : ''),
+        Aksi: '',
+        _logId: o.id,
+        _bisaTerima: o.status === 'DITOLAK' && o.kode_tolak === 'BEDA_HARI',
+      }));
+
+      monitoringState = { category, columns: ['Nama', 'QrCodeId', 'Tanggal', 'Jam HP (WITA)', 'Jam Sync', 'Lokasi', 'Hasil', 'Keterangan', 'Aksi'], rows };
     } else {
       if (titleEl) titleEl.textContent = '🧑‍💼 Status Enroll Wajah Karyawan';
       if (subtitleEl) subtitleEl.textContent = 'Karyawan yang sudah / belum enroll wajah (faceData).';
@@ -503,7 +541,12 @@ async function loadMonitoringPage(category, btnEl) {
 
     renderMonitoringTable();
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td style="text-align:center;color:red;">Gagal memuat data: ${err.message}</td></tr>`;
+    // Jangan nyisain header/jumlah dari tab sebelumnya.
+    monitoringState = { category, columns: [], rows: [] };
+    if (thead) thead.innerHTML = '';
+    const countEl = document.getElementById('monitoringCount');
+    if (countEl) countEl.textContent = '0 Data';
+    if (tbody) tbody.innerHTML = `<tr><td style="text-align:center;color:red;">Gagal memuat data: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -548,6 +591,16 @@ function renderMonitoringTable() {
       let val = r[c];
       if (val && typeof val === 'string' && val.includes('T') && /\d{4}-\d{2}-\d{2}T/.test(val)) val = val.replace('T', ' ').split('.')[0];
       
+      if (c === 'Aksi') {
+        return r._bisaTerima
+          ? `<td><button type="button" class="btn btn-primary" style="padding:5px 10px;font-size:12px;white-space:nowrap;" onclick="terimaManualAbsenOffline(${Number(r._logId)})">✔ Terima Manual</button></td>`
+          : '<td>-</td>';
+      }
+      if ((c === 'Hasil' || (c === 'Sumber' && String(val).startsWith('📴'))) && val) {
+        const ok = !String(val).includes('Ditolak');
+        const [bg, color, border] = c === 'Sumber' ? ['#FBF3DC', '#8A6508', '#F3D98B'] : ok ? ['#DCFCE7', '#15803D', '#86EFAC'] : ['#FCEAE8', '#B42318', '#F5B5AE'];
+        return `<td><span style="display:inline-block;padding:2px 8px;border-radius:6px;background:${bg};color:${color};border:1px solid ${border};font-weight:700;font-size:11px;white-space:nowrap;">${escapeHtml(val)}</span></td>`;
+      }
       if (c === 'Lokasi' && val && val !== '-') {
         return `<td><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:#F1F5F9;font-weight:600;font-size:12px;color:#334155;border:1px solid #CBD5E1;">📍 ${escapeHtml(val)}</span></td>`;
       }
@@ -577,6 +630,15 @@ function renderMonitoringTable() {
       }
       return `<td>${escapeHtml(val ?? '-')}</td>`;
     }).join('')}</tr>`).join('');
+}
+
+async function terimaManualAbsenOffline(id) {
+  if (!confirm('Terima manual absen offline ini? Data diteruskan ke absensi pakai jam asli HP (cek radius & slot tetap jalan).')) return;
+  const { data, error } = await fusionAdminRpc('terima_manual_absensi_offline', { p_id: id });
+  if (error) { showToast('Gagal: ' + error.message, 'error'); return; }
+  if (data && data.status === 'DITERIMA') showToast('Absen offline diterima: ' + (data.slot || ''), 'success');
+  else showToast('Ditolak: ' + ((data && data.message) || '-'), 'error', 6000);
+  loadMonitoringPage('offline');
 }
 
 // ==========================================
