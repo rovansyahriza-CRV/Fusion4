@@ -492,14 +492,19 @@ function escOffline(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// HP bisa nyimpen beberapa orang: PIN yang dimasukkan nentuin profil siapa yang dibuka.
 async function tryOfflinePinLogin(pin) {
-  if (typeof getOfflineProfile !== 'function') return false;
-  const profile = await getOfflineProfile().catch(() => null);
-  if (!profile || !profile.pinHash) return false;
-  if (await sha256Hex(profile.qrCodeId + ":" + pin) !== profile.pinHash) return false;
-  renderBadgeOffline(profile);
-  return true;
+  if (typeof listOfflineProfiles !== 'function') return false;
+  for (const profile of await listOfflineProfiles()) {
+    if (profile.pinHash && await sha256Hex(profile.qrCodeId + ":" + pin) === profile.pinHash) {
+      renderBadgeOffline(profile);
+      return true;
+    }
+  }
+  return false;
 }
+
+let offlinePackError = null; // mis. HP sudah penuh 5 orang
 
 function renderBadgeOffline(profile) {
   const qrId = profile.qrCodeId;
@@ -539,6 +544,7 @@ function renderBadgeOffline(profile) {
     document.getElementById('payrollSlipBox')
   ].forEach(el => { if (el) el.style.display = "none"; });
 
+  markOfflineProfileUsed(qrId).catch(() => {});
   refreshOfflineReadyBox(qrId);
 }
 
@@ -561,7 +567,9 @@ async function refreshOfflineReadyBox(qrId, loadingText) {
   if (!r) { box.style.display = "none"; return; }
 
   let html;
-  if (r.ready) {
+  if (!r.profile && offlinePackError) {
+    html = "⚠️ " + escOffline(offlinePackError);
+  } else if (r.ready) {
     html = `<span style="color:#178A4C; font-weight:700;">✅ Siap Offline</span> · update terakhir ${formatJamOffline(r.profile.updatedAt)}`;
   } else if (r.profile && r.profile.needAuth) {
     html = "🔒 Akun Anda memakai password otorisasi — absen wajib online.";
@@ -588,7 +596,28 @@ async function refreshOfflineReadyBox(qrId, loadingText) {
       (ok ? ` terkirim${h.slot ? ' (' + escOffline(h.slot) + ')' : ''}` : ` ditolak: ${escOffline(h.message || '-')}`) + `</span>`;
   });
 
+  // Daftar orang yang tersimpan di HP ini (pemilik + titipan), bisa dihapus.
+  if (r.profiles && r.profiles.length) {
+    html += `<div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(0,0,0,0.12); text-align:left;">` +
+      `<b>Tersimpan di HP ini (${r.profiles.length}/${r.maxProfiles}):</b>` +
+      r.profiles.map(p =>
+        `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:4px;">` +
+        `<span>${escOffline(p.nama)}${p.isOwner ? ' <i>(pemilik HP)</i>' : ''}${p.qrCodeId === normQr(qrId) ? ' · <b>Anda</b>' : ''}</span>` +
+        `<a href="javascript:void(0)" data-hapus-offline="${escOffline(p.qrCodeId)}" style="color:#D9312E; white-space:nowrap;">hapus</a></div>`
+      ).join('') +
+      `<div style="margin-top:4px; font-size:10px;">Maks ${r.maxProfiles} orang. Titipan yang 30 hari tidak dipakai di HP ini terhapus otomatis.</div></div>`;
+  }
+
   box.innerHTML = html;
+  box.querySelectorAll('[data-hapus-offline]').forEach(a => {
+    a.onclick = async () => {
+      const target = r.profiles.find(p => p.qrCodeId === a.getAttribute('data-hapus-offline'));
+      if (!target || !confirm(`Hapus data absen offline ${target.nama} dari HP ini?`)) return;
+      await deleteOfflineProfile(target.qrCodeId);
+      offlinePackError = null;
+      refreshOfflineReadyBox(qrId);
+    };
+  });
 }
 
 window.addEventListener('fusion4-offline-synced', () => {
@@ -673,8 +702,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Offline + dibuka dengan ?QrCodeId= (mis. tombol "Kembali ke Badge" dari Absen): pakai paket offline.
   if (isBadgeOffline() && qrParam && !pinParam) {
-    const profile = await getOfflineProfile().catch(() => null);
-    if (profile && profile.qrCodeId === qrParam.trim().toUpperCase()) {
+    const profile = await getOfflineProfile(qrParam).catch(() => null);
+    if (profile) {
       renderBadgeOffline(profile);
       return;
     }
@@ -901,9 +930,15 @@ async function submitPin() {
       try { loadMyVouchers(qrId); } catch (e) { console.warn("loadMyVouchers error:", e); }
 
       // Siapkan / segarkan paket Absen Offline (wajah sendiri + lokasi + library & model wajah).
+      // Sekalian perbarui profil lain yang dititipkan di HP ini.
       refreshOfflineReadyBox(qrId, "⏳ Menyiapkan mode offline...");
+      offlinePackError = null;
       prepareOfflinePack(qrId, pin)
-        .catch(e => console.warn("Paket offline gagal:", e.message))
+        .catch(e => {
+          console.warn("Paket offline gagal:", e.message);
+          if (e.code === "PENUH") offlinePackError = e.message;
+        })
+        .then(() => refreshAllOfflineProfiles().catch(() => {}))
         .finally(() => refreshOfflineReadyBox(qrId));
 
     } catch (e) {

@@ -509,14 +509,17 @@ async function initGPS() {
 // Lembur/SPKL, voucher ijin, pindah lokasi, & karyawan AuthCheck tetap wajib online.
 async function startOfflineFlow(lat, lng) {
   isOfflineMode = true;
-  const profile = typeof getOfflineProfile === "function" ? await getOfflineProfile() : null;
+  // HP bisa nyimpen beberapa orang -> cari profil sesuai QR dari Badge (tanpa QR: cuma kalau HP nyimpen 1 orang).
+  const profile = typeof getOfflineProfile === "function" ? await getOfflineProfile(qrCodeId) : null;
   const gagal = (pesan) => {
     showBanner(locBanner, "📴 " + pesan, "fail");
     showRetry();
   };
 
-  if (!profile || (qrCodeId && profile.qrCodeId !== qrCodeId)) {
-    return gagal("Tidak ada internet. HP ini belum disiapkan untuk absen offline -- buka Digital Badge sekali saat ada sinyal, lalu coba lagi.");
+  if (!profile) {
+    return gagal(qrCodeId
+      ? "Tidak ada internet. Data Anda belum tersimpan di HP ini -- login Digital Badge Anda di HP ini sekali saat ada sinyal, lalu coba lagi."
+      : "Tidak ada internet. Buka Absen lewat tombol ABSEN di Digital Badge Anda.");
   }
   if (profile.needAuth) {
     return gagal("Tidak ada internet. Akun Anda memakai password otorisasi, jadi absen wajib online.");
@@ -574,8 +577,8 @@ async function cobaQueueSetelahSinyalPutus(err) {
   const pesan = String((err && err.message) || err || "");
   const masalahJaringan = navigator.onLine === false || /fetch|network|load failed|timeout/i.test(pesan);
   if (!masalahJaringan || !fromBadge || !offlineGPS || !activeLocation || typeof getOfflineProfile !== "function") return false;
-  const profile = await getOfflineProfile();
-  if (!profile || profile.qrCodeId !== qrCodeId || profile.needAuth) return false;
+  const profile = await getOfflineProfile(qrCodeId);
+  if (!profile || profile.needAuth) return false;
   isOfflineMode = true;
   await queueAbsenOfflineDanTampilkan();
   return true;
