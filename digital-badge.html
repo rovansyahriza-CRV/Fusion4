@@ -1681,10 +1681,16 @@ async function submitPin() {
 
       // -1. Render Trigger Delivery to Site / Serah Terima Barang (SMMS-BIMA)
       if (hasDeliveryTrigger) {
+        // Tag "Serah Terima Barang" bisa lebih dari 1 proyek, tapi link-nya sama -> gabung jadi 1 card
+        const serahTerimaProjects = [...new Set(deliveryTriggerData.filter(i => i.role === 'SERAH_TERIMA').map(i => i.project))];
+        let serahTerimaRendered = false;
+
         deliveryTriggerData.forEach(item => {
           const row = document.createElement('div');
 
           if (item.role === 'SERAH_TERIMA') {
+            if (serahTerimaRendered) return;
+            serahTerimaRendered = true;
             row.style.cssText = "border:1.5px solid #7c3aed; border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#f5f3ff;";
             row.innerHTML = `
               <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
@@ -1692,7 +1698,7 @@ async function submitPin() {
                 <div style="font-size:13px; font-weight:700; color:#5b21b6;">Storeman — Serah Terima Barang</div>
               </div>
               <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
-                Proyek ${item.project} • Pakai HP ini buat proses serah terima ke end user
+                Proyek ${serahTerimaProjects.join(', ')} • Pakai HP ini buat proses serah terima ke end user
               </div>
               <a href="https://rovansyahriza-crv.github.io/SMMS-BIMA/end-user-receiving.html" target="_blank" style="display:block; text-align:center; padding:9px; font-size:12px; font-weight:700; border-radius:8px; background:#7c3aed; color:#fff; text-decoration:none;">
                 Buka End User Receiving
