@@ -871,7 +871,18 @@ async function tampilkanBadge(hasil, pin) {
       .finally(() => refreshOfflineReadyBox(qrId));
 }
 
-async function submitPin() {
+// submitPin bisa kepicu dobel (auto-submit di digit ke-6, tombol yang terpasang onclick +
+// addEventListener, link ?pin=). Sejak salah PIN dihitung server (5x dikunci), satu salah
+// ketik jangan sampai kehitung 2-3x -- yang lagi jalan ditunggu, panggilan dobel diabaikan.
+var pinSedangDiproses = null; // var (bukan let): submitPin bisa kepanggil sebelum baris ini dieksekusi
+function submitPin() {
+  if (!pinSedangDiproses) {
+    pinSedangDiproses = submitPinInti().finally(() => { pinSedangDiproses = null; });
+  }
+  return pinSedangDiproses;
+}
+
+async function submitPinInti() {
     const pin = getPinValue().trim();
     if (pinMsg) pinMsg.style.display = "none";
 
