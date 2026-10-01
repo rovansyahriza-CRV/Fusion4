@@ -843,11 +843,9 @@ async function refreshRequestReportPdf(refno, forcedStatus = null) {
     const pdfBlob = reportPdfToBlob(pdfDoc);
     const uploadedPdf = await uploadReportPdfToDrive(pdfBlob, `REQ_${refno.replace(/\//g, '-')}.pdf`);
     
-    await supabaseClient.from('request').update({
-      Status: currentStatus,
-      ReportURL: buildDriveViewUrl(uploadedPdf),
-      ReportFileID: uploadedPdf.fileId
-    }).eq('RefNo', refno);
+    // Link PDF dibangun server dari fileId (request_set_report). Status request gak ditulis
+    // dari sini lagi -- diatur request_proses / request_sinkron_status (S2).
+    await supabaseClient.rpc('request_set_report', { p_refno: refno, p_file_id: uploadedPdf.fileId });
 
     return uploadedPdf;
   } catch (err) {

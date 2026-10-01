@@ -2358,7 +2358,7 @@ async function submitPinInti() {
             const { data: rfqDetails } = await supabaseClient.from('rfqDetail').select('RequestID').eq('RFQID', poRow.RFQID);
             const reqIds = [...new Set((rfqDetails || []).map(d => d.RequestID).filter(Boolean))];
             if (reqIds.length > 0) {
-              await supabaseClient.from('request').update({ Status: 'PO Diterbitkan' }).in('ID', reqIds);
+              await supabaseClient.rpc('request_sinkron_status', { p_refnos: null }); // status dihitung server dari data (S2)
               const { data: reqRows } = await supabaseClient.from('request').select('RefNo').in('ID', reqIds);
               const affectedRefNos = [...new Set((reqRows || []).map(r => r.RefNo).filter(Boolean))];
               for (const rNo of affectedRefNos) {
@@ -2821,66 +2821,20 @@ async function sendPoApprovalEmail(extra) {
   }
 
   try {
-    let rpcSuccess = false;
-    let isReviewLevel = false;
-
-    const { data: currAppr } = await supabaseClient.from('request_approval').select('*').eq('RefNo', refno).maybeSingle();
-    if (!currAppr) throw new Error('Data approval tidak ditemukan.');
-    isReviewLevel = String(currAppr.CurrentLevel || '').toLowerCase() === 'review';
-
-    try {
-      const { error } = await supabaseClient.rpc('process_approval_by_qrcode', {
-        p_qrcode: qrId,
-        p_refno: refno,
-        p_decision: decision,
-        p_reason: reason
-      });
-      if (!error) rpcSuccess = true;
-    } catch (rpcErr) {
-      console.warn('process_approval_by_qrcode fallback:', rpcErr);
+    // Review/approve/tolak lewat RPC request_proses pakai sesi Badge (login PIN): wewenang RR/AR
+    // per proyek dicek server. Dulu QrCodeId saja cukup, dan kalau RPC menolak browser fallback
+    // nulis langsung ke tabel.
+    const tokenBadge = (typeof badgeTokenGet === 'function' && badgeTokenGet()) || '';
+    const { data: hasil, error: rpcErr } = await supabaseClient.rpc('request_proses', {
+      p_token: tokenBadge, p_refno: refno, p_decision: decision, p_reason: reason
+    });
+    if (rpcErr) throw rpcErr;
+    if (!hasil || hasil.status !== 'OK') {
+      if (hasil && hasil.status === 'SESSION_EXPIRED') throw new Error('Sesi Badge habis. Tutup lalu buka Badge dan masukkan PIN lagi.');
+      throw new Error((hasil && hasil.message) || 'Gagal memproses request.');
     }
 
-    if (!rpcSuccess) {
-      const { data: kar } = await supabaseClient.from('karyawanTbl').select('Id').ilike('QrCodeId', qrId.trim()).maybeSingle();
-      const userId = kar ? String(kar.Id) : qrId;
-
-      if (decision === 'Approve') {
-        if (isReviewLevel) {
-          await supabaseClient.from('request_approval').update({
-            CurrentLevel: 'Approval',
-            ReviewedBy: userId,
-            ReviewedAt: new Date().toISOString()
-          }).eq('RefNo', refno);
-          await supabaseClient.from('request').update({
-            Status: 'Menunggu Approval Direktur'
-          }).eq('RefNo', refno);
-        } else {
-          await supabaseClient.from('request_approval').update({
-            CurrentLevel: 'Approved',
-            ApprovedBy: userId,
-            ApprovedAt: new Date().toISOString()
-          }).eq('RefNo', refno);
-          await supabaseClient.from('request').update({
-            Status: 'Disetujui'
-          }).eq('RefNo', refno);
-        }
-      } else {
-        await supabaseClient.from('request_approval').update({
-          CurrentLevel: 'Rejected',
-          RejectedBy: userId,
-          RejectedAt: new Date().toISOString(),
-          RejectReason: reason
-        }).eq('RefNo', refno);
-        await supabaseClient.from('request').update({
-          Status: 'Ditolak'
-        }).eq('RefNo', refno);
-      }
-    }
-
-    let nextStatus = 'Ditolak';
-    if (decision === 'Approve') {
-      nextStatus = isReviewLevel ? 'Menunggu Approval Direktur' : 'Disetujui';
-    }
+    const nextStatus = hasil.statusRequest;
     if (typeof refreshRequestReportPdf === 'function') {
       refreshRequestReportPdf(refno, nextStatus).catch(e => console.warn('Gagal refresh Request PDF:', e));
     }
