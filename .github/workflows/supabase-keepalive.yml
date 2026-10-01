@@ -15,8 +15,6 @@ jobs:
         env:
           SUPABASE_URL_1: https://nhmpwjriextmbotmvvbu.supabase.co
           SUPABASE_KEY_1: sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz
-          SUPABASE_URL_2: https://wvzajdnxmjegblqrvgfs.supabase.co
-          SUPABASE_KEY_2: sb_publishable_BsYvIC-QEgxEfE2UP1siZg_85Rx0XYP
         run: |
           curl --fail-with-body --silent --show-error \
             --request POST \
@@ -26,9 +24,3 @@ jobs:
             --data '{}' \
             --output /dev/null \
             "${SUPABASE_URL_1}/rest/v1/rpc/get_active_karyawan"
-
-          curl --fail-with-body --silent --show-error \
-            --request GET \
-            --header "apikey: ${SUPABASE_KEY_2}" \
-            --output /dev/null \
-            "${SUPABASE_URL_2}/auth/v1/health"
