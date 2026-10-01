@@ -150,3 +150,13 @@ async function compressImageForReport(file) {
 async function uploadReportPdfToDrive(pdfBlob, fileName) {
   return uploadToDrive("reports", fileName, "application/pdf", pdfBlob);
 }
+
+// Bangun link Drive yang bisa dibuka langsung sebagai halaman (bukan thumbnail/embed image).
+// viewUrl/directUrl dari GAS Drive Bridge selalu format thumbnail (drive.google.com/thumbnail?id=...)
+// yang gak reliable dibuka langsung di tab baru -- terutama buat file PDF. Ini bangun manual dari fileId.
+function buildDriveViewUrl(uploaded) {
+  if (uploaded && uploaded.fileId) {
+    return `https://drive.google.com/file/d/${uploaded.fileId}/view`;
+  }
+  return (uploaded && (uploaded.viewUrl || uploaded.directUrl)) || null;
+}

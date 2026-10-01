@@ -260,6 +260,62 @@ async function buildReportPdf(config) {
     y += 8;
   }
 
+  // ---- Foto Referensi (opsional, daftar link + thumbnail kalau dataUrl tersedia) ----
+  if (config.photoLinks && config.photoLinks.length > 0) {
+    y = drawSectionTitle(doc, "Foto Referensi", marginX, y, pageW, marginX);
+
+    const thumbSize = 32; // mm, persegi
+    const gap = 6;
+    const perRow = Math.max(1, Math.floor((pageW - marginX * 2 + gap) / (thumbSize + gap)));
+    let col = 0;
+    let rowStartY = y;
+    let rowMaxH = 0;
+
+    config.photoLinks.forEach((p, i) => {
+      const cx = marginX + col * (thumbSize + gap);
+
+      if (p.dataUrl) {
+        try {
+          const fmt = p.dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG";
+          doc.addImage(p.dataUrl, fmt, cx, rowStartY, thumbSize, thumbSize);
+          doc.setDrawColor(...hexToRgb(C.BORDER || "#cccccc"));
+          doc.rect(cx, rowStartY, thumbSize, thumbSize, "S");
+        } catch (e) {
+          doc.setDrawColor(...hexToRgb(C.BORDER || "#cccccc"));
+          doc.rect(cx, rowStartY, thumbSize, thumbSize, "S");
+        }
+      } else {
+        // Gak ada thumbnail (misal gagal fetch ulang pas refresh) -- gambar placeholder kotak
+        doc.setDrawColor(...hexToRgb(C.BORDER || "#cccccc"));
+        doc.setFillColor(245, 245, 245);
+        doc.rect(cx, rowStartY, thumbSize, thumbSize, "FD");
+        doc.setFontSize(7);
+        doc.setTextColor(150, 150, 150);
+        doc.text("Buka link", cx + thumbSize / 2, rowStartY + thumbSize / 2, { align: "center" });
+      }
+
+      // Label + link di bawah thumbnail
+      const label = `[${i + 1}] ${(p.label || 'Foto ' + (i + 1)).slice(0, 22)}`;
+      doc.setFontSize(7);
+      doc.setTextColor(37, 99, 235);
+      doc.textWithLink(label, cx, rowStartY + thumbSize + 4, { url: p.url });
+      doc.setDrawColor(37, 99, 235);
+      doc.setLineWidth(0.15);
+      doc.line(cx, rowStartY + thumbSize + 4.6, cx + doc.getTextWidth(label), rowStartY + thumbSize + 4.6);
+
+      rowMaxH = Math.max(rowMaxH, thumbSize + 8);
+      col++;
+      if (col >= perRow) {
+        col = 0;
+        rowStartY += rowMaxH;
+        rowMaxH = 0;
+      }
+    });
+
+    y = rowStartY + (col > 0 ? rowMaxH : 0) + 4;
+    doc.setTextColor(...hexToRgb(C.INK));
+  }
+
   // ---- Dokumentasi foto (opsional, null = dilewati) ----
   if (config.photo) {
     y = drawSectionTitle(doc, "Dokumentasi", marginX, y, pageW, marginX);
@@ -406,7 +462,8 @@ async function generateRequestReportPdf(data) {
           rows: data.approvalHistory.map((h) => [h.tanggal, h.oleh, h.keterangan]),
         }
       : null,
-    photo: null, // Report Request gak ada foto
+    photo: null, // Report Request gak ada foto dokumentasi tunggal
+    photoLinks: data.photoLinks || null, // Foto referensi opsional (bisa lebih dari 1), ditampilkan sebagai link
     signatures,
   };
 
@@ -504,15 +561,17 @@ async function generateRfqReportPdf(data) {
   // data: { noRfq, tanggalRfq, createdBy, createdBySub, createdByQr, notes, deliveryPoint,
   //         items:[{noRequest, kode, desk, qty, unit}], vendors:[{nama, email, status}] }
   const usableW = 210 - 16 * 2;
-  const noColW = 8, reqNoColW = 44, kodeColW = 20, qtyColW = 20;
-  const deskColW = usableW - noColW - reqNoColW - kodeColW - qtyColW;
+  const noColW = 8, reqNoColW = 40, kodeColW = 20, qtyColW = 18, priceColW = 28;
+  const deskColW = usableW - noColW - reqNoColW - kodeColW - qtyColW - priceColW;
 
+  // Unit Price sengaja dikosongkan -- diisi manual oleh admin di hasil print.
   const itemsRows = data.items.map((it, i) => [
     String(i + 1),
     it.noRequest || "-",
     it.kode || "-",
     it.desk,
     { text: `${it.qty} ${it.unit || ""}`, align: "right" },
+    { text: "", align: "right" },
   ]);
 
   const vendorColW2 = [56, 70, 42];
@@ -528,8 +587,8 @@ async function generateRfqReportPdf(data) {
     ],
     noteBlocks: [{ label: "Catatan", text: data.notes }],
     itemsTitle: "Item yang Di-RFQ-kan",
-    itemsHead: ["No", "No. Request", "Kode Item", "Deskripsi", { text: "Qty", align: "right" }],
-    itemsColWidths: [noColW, reqNoColW, kodeColW, deskColW, qtyColW],
+    itemsHead: ["No", "No. Request", "Kode Item", "Deskripsi", { text: "Qty", align: "right" }, { text: "Unit Price", align: "right" }],
+    itemsColWidths: [noColW, reqNoColW, kodeColW, deskColW, qtyColW, priceColW],
     itemsRows,
     extraTable: {
       title: "Vendor yang Diundang",
@@ -775,7 +834,10 @@ async function refreshRequestReportPdf(refno, forcedStatus = null) {
       direviewOlehQr: direviewOlehQr,
       disetujuiOleh: disetujuiOleh,
       disetujuiOlehSub: disetujuiOlehSub,
-      disetujuiOlehQr: disetujuiOlehQr
+      disetujuiOlehQr: disetujuiOlehQr,
+      photoLinks: Array.isArray(firstReq.PhotoUrls) && firstReq.PhotoUrls.length > 0
+        ? firstReq.PhotoUrls.map((p, i) => ({ label: p.fileName || `Foto ${i + 1}`, url: p.url, dataUrl: p.dataUrl || null }))
+        : null
     });
 
     const pdfBlob = reportPdfToBlob(pdfDoc);
@@ -783,7 +845,7 @@ async function refreshRequestReportPdf(refno, forcedStatus = null) {
     
     await supabaseClient.from('request').update({
       Status: currentStatus,
-      ReportURL: uploadedPdf.directUrl,
+      ReportURL: buildDriveViewUrl(uploadedPdf),
       ReportFileID: uploadedPdf.fileId
     }).eq('RefNo', refno);
 
