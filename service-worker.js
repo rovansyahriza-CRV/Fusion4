@@ -9,7 +9,7 @@
 
 importScripts('offline-absen.js');
 
-const CACHE_NAME = 'fusion4-shell-v3';
+const CACHE_NAME = 'fusion4-shell-v4';
 const RUNTIME_CDN_CACHE = 'fusion4-cdn-runtime-v1';
 const KEEP_CACHES = [CACHE_NAME, RUNTIME_CDN_CACHE, OFFLINE_ASSET_CACHE];
 
@@ -27,7 +27,10 @@ const SHELL_FILES = [
   '/Fusion4/manifest.json',
   '/Fusion4/manifest-badge.json',
   '/Fusion4/icon-192.png',
-  '/Fusion4/badge-icon-192.png'
+  '/Fusion4/badge-icon-192.png',
+  '/Fusion4/set-lokasi.html',
+  '/Fusion4/manifest-setlokasi.json',
+  '/Fusion4/setlokasi-icon-192.png'
 ];
 
 const CDN_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];

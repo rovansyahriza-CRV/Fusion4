@@ -1,0 +1,14 @@
+{
+  "name": "Fusion4 - Set Lokasi",
+  "short_name": "Set Lokasi",
+  "start_url": "./set-lokasi.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F0F2F6",
+  "theme_color": "#23345F",
+  "icons": [
+    { "src": "setlokasi-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "setlokasi-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

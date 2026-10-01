@@ -176,7 +176,8 @@
       <div class="page-title-section">
         <span class="category-tag">KELOLA LOKASI</span>
         <h2>Master Data Lokasi / Site</h2>
-        <p>Tambah, edit, atau hapus titik lokasi (dipakai buat geofencing GPS pas Attendance / Pindah Lokasi).</p>
+        <p>Tambah, edit, atau hapus titik lokasi (dipakai buat geofencing GPS pas Attendance / Pindah Lokasi).
+          Petugas berhak <strong>SL</strong> bisa set titik langsung dari HP di site lewat <a href="set-lokasi.html" target="_blank" rel="noopener">set-lokasi.html</a> — titik dari lapangan ditandai 📡.</p>
       </div>
 
       <div class="card table-card">
@@ -195,7 +196,9 @@
           <table>
             <thead>
               <tr>
+                <th>Kode</th>
                 <th>Nama Lokasi</th>
+                <th>Project</th>
                 <th>Latitude</th>
                 <th>Longitude</th>
                 <th>Radius (m)</th>
@@ -206,7 +209,7 @@
               </tr>
             </thead>
             <tbody id="lokasiTableBody">
-              <tr><td colspan="8" style="text-align:center;color:#777;">Memuat data...</td></tr>
+              <tr><td colspan="10"style="text-align:center;color:#777;">Memuat data...</td></tr>
             </tbody>
           </table>
         </div>
@@ -222,6 +225,16 @@
           <div class="input-group">
             <label for="lokasiNama">Nama Lokasi</label>
             <input type="text" id="lokasiNama" placeholder="Contoh: Site BIMA - Gudang Utama">
+          </div>
+          <div class="input-group">
+            <label for="lokasiKode">Kode Lokasi</label>
+            <input type="text" id="lokasiKode" maxlength="30" placeholder="Kosongkan = otomatis (LOK-xxx)" style="text-transform:uppercase;">
+          </div>
+          <div class="input-group">
+            <label for="lokasiProject">Project</label>
+            <select id="lokasiProject">
+              <option value="">-- Tanpa project --</option>
+            </select>
           </div>
           <div class="input-group">
             <label for="lokasiRadius">Radius Geofence (meter)</label>
@@ -478,7 +491,7 @@
             <input type="text" id="karyawanPic" placeholder="Contoh: ER-014, PER, MAE, KL, DK -- ALL = akses semua, kosong = tanpa akses">
             <div style="font-size:12px;line-height:1.6;padding:10px;background:#eef4fb;border-radius:8px;margin-top:6px"><strong>SPMS:</strong> <code>Operational Master Komersial</code> untuk kelola project/master; <code>Operational WO</code> untuk WO–SMS. Pisahkan dengan koma dan pertahankan akses aplikasi lain. PIC ALL membuka seluruh modul SPMS; PIC kosong tidak memberi akses SPMS. Akses ini berlaku tingkat modul, belum dibatasi per project. Login SPMS masih menunggu pengamanan akun selesai.</div>
             <div style="font-size:11px;color:#8A8580;margin:5px 0 0;line-height:1.5;background:#FAF8F5;padding:8px 12px;border-radius:8px;border:1px solid #E6DED9;">
-              <div style="margin-bottom:3px;"><strong style="color:#2B6CB0;">🏢 SmartGate Fusion4:</strong> <strong>ER-&lt;Proj&gt;</strong>=Request Karyawan, <strong>PER</strong>=Proses HRD, <strong>DK</strong>=Data Karyawan, <strong>KK</strong>=Kontrak, <strong>KB</strong>=Kompensasi &amp; Benefit, <strong>KDB</strong>=Badge, <strong>MAE</strong>=Monitoring, <strong>KL</strong>=Lokasi, <strong>OIL</strong>=Ijin/Lembur, <strong>GP</strong>=Ganti Password (Admin).</div>
+              <div style="margin-bottom:3px;"><strong style="color:#2B6CB0;">🏢 SmartGate Fusion4:</strong> <strong>ER-&lt;Proj&gt;</strong>=Request Karyawan, <strong>PER</strong>=Proses HRD, <strong>DK</strong>=Data Karyawan, <strong>KK</strong>=Kontrak, <strong>KB</strong>=Kompensasi &amp; Benefit, <strong>KDB</strong>=Badge, <strong>MAE</strong>=Monitoring, <strong>KL</strong>=Lokasi, <strong>SL</strong>=Set Lokasi dari HP di site,<strong>OIL</strong>=Ijin/Lembur, <strong>GP</strong>=Ganti Password (Admin).</div>
               <div style="margin-bottom:3px;"><strong style="color:#e8562c;">📦 SMMS Portal:</strong> <strong>MR</strong>=Master Resources, <strong>REQ</strong>=Request, <strong>RFQ</strong>=Buat RFQ, <strong>SVR</strong>=Seleksi Vendor, <strong>PO-&lt;Proj&gt;</strong>=Ajukan PO/SO, <strong>TV</strong>=Terima Vendor.</div>
               <div><strong style="color:#6B46C1;">⚡ Super Admin:</strong> ketik <strong>ALL</strong> untuk membuka seluruh menu. PIC &amp; Author <strong>kosong = tanpa akses</strong> menu admin.</div>
             </div>

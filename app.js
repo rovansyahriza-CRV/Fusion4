@@ -769,7 +769,8 @@ document.addEventListener('keydown', (e) => {
 async function loadLokasiPage() {
   initLokasiMapIfNeeded();
   const tbody = document.getElementById('lokasiTableBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#777;">Memuat data...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">Memuat data...</td></tr>';
+  loadLokasiProjectOptions();
 
   try {
     let data = null;
@@ -790,10 +791,33 @@ async function loadLokasiPage() {
     }
 
     lokasiState.rows = data || [];
+
+    // Kode, Project & perubahan terakhir dari Set Lokasi HP (migrasi_set_lokasi_mobile.sql).
+    // Kalau RPC-nya belum ada, tabel tetap tampil tanpa info ini.
+    try {
+      const { data: info, error: infoErr } = await supabaseClient.rpc('list_lokasi_lapangan_info');
+      if (!infoErr && info) {
+        const byId = new Map(info.map(i => [Number(i.id), i]));
+        lokasiState.rows.forEach(r => { Object.assign(r, byId.get(Number(r.id)) || {}); });
+      }
+    } catch (e) { /* abaikan */ }
+
     renderLokasiTable();
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:red;">Gagal memuat data: ${err.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">Gagal memuat data: ${err.message}</td></tr>`;
   }
+}
+
+async function loadLokasiProjectOptions() {
+  const sel = document.getElementById('lokasiProject');
+  if (!sel || sel.dataset.loaded) return;
+  try {
+    const { data, error } = await supabaseClient.rpc('list_project_codes');
+    if (error || !data) return;
+    sel.innerHTML = '<option value="">-- Tanpa project --</option>' +
+      data.map(p => `<option value="${escapeHtml(p.code)}">${escapeHtml(p.code)} · ${escapeHtml(p.name)}</option>`).join('');
+    sel.dataset.loaded = '1';
+  } catch (e) { /* abaikan */ }
 }
 
 function renderLokasiTable() {
@@ -802,12 +826,12 @@ function renderLokasiTable() {
   if (!tbody) return;
 
   const keyword = (document.getElementById('lokasiSearch')?.value || '').toLowerCase().trim();
-  const filtered = (lokasiState.rows || []).filter(r => !keyword || String(r.namalokasi || '').toLowerCase().includes(keyword));
+  const filtered = (lokasiState.rows || []).filter(r => !keyword || `${r.namalokasi || ''} ${r.kodelokasi || ''}`.toLowerCase().includes(keyword));
 
   if (countEl) countEl.textContent = `${filtered.length} Lokasi`;
 
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#777;">Belum ada data.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">Belum ada data.</td></tr>';
     return;
   }
 
@@ -818,10 +842,15 @@ function renderLokasiTable() {
     const pulang = r.jampulang ? String(r.jampulang).slice(0, 5) : '17:00';
     const tlTitle = `Masuk 1: ${masuk1} | Istirahat: ${istirahat} | Masuk 2: ${masuk2} | Pulang: ${pulang}`;
     const tlBadge = `<span class="badge-timelimit" title="${escapeHtml(tlTitle)}"><span class="tl-icon">⏰</span>${masuk1} - ${pulang}</span>`;
+    const lapangan = r.lapangan_waktu
+      ? `<div style="font-size:11.5px;color:#2B6CB0;margin-top:3px;" title="Diset dari HP (Set Lokasi) · ${escapeHtml(r.lapangan_via || '')}">📡 ${r.lapangan_aksi === 'BARU' ? 'Dibuat' : 'Titik diubah'} dari lapangan · ${escapeHtml(r.lapangan_petugas || '-')} · ${new Date(r.lapangan_waktu).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>`
+      : '';
 
     return `
       <tr>
-        <td><strong>${escapeHtml(r.namalokasi)}</strong></td>
+        <td style="font-family:monospace;white-space:nowrap;">${escapeHtml(r.kodelokasi) || '-'}</td>
+        <td><strong>${escapeHtml(r.namalokasi)}</strong>${lapangan}</td>
+        <td>${escapeHtml(r.project) || '-'}</td>
         <td>${r.latitude != null ? Number(r.latitude).toFixed(6) : '-'}</td>
         <td>${r.longitude != null ? Number(r.longitude).toFixed(6) : '-'}</td>
         <td>${r.radius != null ? r.radius : '-'}</td>
@@ -843,6 +872,8 @@ function editLokasi(id) {
   document.getElementById('lokasiFormTitle').textContent = `✏️ Edit Lokasi: ${row.namalokasi || ''}`;
   document.getElementById('lokasiEditId').value = row.id;
   document.getElementById('lokasiNama').value = row.namalokasi || '';
+  if (document.getElementById('lokasiKode')) document.getElementById('lokasiKode').value = row.kodelokasi || '';
+  if (document.getElementById('lokasiProject')) document.getElementById('lokasiProject').value = row.project || '';
   document.getElementById('lokasiRadius').value = row.radius != null ? row.radius : 100;
   document.getElementById('lokasiStatus').value = row.status || 'Active';
   document.getElementById('lokasiType').value = row.type || '';
@@ -896,7 +927,11 @@ async function submitLokasi() {
   const jamMasuk2 = formatTimeVal(document.getElementById('lokasiJamMasuk2')?.value, '13:00');
   const jamPulang = formatTimeVal(document.getElementById('lokasiJamPulang')?.value, '17:00');
 
+  const kode = (document.getElementById('lokasiKode')?.value || '').trim().toUpperCase();
+  const project = document.getElementById('lokasiProject')?.value || '';
+
   if (!nama) { showToast('Nama lokasi wajib diisi.', 'error'); return; }
+  if (kode && !/^[A-Z0-9][A-Z0-9_.-]{1,29}$/.test(kode)) { showToast('Kode lokasi cuma boleh huruf, angka, - _ . (2-30 karakter).', 'error'); return; }
   if (isNaN(lat) || isNaN(lng)) { showToast('Tentukan dulu titik lokasi di peta (klik atau cari alamat).', 'error'); return; }
 
   const btn = document.getElementById('btnSubmitLokasi');
@@ -923,6 +958,8 @@ async function submitLokasi() {
       if (!errRpc) {
         saved = true;
         showToast(editId ? 'Lokasi & jam kerja berhasil diperbarui.' : 'Lokasi & jam kerja baru berhasil ditambahkan.', 'success');
+        const savedId = (resData && resData.id) || (editId ? parseInt(editId, 10) : null);
+        if (savedId) await saveLokasiKodeProject(savedId, kode, project);
       }
     } catch (e) {
       saved = false;
@@ -956,10 +993,23 @@ async function submitLokasi() {
   }
 }
 
+// Kode & Project lewat RPC admin ber-sesi (cek PIC KL di server). Kode kosong = LOK-<id>.
+async function saveLokasiKodeProject(id, kode, project) {
+  try {
+    const { data, error } = await fusionAdminRpc('set_lokasi_kode_project', { p_id: id, p_kode: kode || null, p_project: project || null });
+    if (error) throw error;
+    if (data && data.status !== 'SUCCESS') showToast('Lokasi tersimpan, tapi kode/project gagal: ' + (data.message || data.status), 'error', 6000);
+  } catch (err) {
+    showToast('Lokasi tersimpan, tapi kode/project gagal: ' + err.message, 'error', 6000);
+  }
+}
+
 function resetLokasiForm() {
   document.getElementById('lokasiFormTitle').textContent = '+ Tambah Lokasi Baru';
   document.getElementById('lokasiEditId').value = '';
   document.getElementById('lokasiNama').value = '';
+  if (document.getElementById('lokasiKode')) document.getElementById('lokasiKode').value = '';
+  if (document.getElementById('lokasiProject')) document.getElementById('lokasiProject').value = '';
   document.getElementById('lokasiRadius').value = 100;
   document.getElementById('lokasiStatus').value = 'Active';
   document.getElementById('lokasiType').value = '';

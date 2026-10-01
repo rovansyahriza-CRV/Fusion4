@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Set Lokasi — Fusion4 SmartGate</title>
+<meta name="theme-color" content="#23345F">
+<link rel="manifest" href="manifest-setlokasi.json">
+<link rel="icon" href="setlokasi-icon-192.png">
+<link rel="apple-touch-icon" href="setlokasi-icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!--
+  SET LOKASI MOBILE -- petugas pemegang hak SL netapin titik geofence absensi dari HP di site.
+  Sesuai Manual Operasional Set Lokasi Fusion4 (Draft 0.1) + mockup-nya.
+
+  Alur: PIN -> Tujuan (Lokasi Baru / Update Titik) + Cara (Titik Tengah / Keliling Area)
+        -> ambil titik -> Detail & Simpan -> Lokasi Aktif.
+
+  Offline:
+  - Login online sekali -> server kasih token sesi 30 hari; HP nyimpen token + hash PIN (PBKDF2),
+    BUKAN PIN-nya. Offline cuma nerima PIN orang yang pernah login online di HP ini.
+  - Status: SIAP OFFLINE (sync <= 3 hari), PERLU SYNC (3-7 hari), BELUM SIAP (> 7 hari / belum ada).
+  - Simpan pas offline -> antrian IndexedDB, dikirim otomatis begitu ada sinyal (RPC setlokasi_simpan,
+    idempotent per clientId). Waktu ambil titik tetap waktu asli di lapangan.
+  - Sampel GPS dengan akurasi > 25 m dibuang. Hijau <= 15 m, kuning 15-25 m.
+-->
+<style>
+:root{
+  --navy:#23345F; --navy-2:#1B2849; --red:#D93030; --red-d:#B92424; --green:#1F7A4D; --green-bg:#E3F0E8;
+  --amber:#B7791F; --amber-bg:#FBF1DE; --red-bg:#FBE6E4;
+  --bg:#F0F2F6; --card:#FFFFFF; --line:#D6DAE4; --line-2:#E4E7EE; --text:#141B2D; --muted:#5A6275; --muted-2:#8A91A3;
+  --cond:'Barlow Condensed','Arial Narrow',sans-serif; --body:'Barlow',-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:16px;min-height:100%}
+body{display:flex;justify-content:center}
+.app{width:100%;max-width:480px;min-height:100vh;min-height:100dvh;position:relative;background:var(--bg)}
+.screen{display:none;min-height:100vh;min-height:100dvh;flex-direction:column}
+.screen.active{display:flex}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button:disabled{cursor:not-allowed}
+.mono{font-family:var(--mono)}
+
+/* ---------- header ---------- */
+.hdr{background:var(--navy);color:#fff;padding:18px 20px 22px;padding-top:max(18px,env(safe-area-inset-top))}
+.hdr .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:#C9D1E4;display:flex;justify-content:space-between;align-items:center}
+.hdr .ver{background:var(--navy-2);border-radius:6px;padding:4px 9px;letter-spacing:.04em;font-size:11px}
+.hdr h1{font-family:var(--cond);font-weight:700;font-size:34px;letter-spacing:.01em;margin-top:8px;line-height:1}
+.hdr-bar{background:var(--navy);color:#fff;display:flex;align-items:center;gap:14px;padding:16px 18px;padding-top:max(16px,env(safe-area-inset-top));min-height:72px}
+.hdr-bar .back{width:36px;height:36px;display:grid;place-items:center;border-radius:8px;color:#fff}
+.hdr-bar .back:active{background:var(--navy-2)}
+.hdr-bar h2{font-family:var(--cond);font-weight:700;font-size:24px;letter-spacing:.01em;flex:1}
+.hdr-bar .step{font-family:var(--mono);font-size:13px;color:#C9D1E4}
+.hdr-user{background:var(--navy);color:#fff;display:flex;align-items:center;gap:12px;padding:16px 18px;padding-top:max(16px,env(safe-area-inset-top))}
+.avatar{width:44px;height:44px;border-radius:50%;background:var(--navy-2);display:grid;place-items:center;font-family:var(--cond);font-weight:700;font-size:19px;flex:none}
+.hdr-user .who{flex:1;min-width:0}
+.hdr-user .who b{display:block;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr-user .who span{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:#C9D1E4}
+.btn-ghost{border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:8px 12px;font-size:14px;color:#fff}
+
+/* ---------- status offline ---------- */
+.sync{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.sync .ic{flex:none}
+.sync .tx{flex:1;min-width:0}
+.sync b{font-family:var(--cond);font-weight:700;font-size:17px;letter-spacing:.02em;display:block}
+.sync span{font-family:var(--mono);font-size:11px;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sync .btn-sync{flex:none;border:1.5px solid currentColor;border-radius:9px;padding:8px 12px;font-weight:600;font-size:14px;background:#fff}
+.sync.ok{background:var(--green-bg);color:var(--green)} .sync.warn{background:var(--amber-bg);color:var(--amber)} .sync.bad{background:var(--red-bg);color:var(--red-d)}
+
+/* ---------- PIN ---------- */
+.pin-wrap{flex:1;display:flex;flex-direction:column;align-items:center;padding:22px 20px 18px}
+.lock{width:68px;height:68px;border-radius:50%;border:2px solid var(--navy);display:grid;place-items:center;color:var(--navy)}
+.pin-wrap h3{font-family:var(--cond);font-weight:700;font-size:25px;margin-top:16px}
+.pin-wrap p.sub{color:var(--muted);text-align:center;font-size:14px;margin-top:8px;line-height:1.45;max-width:300px}
+.pin-boxes{display:grid;grid-template-columns:repeat(6,1fr);gap:9px;width:100%;margin:22px 0 18px}
+.pin-box{aspect-ratio:.85;border:2px solid #C9CEDB;border-radius:10px;display:grid;place-items:center;background:var(--bg)}
+.pin-box.filled{border-color:var(--navy)} .pin-box.filled::after{content:'';width:12px;height:12px;border-radius:50%;background:var(--navy)}
+.pin-box.cur{border-color:var(--red)}
+.pin-box.err{border-color:var(--red);animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;width:100%}
+.key{background:#fff;border-radius:11px;height:54px;font-family:var(--mono);font-size:22px;color:var(--text)}
+.key:active{background:var(--line-2)}
+.key.del{background:var(--line-2);display:grid;place-items:center;color:var(--navy)}
+.key.blank{visibility:hidden}
+.pin-msg{min-height:20px;font-size:13.5px;color:var(--red-d);text-align:center;margin-top:12px;font-weight:500}
+.pin-foot{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:10px;text-align:center}
+
+/* ---------- tombol utama ---------- */
+.btn-main{display:block;width:100%;border-radius:12px;padding:15px 16px;font-family:var(--cond);font-weight:700;font-size:21px;letter-spacing:.04em;text-transform:uppercase}
+.btn-red{background:var(--red);color:#fff} .btn-red:active{background:var(--red-d)}
+.btn-navy{background:var(--navy);color:#fff} .btn-navy:active{background:var(--navy-2)}
+.btn-line{background:#fff;color:var(--navy);border:2px solid var(--navy)}
+.btn-main:disabled{background:#C3C8D4;color:#fff;border-color:#C3C8D4}
+.foot{padding:12px 20px 20px;padding-bottom:max(20px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;position:sticky;bottom:0;background:var(--bg);z-index:5}
+.foot-row{display:flex;gap:10px}
+.foot-row .btn-line{flex:0 0 34%} .foot-row .btn-red{flex:1}
+.foot small{display:block;text-align:center;font-size:13px;color:var(--muted)}
+
+/* ---------- konten ---------- */
+.body{flex:1;padding:18px 18px 8px;display:flex;flex-direction:column;gap:12px}
+.lbl{font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-top:4px}
+.card{background:var(--card);border-radius:13px;padding:14px 16px}
+.tujuan{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.opt{background:#fff;border:2px solid var(--line-2);border-radius:13px;padding:14px;text-align:left;color:var(--text)}
+.opt.on{border-color:var(--navy)}
+.opt svg{color:var(--navy)}
+.opt b{display:block;font-family:var(--cond);font-weight:700;font-size:21px;margin-top:8px}
+.opt span{display:block;color:var(--muted);font-size:13.5px;line-height:1.35;margin-top:4px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--line-2);border-radius:11px;padding:4px}
+.seg button{padding:11px 6px;border-radius:8px;font-weight:600;font-size:16px;color:var(--navy)}
+.seg button.on{background:var(--navy);color:#fff}
+.desc{display:flex;gap:12px;align-items:flex-start;font-size:14.5px;line-height:1.45}
+.desc svg{flex:none;margin-top:2px}
+.gps{display:flex;align-items:center;gap:10px}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--muted-2);flex:none}
+.dot.g{background:var(--green)} .dot.y{background:#D69E2E} .dot.r{background:var(--red)}
+.gps b{flex:1;font-weight:600}
+.gps .acc{font-family:var(--mono);font-size:14px}
+.acc.g{color:var(--green)} .acc.y{color:var(--amber)} .acc.r{color:var(--red-d)}
+.picker input{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:15px;background:#fff}
+.picker ul{list-style:none;max-height:230px;overflow:auto;margin-top:8px}
+.picker li{padding:10px 4px;border-bottom:1px solid var(--line-2);display:flex;justify-content:space-between;gap:8px;font-size:14.5px}
+.picker li:last-child{border-bottom:none}
+.picker li.on{background:#EEF1F8;border-radius:8px;padding:10px 8px}
+.picker li small{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}
+.picker .empty{color:var(--muted);font-size:13.5px;padding:8px 0}
+.queue-note{background:var(--amber-bg);color:var(--amber);border-radius:11px;padding:10px 14px;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.queue-note.bad{background:var(--red-bg);color:var(--red-d)}
+.queue-note button{font-weight:600;text-decoration:underline}
+
+/* ---------- peta ---------- */
+.map{position:relative;background:#E3E7EE;height:min(330px,38vh);min-height:240px;overflow:hidden}
+.map svg{display:block;width:100%;height:100%}
+.legend{position:absolute;left:12px;top:12px;background:#fff;border-radius:9px;padding:8px 11px;font-size:13px;line-height:1.6}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+.chip{position:absolute;right:12px;bottom:12px;background:var(--text);color:#fff;font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:7px}
+.scale{position:absolute;left:12px;bottom:12px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.acc-card{display:flex;justify-content:space-between;align-items:center}
+.acc-card .big{font-family:var(--mono);font-weight:500;font-size:38px;line-height:1.1;margin-top:4px}
+.badge{font-family:var(--cond);font-weight:700;font-size:17px;letter-spacing:.05em;border-radius:7px;padding:7px 12px;color:#fff;background:var(--muted-2)}
+.badge.g{background:var(--green)} .badge.y{background:#C68A1D} .badge.r{background:var(--red)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:#fff;border-radius:11px;padding:10px 12px}
+.stat span{display:block;font-size:13px;color:var(--muted)}
+.stat b{display:block;font-family:var(--mono);font-weight:500;font-size:20px;margin-top:2px;white-space:nowrap}
+.bar{height:7px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--navy);width:0;transition:width .3s}
+.tip{color:var(--muted);font-size:14px;line-height:1.45}
+.pojok-list .row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2);font-family:var(--mono);font-size:14px}
+.pojok-list .row:last-child{border-bottom:none}
+.pojok-list .ok{color:var(--green);font-family:var(--cond);font-weight:700;font-size:15px}
+.pojok-list .hapus{color:var(--red);font-weight:600;font-size:15px}
+.pojok-list .empty{color:var(--muted);font-size:13.5px;padding:4px 0}
+
+/* ---------- detail ---------- */
+.locked{display:flex;gap:14px;align-items:center}
+.locked svg{flex:none;border-radius:9px}
+.locked .lab{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--muted)}
+.locked .co{font-family:var(--mono);font-size:14.5px;margin-top:3px}
+.locked .q{color:var(--green);font-weight:600;font-size:13.5px;margin-top:3px}
+.field label{display:block;font-weight:600;font-size:15px;margin-bottom:6px}
+.field input,.field select{width:100%;padding:13px 13px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:16px;background:#fff;color:var(--text)}
+.field input:focus,.field select:focus{outline:none;border-color:var(--navy)}
+.field input.code{font-family:var(--mono);text-transform:uppercase}
+.field .hint{font-size:12.5px;color:var(--muted);margin-top:5px}
+.radius-top{display:flex;justify-content:space-between;align-items:baseline}
+.radius-top b{font-weight:600;font-size:15px}
+.radius-top span{font-family:var(--mono);font-size:30px;font-weight:500;color:var(--navy)}
+input[type=range]{width:100%;margin:14px 0 6px;accent-color:var(--navy);height:28px}
+.range-lim{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.info{border-radius:11px;padding:10px 14px;font-size:13.5px;line-height:1.45}
+.info.warn{background:var(--amber-bg);color:#8A5A12} .info.err{background:var(--red-bg);color:var(--red-d)} .info.note{background:#E8ECF5;color:var(--navy)}
+
+/* ---------- selesai ---------- */
+.done{flex:1;display:flex;flex-direction:column;align-items:center;padding:30px 14px 8px}
+.done .circle{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;color:#fff;background:var(--green)}
+.done .circle.wait{background:#C68A1D}
+.done h3{font-family:var(--cond);font-weight:700;font-size:32px;margin-top:18px;text-align:center}
+.done p{color:var(--muted);text-align:center;font-size:15px;line-height:1.45;margin-top:8px;max-width:320px}
+.sum{width:100%;background:#fff;border-radius:14px;padding:4px 16px;margin-top:22px}
+.sum .r{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-2);font-size:15px}
+.sum .r:last-child{border-bottom:none}
+.sum .r span{color:var(--muted)}
+.sum .r b{text-align:right;font-weight:600}
+.sum .r b.m{font-family:var(--mono);font-weight:400}
+.done .note{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:12px}
+
+/* ---------- riwayat (sheet) ---------- */
+.sheet-bg{position:fixed;inset:0;background:rgba(20,27,45,.45);display:none;z-index:20}
+.sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:480px;max-height:80vh;background:var(--bg);border-radius:18px 18px 0 0;z-index:21;display:none;flex-direction:column}
+.sheet.open,.sheet-bg.open{display:flex}
+.sheet-h{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}
+.sheet-h b{font-family:var(--cond);font-weight:700;font-size:22px}
+.sheet-b{overflow:auto;padding:12px 16px 24px;display:flex;flex-direction:column;gap:10px}
+.qi{background:#fff;border-radius:12px;padding:12px 14px}
+.qi .t{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.qi .t b{font-weight:600}
+.qi small{display:block;font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px}
+.st{font-family:var(--cond);font-weight:700;font-size:13px;letter-spacing:.04em;border-radius:6px;padding:3px 8px;white-space:nowrap}
+.st.p{background:var(--amber-bg);color:var(--amber)} .st.s{background:var(--green-bg);color:var(--green)} .st.x{background:var(--red-bg);color:var(--red-d)}
+.qi .msg{font-size:13px;color:var(--red-d);margin-top:6px}
+.qi .act{display:flex;gap:14px;margin-top:8px}
+.qi .act button{font-weight:600;font-size:14px;color:var(--navy);text-decoration:underline}
+
+.toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);background:var(--text);color:#fff;padding:11px 16px;border-radius:10px;font-size:14px;z-index:40;max-width:92%;display:none;box-shadow:0 6px 18px rgba(0,0,0,.2)}
+.toast.err{background:var(--red-d)} .toast.ok{background:var(--green)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ==================== LANGKAH 1: PIN ==================== -->
+<section class="screen active" id="scrPin">
+  <header class="hdr">
+    <div class="eyebrow"><span>FUSION4 SMARTGATE</span><span class="ver">v1.0</span></div>
+    <h1>SET LOKASI</h1>
+  </header>
+  <div class="sync" id="syncBar">
+    <svg class="ic" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path id="syncIcPath" d="M8 12.5l2.5 2.5L16 9.5"/></svg>
+    <div class="tx"><b id="syncTitle">MEMERIKSA...</b><span id="syncSub">-</span></div>
+    <button class="btn-sync" id="btnSync" type="button">Sync ulang</button>
+  </div>
+  <div class="pin-wrap">
+    <div class="lock"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+    <h3>Masukkan PIN Akses</h3>
+    <p class="sub">Khusus pemegang hak Set Lokasi. Titik yang disimpan langsung aktif untuk geofence absensi.</p>
+    <div class="pin-boxes" id="pinBoxes"></div>
+    <div class="keypad" id="keypad"></div>
+    <div class="pin-msg" id="pinMsg"></div>
+    <div style="width:100%;margin-top:14px"><button class="btn-main btn-red" id="btnMasuk" type="button">MASUK</button></div>
+    <div class="pin-foot">Salah PIN 5x = akses dikunci 15 menit</div>
+  </div>
+</section>
+
+<!-- ==================== LANGKAH 2: TUJUAN & CARA ==================== -->
+<section class="screen" id="scrMenu">
+  <header class="hdr-user">
+    <div class="avatar" id="avatar">--</div>
+    <div class="who"><b id="userNama">-</b><span id="userSub">HAK: SET LOKASI</span></div>
+    <button class="btn-ghost" id="btnKeluar" type="button">Keluar</button>
+  </header>
+  <div class="body">
+    <div class="queue-note hidden" id="queueNote"><span id="queueNoteTx"></span><button type="button" data-open-riwayat>Lihat</button></div>
+
+    <div class="lbl">1 · Tujuan</div>
+    <div class="tujuan">
+      <button class="opt on" type="button" data-tujuan="BARU">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><path d="M12 7v6M9 10h6"/></svg>
+        <b>Lokasi Baru</b><span>Daftarkan site / titik absen baru</span>
+      </button>
+      <button class="opt" type="button" data-tujuan="UPDATE">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><path d="M14.5 8.5A3 3 0 1 0 15 11"/><path d="M15 7v2h-2"/></svg>
+        <b>Update Titik</b><span>Geser titik lokasi yang sudah ada</span>
+      </button>
+    </div>
+
+    <div class="card picker hidden" id="picker">
+      <input type="search" id="pickerSearch" placeholder="Cari nama / kode lokasi..." autocomplete="off">
+      <ul id="pickerList"></ul>
+    </div>
+
+    <div class="lbl">2 · Cara ambil titik</div>
+    <div class="seg">
+      <button class="on" type="button" data-mode="TENGAH">Titik Tengah</button>
+      <button type="button" data-mode="KELILING">Keliling Area</button>
+    </div>
+    <div class="card desc">
+      <svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" fill="none" stroke="#23345F" stroke-width="1.2" stroke-dasharray="2.5 2.5"/><circle cx="13" cy="13" r="2.6" fill="#D93030"/></svg>
+      <span id="modeDesc">Berdiri di tengah site, sistem ambil titik lalu kamu atur radius. Cocok untuk site kecil–sedang.</span>
+    </div>
+
+    <div class="lbl">GPS perangkat</div>
+    <div class="card gps"><span class="dot" id="gpsDot"></span><b id="gpsText">Mencari sinyal GPS...</b><span class="acc" id="gpsAcc"></span></div>
+    <div style="flex:1"></div>
+  </div>
+  <div class="foot">
+    <button class="btn-main btn-red" id="btnMulai" type="button">MULAI AMBIL TITIK</button>
+    <small><button type="button" data-open-riwayat style="text-decoration:underline;color:var(--muted);font-size:13px">Riwayat & antrian di HP ini</button></small>
+  </div>
+</section>
+
+<!-- ==================== LANGKAH 3A: TITIK TENGAH ==================== -->
+<section class="screen" id="scrTengah">
+  <header class="hdr-bar">
+    <button class="back" type="button" data-back="scrMenu" aria-label="Kembali"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h2>AMBIL TITIK GPS</h2><span class="step">2/3</span>
+  </header>
+  <div class="map">
+    <svg id="mapTengah" viewBox="0 0 390 330" preserveAspectRatio="xMidYMid slice"></svg>
+    <div class="legend"><div><i style="background:var(--navy)"></i>Sampel dipakai</div><div><i style="background:#B9BFCC"></i>Dibuang (&gt;25 m)</div></div>
+    <div class="chip" id="chipRadius">Radius awal 100 m</div>
+    <div class="scale" id="scaleTengah"></div>
+  </div>
+  <div class="body">
+    <div class="card acc-card">
+      <div><div class="lbl" style="margin:0">Akurasi rata-rata</div><div class="big acc" id="tAcc">±– m</div></div>
+      <span class="badge" id="tBadge">MENUNGGU</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>Sampel</span><b id="tSampel">0/20</b></div>
+      <div class="stat"><span>Sebaran</span><b id="tSebaran">– m</b></div>
+      <div class="stat"><span>Durasi</span><b id="tDurasi">00:00</b></div>
+    </div>
+    <div class="bar"><i id="tBar"></i></div>
+    <p class="tip" id="tTip">Tetap diam di titik. Hindari berdiri di bawah atap atau dekat dinding tinggi.</p>
+  </div>
+  <div class="foot"><div class="foot-row">
+    <button class="btn-main btn-line" id="btnUlangi" type="button">ULANGI</button>
+    <button class="btn-main btn-red" id="btnKunci" type="button" disabled>KUNCI TITIK</button>
+  </div></div>
+</section>
+
+<!-- ==================== LANGKAH 3B: KELILING AREA ==================== -->
+<section class="screen" id="scrKeliling">
+  <header class="hdr-bar">
+    <button class="back" type="button" data-back="scrMenu" aria-label="Kembali"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h2>KELILING AREA</h2><span class="step">2/3</span>
+  </header>
+  <div class="map">
+    <svg id="mapKeliling" viewBox="0 0 390 330" preserveAspectRatio="xMidYMid slice"></svg>
+    <div class="legend"><div><i style="background:var(--navy)"></i>Pojok ditandai</div><div><i style="background:var(--green)"></i>Posisi kamu</div><div><b style="color:var(--red);margin-right:6px">+</b>Titik tengah (otomatis)</div></div>
+    <div class="scale" id="scaleKeliling"></div>
+  </div>
+  <div class="body">
+    <div class="stats">
+      <div class="stat"><span>Pojok</span><b id="kPojok">0</b></div>
+      <div class="stat"><span>Radius hasil</span><b id="kRadius">– m</b></div>
+      <div class="stat"><span>Akurasi</span><b class="acc" id="kAcc">±– m</b></div>
+    </div>
+    <div class="card pojok-list" id="kList"></div>
+    <p class="tip">Jalan ke tiap pojok batas site, tunggu akurasi hijau, lalu tap Tandai. Minimal 3 pojok. Radius = jarak pojok terjauh + buffer 20 m.</p>
+  </div>
+  <div class="foot">
+    <button class="btn-main btn-navy" id="btnTandai" type="button">+ TANDAI POJOK KE-1</button>
+    <button class="btn-main btn-red" id="btnHitung" type="button" disabled>SELESAI &amp; HITUNG AREA</button>
+  </div>
+</section>
+
+<!-- ==================== LANGKAH 4: DETAIL ==================== -->
+<section class="screen" id="scrDetail">
+  <header class="hdr-bar">
+    <button class="back" type="button" id="btnBackDetail" aria-label="Kembali"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h2>DETAIL LOKASI</h2><span class="step">3/3</span>
+  </header>
+  <div class="body">
+    <div class="card locked">
+      <svg width="84" height="84" viewBox="0 0 84 84"><rect width="84" height="84" fill="#E3E7EE"/><path d="M0 30 L84 26 M30 0 L34 84" stroke="#fff" stroke-width="5"/><circle cx="42" cy="44" r="27" fill="rgba(35,52,95,.08)" stroke="#23345F" stroke-width="1.4" stroke-dasharray="4 3"/><circle cx="42" cy="44" r="5.5" fill="#D93030" stroke="#fff" stroke-width="2"/></svg>
+      <div>
+        <div class="lab">TITIK TERKUNCI</div>
+        <div class="co" id="dLat">LAT –</div>
+        <div class="co" id="dLng">LNG –</div>
+        <div class="q" id="dQual">–</div>
+      </div>
+    </div>
+    <div class="info note hidden" id="dGeser"></div>
+    <div class="info warn hidden" id="dWarn"></div>
+    <div class="field">
+      <label for="fKode">Kode Lokasi</label>
+      <input class="code" id="fKode" maxlength="30" placeholder="AUTO / KODE" autocomplete="off">
+      <div class="hint" id="fKodeHint">Kosongkan = otomatis (LOK-xxx).</div>
+    </div>
+    <div class="field">
+      <label for="fNama">Nama Lokasi</label>
+      <input id="fNama" maxlength="80" placeholder="Contoh: Gudang Utama Site" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="fProject">Project</label>
+      <select id="fProject"></select>
+    </div>
+    <div class="card">
+      <div class="radius-top"><b>Radius Geofence</b><span id="fRadiusVal">100 m</span></div>
+      <input type="range" id="fRadius" min="50" max="300" step="5" value="100">
+      <div class="range-lim"><span>50 m</span><span>300 m</span></div>
+    </div>
+    <div class="info err hidden" id="dErr"></div>
+  </div>
+  <div class="foot">
+    <button class="btn-main btn-red" id="btnSimpan" type="button">SIMPAN &amp; AKTIFKAN</button>
+    <small id="dFootNote">Langsung dipakai untuk geofence absensi</small>
+  </div>
+</section>
+
+<!-- ==================== LANGKAH 5: LOKASI AKTIF ==================== -->
+<section class="screen" id="scrDone">
+  <header class="hdr-bar"><h2 style="font-size:26px">SET LOKASI</h2></header>
+  <div class="done">
+    <div class="circle" id="doneCircle"></div>
+    <h3 id="doneTitle">LOKASI AKTIF</h3>
+    <p id="doneSub">Karyawan sudah bisa absen di titik ini mulai sekarang.</p>
+    <div class="sum" id="doneSum"></div>
+    <div class="note">Tercatat di riwayat lokasi</div>
+  </div>
+  <div class="foot">
+    <button class="btn-main btn-navy" id="btnLain" type="button">SET LOKASI LAIN</button>
+    <button class="btn-main btn-line" id="btnSelesai" type="button">SELESAI</button>
+  </div>
+</section>
+
+</div>
+
+<!-- Riwayat & antrian -->
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-h"><b>Riwayat di HP ini</b><button type="button" id="btnTutupSheet" style="font-weight:600;color:var(--navy)">Tutup</button></div>
+  <div class="sheet-b" id="sheetBody"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ================= KONFIG =================
+const SL_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
+const SL_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
+const ACC_BUANG = 25;          // sampel > 25 m dibuang
+const ACC_HIJAU = 15;          // <= 15 m = AKURAT
+const TARGET_SAMPEL = 20;
+const MIN_SAMPEL_KUNCI = 8;
+const BUFFER_KELILING = 20;    // m
+const R_MIN = 50, R_MAX = 300;
+const HARI = 24 * 3600 * 1000;
+const MAX_PROFIL = 5;
+
+// ================= UTIL =================
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = (n) => String(n).padStart(2, '0');
+const fmtWaktu = (d) => { d = new Date(d); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fmtAcc = (a) => (a == null || !isFinite(a)) ? '±– m' : `±${Math.round(a)} m`;
+const accCls = (a) => a == null ? '' : a <= ACC_HIJAU ? 'g' : a <= ACC_BUANG ? 'y' : 'r';
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+
+let toastTimer = null;
+function toast(msg, type = '', ms = 3500) {
+  const el = $('toast');
+  el.textContent = msg; el.className = 'toast ' + type; el.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.style.display = 'none'; }, ms);
+}
+
+// Jarak (m) & proyeksi lokal (m) relatif ke titik acuan.
+function jarak(a, b) {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function keMeter(p, o) {
+  return { x: (p.lng - o.lng) * 111320 * Math.cos(o.lat * Math.PI / 180), y: (p.lat - o.lat) * 110540 };
+}
+
+// ================= RPC =================
+async function rpc(name, params, timeoutMs = 12000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(`${SL_URL}/rest/v1/rpc/${name}`, {
+      method: 'POST', signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', apikey: SL_KEY, Authorization: `Bearer ${SL_KEY}` },
+      body: JSON.stringify(params)
+    });
+  } catch (e) {
+    const err = new Error('Tidak ada koneksi ke server.'); err.network = true; throw err;
+  } finally { clearTimeout(t); }
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    let msg = txt || ('HTTP ' + res.status);
+    try {
+      const j = JSON.parse(txt);
+      msg = j.code === 'PGRST202' ? 'Server belum diperbarui (fungsi Set Lokasi belum terpasang). Hubungi admin.' : (j.message || msg);
+    } catch (e) { /* bukan JSON */ }
+    const err = new Error(msg); err.network = res.status >= 500; throw err;
+  }
+  return res.json();
+}
+
+// ================= INDEXEDDB =================
+let dbP = null;
+function db() {
+  if (dbP) return dbP;
+  dbP = new Promise((resolve, reject) => {
+    const r = indexedDB.open('Fusion4SetLokasiDB', 1);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains('profile')) d.createObjectStore('profile', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('queue')) d.createObjectStore('queue', { keyPath: 'clientId' });
+    };
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  return dbP;
+}
+async function idb(store, mode, fn) {
+  const d = await db();
+  return new Promise((resolve, reject) => {
+    const tx = d.transaction(store, mode);
+    const req = fn(tx.objectStore(store));
+    tx.oncomplete = () => resolve(req ? req.result : undefined);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+const idbAll = (s) => idb(s, 'readonly', (o) => o.getAll());
+const idbGet = (s, k) => idb(s, 'readonly', (o) => o.get(k));
+const idbPut = (s, v) => idb(s, 'readwrite', (o) => o.put(v));
+const idbDel = (s, k) => idb(s, 'readwrite', (o) => o.delete(k));
+
+// ================= PIN HASH (PBKDF2) =================
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function hashPin(pin, saltB64) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64(saltB64), iterations: 150000 }, key, 256);
+  return b64(bits);
+}
+
+function deviceId() {
+  try {
+    let id = localStorage.getItem('sl_device');
+    if (!id) { id = uuid(); localStorage.setItem('sl_device', id); }
+    return id;
+  } catch (e) { return 'nostorage'; }
+}
+
+// Kunci lokal 5x salah / 15 menit (server juga ngunci per HP pas online).
+function lockInfo() { try { return JSON.parse(localStorage.getItem('sl_lock') || '{}'); } catch (e) { return {}; } }
+function setLock(o) { try { localStorage.setItem('sl_lock', JSON.stringify(o)); } catch (e) {} }
+function sisaKunci() { const l = lockInfo(); return l.until && l.until > Date.now() ? l.until - Date.now() : 0; }
+function catatSalah() {
+  const l = lockInfo(); const n = (l.until && l.until <= Date.now() ? 0 : (l.count || 0)) + 1;
+  setLock(n >= 5 ? { count: 0, until: Date.now() + 15 * 60000 } : { count: n });
+  return Math.max(5 - n, 0);
+}
+
+// ================= STATE =================
+const S = {
+  profile: null, viaOffline: false,
+  tujuan: 'BARU', mode: 'TENGAH', target: null,
+  titik: null,          // hasil kunci: {lat,lng,akurasi,sampel,mode,pojok,waktu,radiusSaran}
+  fix: null,            // fix GPS terbaru {lat,lng,acc,t}
+  recent: [],           // fix 8 detik terakhir (buat tandai pojok)
+  tengah: null, keliling: null,
+  fixPerbaikan: null    // clientId antrian ditolak yang lagi diperbaiki
+};
+
+// ================= STATUS OFFLINE =================
+async function renderSyncBar() {
+  const profiles = await idbAll('profile').catch(() => []);
+  const queue = await idbAll('queue').catch(() => []);
+  const pending = queue.filter((q) => q.status === 'pending').length;
+  const newest = profiles.reduce((m, p) => Math.max(m, p.syncedAt || 0), 0);
+  const age = newest ? Date.now() - newest : Infinity;
+  const lengkap = profiles.some((p) => p.syncedAt === newest && Array.isArray(p.lokasi) && p.lokasi.length && Array.isArray(p.projects));
+  let cls, title, sub, icon;
+  if (newest && age <= 3 * HARI && lengkap) { cls = 'ok'; title = 'SIAP OFFLINE'; icon = 'M8 12.5l2.5 2.5L16 9.5'; }
+  else if (newest && age <= 7 * HARI) { cls = 'warn'; title = 'PERLU SYNC'; icon = 'M12 7v6M12 16.5v.5'; }
+  else if (!newest && navigator.onLine) { cls = 'warn'; title = 'PERLU SYNC'; icon = 'M12 7v6M12 16.5v.5'; }
+  else { cls = 'bad'; title = 'BELUM SIAP'; icon = 'M9 9l6 6M15 9l-6 6'; }
+  sub = newest ? `Sync ${fmtWaktu(newest)} · PIN · Lokasi` : 'Belum ada data · masukkan PIN';
+  if (newest && profiles.some((p) => p.expired)) sub = 'Sesi habis — masukkan PIN selagi ada sinyal';
+  if (pending) sub += ` · ${pending} antri`;
+  $('syncBar').className = 'sync ' + cls;
+  $('syncTitle').textContent = title;
+  $('syncSub').textContent = sub;
+  $('syncIcPath').setAttribute('d', icon);
+  $('btnSync').disabled = !navigator.onLine;
+  $('btnSync').style.opacity = navigator.onLine ? 1 : .5;
+}
+
+async function syncSemua(tampilkan) {
+  if (!navigator.onLine) { if (tampilkan) toast('HP sedang offline. Cari sinyal dulu.', 'err'); return; }
+  const profiles = await idbAll('profile');
+  if (!profiles.length) { if (tampilkan) toast('Belum ada data. Masukkan PIN dulu selagi ada sinyal.'); return; }
+  let ok = 0;
+  for (const p of profiles) {
+    try {
+      const r = await rpc('setlokasi_sync', { p_token: p.token });
+      if (r.status === 'OK') {
+        Object.assign(p, { nama: r.nama, lokasi: r.lokasi, projects: r.projects, syncedAt: Date.now(), expiresAt: r.expiresAt, expired: false });
+        await idbPut('profile', p); ok++;
+        if (S.profile && S.profile.id === p.id) S.profile = p;
+      } else if (r.status === 'NO_ACCESS') {
+        await idbDel('profile', p.id);
+      } else if (r.status === 'SESSION_EXPIRED') {
+        p.expired = true; await idbPut('profile', p);
+      }
+    } catch (e) { if (e.network) break; }
+  }
+  await flushQueue();
+  await renderSyncBar();
+  if (tampilkan) toast(ok ? 'Sync selesai. Data offline diperbarui.' : 'Sync gagal / sesi habis. Masukkan PIN lagi.', ok ? 'ok' : 'err');
+}
+
+// ================= PIN =================
+let pin = '';
+function renderPin(err) {
+  const boxes = $('pinBoxes');
+  boxes.innerHTML = '';
+  for (let i = 0; i < 6; i++) {
+    const d = document.createElement('div');
+    d.className = 'pin-box' + (i < pin.length ? ' filled' : '') + (i === pin.length && !err ? ' cur' : '') + (err ? ' err' : '');
+    boxes.appendChild(d);
+  }
+  $('btnMasuk').disabled = pin.length !== 6;
+}
+function buildKeypad() {
+  const kp = $('keypad');
+  ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].forEach((k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    if (k === '') { b.className = 'key blank'; b.tabIndex = -1; }
+    else if (k === 'del') {
+      b.className = 'key del'; b.setAttribute('aria-label', 'Hapus');
+      b.innerHTML = '<svg width="26" height="20" viewBox="0 0 26 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M8 2h15v16H8L1 10z"/><path d="M12 7l6 6M18 7l-6 6"/></svg>';
+      b.onclick = () => { pin = pin.slice(0, -1); $('pinMsg').textContent = ''; renderPin(); };
+    } else {
+      b.className = 'key'; b.textContent = k;
+      b.onclick = () => { if (pin.length < 6) { pin += k; $('pinMsg').textContent = ''; renderPin(); } };
+    }
+    kp.appendChild(b);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!$('scrPin').classList.contains('active')) return;
+    if (/^[0-9]$/.test(e.key) && pin.length < 6) { pin += e.key; renderPin(); }
+    else if (e.key === 'Backspace') { pin = pin.slice(0, -1); renderPin(); }
+    else if (e.key === 'Enter' && pin.length === 6) masuk();
+  });
+}
+
+function pinGagal(msg) {
+  $('pinMsg').textContent = msg;
+  pin = ''; renderPin(true);
+  setTimeout(() => renderPin(), 400);
+}
+
+async function masuk() {
+  if (pin.length !== 6) return;
+  const kunci = sisaKunci();
+  if (kunci) { pinGagal(`Akses dikunci. Coba lagi ${Math.ceil(kunci / 60000)} menit lagi.`); return; }
+  const btn = $('btnMasuk');
+  btn.disabled = true; btn.textContent = 'MEMERIKSA...';
+  const p = pin;
+  try {
+    if (navigator.onLine) {
+      try {
+        const r = await rpc('setlokasi_login', { p_pin: p, p_device: deviceId() });
+        if (r.status === 'OK') { setLock({}); await simpanProfil(r, p); return masukApp(false); }
+        if (r.status === 'LOCKED') { setLock({ count: 0, until: Date.now() + 15 * 60000 }); return pinGagal(r.message); }
+        if (r.status === 'INVALID') { catatSalah(); return pinGagal(`PIN salah. Sisa ${r.sisa} percobaan.`); }
+        return pinGagal(r.message || 'Login gagal.');
+      } catch (e) {
+        if (!e.network) return pinGagal('Gagal: ' + e.message);
+        // sinyal ada tapi server gak kejangkau -> lanjut verifikasi offline
+      }
+    }
+    await masukOffline(p);
+  } finally {
+    btn.textContent = 'MASUK'; renderPin();
+  }
+}
+
+async function simpanProfil(r, p) {
+  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  const prof = {
+    id: r.id, nama: r.nama, token: r.token, expiresAt: r.expiresAt,
+    pinSalt: salt, pinHash: await hashPin(p, salt),
+    lokasi: r.lokasi || [], projects: r.projects || [], syncedAt: Date.now(), lastUsed: Date.now(), expired: false
+  };
+  await idbPut('profile', prof);
+  // Maks 5 orang per HP: buang yang paling lama gak dipakai.
+  const all = (await idbAll('profile')).sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
+  for (const x of all.slice(MAX_PROFIL)) await idbDel('profile', x.id);
+  S.profile = prof;
+}
+
+async function masukOffline(p) {
+  const profiles = await idbAll('profile');
+  if (!profiles.length) return pinGagal('HP offline & belum ada data. Cari sinyal, lalu masukkan PIN.');
+  for (const prof of profiles) {
+    if (await hashPin(p, prof.pinSalt) === prof.pinHash) {
+      if (Date.now() - (prof.syncedAt || 0) > 7 * HARI) return pinGagal('Data offline lebih dari 7 hari. Cari sinyal & Sync ulang.');
+      setLock({});
+      prof.lastUsed = Date.now(); await idbPut('profile', prof);
+      S.profile = prof;
+      return masukApp(true);
+    }
+  }
+  const sisa = catatSalah();
+  pinGagal(sisa ? `PIN salah / belum pernah login di HP ini. Sisa ${sisa} percobaan.` : 'Salah PIN 5x. Akses dikunci 15 menit.');
+}
+
+function masukApp(offline) {
+  S.viaOffline = offline;
+  pin = '';
+  const n = S.profile.nama || '-';
+  $('userNama').textContent = n;
+  $('avatar').textContent = n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '--';
+  updateUserSub();
+  resetPilihan();
+  show('scrMenu');
+  mulaiGPS();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  flushQueue().then(renderQueueNote);
+  renderQueueNote();
+}
+
+function updateUserSub() {
+  $('userSub').textContent = 'HAK: SET LOKASI' + (navigator.onLine ? '' : ' · OFFLINE') + (SIMULASI ? ' · SIMULASI' : '');
+}
+
+function keluar() {
+  S.profile = null; S.titik = null; S.target = null; S.fixPerbaikan = null;
+  stopGPS(); stopTengah();
+  pin = ''; renderPin(); $('pinMsg').textContent = '';
+  show('scrPin');
+  renderSyncBar();
+}
+
+// ================= NAVIGASI =================
+let wakeLock = null;
+function show(id) {
+  document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
+  window.scrollTo(0, 0);
+  const capture = id === 'scrTengah' || id === 'scrKeliling';
+  if (capture && 'wakeLock' in navigator && !wakeLock) navigator.wakeLock.request('screen').then((w) => { wakeLock = w; w.onrelease = () => { wakeLock = null; }; }).catch(() => {});
+  if (!capture && wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+const aktif = (id) => $(id).classList.contains('active');
+
+// ================= GPS =================
+// Mode simulasi buat trial di laptop (gak ada GPS): set-lokasi.html?simulasi=1, CUMA di localhost.
+// Di GitHub Pages mode ini mati, jadi petugas gak bisa malsuin titik. Panah keyboard = geser 5 m.
+const SIMULASI = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && new URLSearchParams(location.search).has('simulasi');
+let simPos = null;
+function mulaiSimulasi() {
+  simPos = { lat: -1.2650, lng: 116.8310 };  // default Balikpapan; diganti posisi asli kalau kebaca
+  navigator.geolocation?.getCurrentPosition((p) => { simPos = { lat: p.coords.latitude, lng: p.coords.longitude }; }, () => {}, { timeout: 5000 });
+  document.addEventListener('keydown', (e) => {
+    if (!simPos || /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || '')) return;
+    const d = { ArrowUp: [5, 0], ArrowDown: [-5, 0], ArrowRight: [0, 5], ArrowLeft: [0, -5] }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    simPos.lat += d[0] / 110540;
+    simPos.lng += d[1] / (111320 * Math.cos(simPos.lat * Math.PI / 180));
+  });
+  return setInterval(() => {
+    const j = () => (Math.random() - 0.5) * 0.00003;
+    onFix({ coords: { latitude: simPos.lat + j(), longitude: simPos.lng + j(), accuracy: Math.random() < 0.1 ? 40 : 5 + Math.random() * 5 }, timestamp: Date.now() });
+  }, 1000);
+}
+
+let watchId = null;
+function mulaiGPS() {
+  if (watchId != null) return;
+  if (SIMULASI) { watchId = 'sim:' + mulaiSimulasi(); return; }
+  if (!('geolocation' in navigator)) { setGpsCard('r', 'GPS tidak didukung HP ini', ''); return; }
+  watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+}
+function stopGPS() {
+  if (typeof watchId === 'string') clearInterval(Number(watchId.slice(4)));
+  else if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  watchId = null; S.fix = null; S.recent = [];
+}
+function onFix(pos) {
+  const f = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy, t: pos.timestamp || Date.now() };
+  if (S.fix && S.fix.t === f.t) return;
+  S.fix = f;
+  S.recent.push(f);
+  const batas = Date.now() - 8000;
+  S.recent = S.recent.filter((x) => x.t >= batas);
+  const c = accCls(f.acc);
+  setGpsCard(c, SIMULASI ? 'GPS SIMULASI (localhost)' : 'GPS aktif', fmtAcc(f.acc));
+  if (aktif('scrMenu')) renderPicker();
+  if (aktif('scrTengah')) tambahSampel(f);
+  if (aktif('scrKeliling')) renderKeliling();
+}
+function onFixErr(err) {
+  if (err.code === 1) setGpsCard('r', 'Izin lokasi ditolak', '');
+  else if (err.code === 3) setGpsCard('y', 'Mencari sinyal GPS...', '');
+  else setGpsCard('r', 'GPS mati / tidak terbaca', '');
+}
+function setGpsCard(cls, text, acc) {
+  $('gpsDot').className = 'dot ' + cls;
+  $('gpsText').textContent = text;
+  $('gpsAcc').textContent = acc;
+  $('gpsAcc').className = 'acc ' + cls;
+}
+
+// ================= MENU =================
+function resetPilihan() {
+  S.tujuan = 'BARU'; S.mode = 'TENGAH'; S.target = null; S.titik = null; S.fixPerbaikan = null;
+  $('pickerSearch').value = '';
+  renderPilihan();
+}
+const DESC_MODE = {
+  TENGAH: 'Berdiri di tengah site, sistem ambil titik lalu kamu atur radius. Cocok untuk site kecil–sedang.',
+  KELILING: 'Jalan ke tiap pojok batas site dan tandai satu per satu (min. 3). Titik tengah & radius dihitung otomatis. Cocok untuk site luas.'
+};
+function renderPilihan() {
+  document.querySelectorAll('[data-tujuan]').forEach((b) => b.classList.toggle('on', b.dataset.tujuan === S.tujuan));
+  document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.mode));
+  $('modeDesc').textContent = DESC_MODE[S.mode];
+  $('picker').classList.toggle('hidden', S.tujuan !== 'UPDATE');
+  if (S.tujuan === 'UPDATE') renderPicker();
+  $('btnMulai').disabled = S.tujuan === 'UPDATE' && !S.target;
+}
+function renderPicker() {
+  if (S.tujuan !== 'UPDATE' || !S.profile) return;
+  const kw = $('pickerSearch').value.trim().toLowerCase();
+  let rows = (S.profile.lokasi || []).filter((l) => !kw || `${l.nama} ${l.kode || ''}`.toLowerCase().includes(kw));
+  if (S.fix) {
+    rows = rows.map((l) => ({ ...l, _d: l.lat != null ? jarak(S.fix, l) : Infinity })).sort((a, b) => a._d - b._d);
+  }
+  const ul = $('pickerList');
+  if (!rows.length) { ul.innerHTML = '<li class="empty">Lokasi tidak ditemukan.</li>'; return; }
+  ul.innerHTML = rows.slice(0, 60).map((l) => {
+    const d = l._d != null && isFinite(l._d) ? (l._d < 1000 ? `${Math.round(l._d)} m` : `${(l._d / 1000).toFixed(1)} km`) : '';
+    return `<li class="${S.target && S.target.id === l.id ? 'on' : ''}" data-id="${l.id}"><span>${esc(l.nama)}</span><small>${esc(l.kode || '')}${d ? ' · ' + d : ''}</small></li>`;
+  }).join('');
+}
+
+// ================= 3A TITIK TENGAH =================
+let tengahTimer = null;
+function mulaiTengah() {
+  S.tengah = { samples: [], start: Date.now(), beku: false };
+  const rAwal = S.tujuan === 'UPDATE' && S.target ? S.target.radius : 100;
+  $('chipRadius').textContent = `Radius awal ${rAwal} m`;
+  clearInterval(tengahTimer);
+  tengahTimer = setInterval(renderTengah, 1000);
+  if (S.fix && Date.now() - S.fix.t < 3000) tambahSampel(S.fix);
+  renderTengah();
+}
+function stopTengah() { clearInterval(tengahTimer); tengahTimer = null; }
+function tambahSampel(f) {
+  const T = S.tengah;
+  if (!T || T.beku) return;
+  if (T.samples.some((s) => s.t === f.t)) return;
+  T.samples.push({ ...f, used: f.acc <= ACC_BUANG });
+  if (T.samples.filter((s) => s.used).length >= TARGET_SAMPEL) T.beku = true;
+  renderTengah();
+}
+function hasilTengah() {
+  const used = (S.tengah?.samples || []).filter((s) => s.used);
+  if (!used.length) return null;
+  let w = 0, lat = 0, lng = 0;
+  used.forEach((s) => { const k = 1 / (s.acc * s.acc); w += k; lat += s.lat * k; lng += s.lng * k; });
+  const c = { lat: lat / w, lng: lng / w };
+  const acc = used.reduce((a, s) => a + s.acc, 0) / used.length;
+  const sebaran = Math.sqrt(used.reduce((a, s) => a + jarak(c, s) ** 2, 0) / used.length);
+  return { ...c, acc, sebaran, n: used.length };
+}
+function renderTengah() {
+  const T = S.tengah; if (!T) return;
+  const h = hasilTengah();
+  if (T.beku && !T.endAt) T.endAt = Date.now();
+  const dur = Math.floor(((T.endAt || Date.now()) - T.start) / 1000);
+  $('tDurasi').textContent = `${pad(Math.floor(dur / 60))}:${pad(dur % 60)}`;
+  const n = h ? h.n : 0;
+  $('tSampel').textContent = `${n}/${TARGET_SAMPEL}`;
+  $('tBar').style.width = `${Math.min(100, n / TARGET_SAMPEL * 100)}%`;
+  $('tSebaran').textContent = h ? `${h.sebaran.toFixed(1)} m` : '– m';
+  // Belum ada sampel terpakai tapi ada bacaan -> tampilkan akurasi bacaan terakhir (merah) biar jelas kenapa nunggu.
+  const terakhir = T.samples.length ? T.samples[T.samples.length - 1] : null;
+  const accEl = $('tAcc');
+  const badge = $('tBadge');
+  if (h) {
+    accEl.textContent = fmtAcc(h.acc); accEl.className = 'big acc ' + accCls(h.acc);
+    if (h.acc <= ACC_HIJAU) { badge.className = 'badge g'; badge.textContent = 'AKURAT'; }
+    else { badge.className = 'badge y'; badge.textContent = 'CUKUP'; }
+  } else if (terakhir) {
+    accEl.textContent = terakhir.acc >= 1000 ? `±${(terakhir.acc / 1000).toFixed(1)} km` : fmtAcc(terakhir.acc);
+    accEl.className = 'big acc r'; badge.className = 'badge r'; badge.textContent = 'KURANG';
+  } else {
+    accEl.textContent = '±– m'; accEl.className = 'big acc'; badge.className = 'badge'; badge.textContent = 'MENUNGGU';
+  }
+  $('btnKunci').disabled = !(h && h.n >= MIN_SAMPEL_KUNCI && h.acc <= ACC_BUANG);
+  const buang = T.samples.length - n;
+  let tip = 'Tetap diam di titik. Hindari berdiri di bawah atap atau dekat dinding tinggi.';
+  if (!T.samples.length && dur > 20) tip = 'Belum ada bacaan GPS. Pastikan GPS & izin lokasi aktif. Offline, penguncian awal bisa 1–2 menit.';
+  else if (!n && terakhir && terakhir.acc > 100) tip = `Akurasi cuma ${accEl.textContent} — ini lokasi perkiraan WiFi/jaringan, bukan GPS. Pakai HP dengan GPS aktif (mode akurasi tinggi) di area terbuka.`;
+  else if (n < MIN_SAMPEL_KUNCI && buang) tip = `${buang} bacaan dibuang (>25 m). Pindah ke area terbuka, jauhi atap & dinding.`;
+  else if (T.beku) tip = 'Sampel cukup. Tekan KUNCI TITIK, atau ULANGI kalau ragu.';
+  $('tTip').textContent = tip;
+  gambarTengah(h);
+}
+function svgGrid() {
+  return `<defs><pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#D3D8E2" stroke-width="1"/></pattern></defs><rect width="390" height="330" fill="url(#g)"/>`;
+}
+function gambarTengah(h) {
+  const svg = $('mapTengah');
+  const T = S.tengah;
+  const radius = S.tujuan === 'UPDATE' && S.target ? S.target.radius : 100;
+  const o = h || (T.samples[0]) || S.fix;
+  const cx = 195, cy = 165;
+  let out = svgGrid();
+  if (!o) { svg.innerHTML = out + `<text x="195" y="170" text-anchor="middle" font-family="Barlow" font-size="15" fill="#5A6275">Menunggu sinyal GPS...</text>`; $('scaleTengah').textContent = ''; return; }
+  const sc = 135 / radius; // px per meter: lingkaran radius = 135 px
+  $('scaleTengah').textContent = `kotak ≈ ${Math.round(40 / sc)} m`;
+  out += `<circle cx="${cx}" cy="${cy}" r="${radius * sc}" fill="rgba(35,52,95,.07)" stroke="#23345F" stroke-width="2" stroke-dasharray="7 6"/>`;
+  // Sebaran sampel cuma beberapa meter -> digambar pakai zoom sendiri (skematik) biar gak ketutup
+  // titik merah: sampel terjauh ~42 px dari tengah, tetap di dalam lingkaran radius.
+  const sampel = T.samples.slice(-60).map((s) => ({ s, m: keMeter(s, o) }));
+  const jauh = Math.max(1, ...sampel.map(({ m }) => Math.hypot(m.x, m.y)));
+  const scS = Math.min(Math.max(sc, 42 / jauh), 120 / jauh);
+  if (h) out += `<circle cx="${cx}" cy="${cy}" r="${Math.min(Math.max(h.acc * sc, 32), 120)}" fill="rgba(31,122,77,.18)" stroke="#1F7A4D" stroke-width="2.5"/>`;
+  sampel.forEach(({ s, m }) => {
+    const x = cx + m.x * scS, y = cy - m.y * scS;
+    out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${s.used ? '#23345F' : '#B9BFCC'}"/>`;
+  });
+  if (h) out += `<circle cx="${cx}" cy="${cy}" r="11" fill="#D93030" stroke="#fff" stroke-width="4"/>`;
+  svg.innerHTML = out;
+}
+function kunciTengah() {
+  const h = hasilTengah(); if (!h) return;
+  S.titik = {
+    lat: h.lat, lng: h.lng, akurasi: Math.round(h.acc * 10) / 10, sampel: h.n, mode: 'TENGAH', pojok: null,
+    waktu: new Date().toISOString(), radiusSaran: S.tujuan === 'UPDATE' && S.target ? S.target.radius : 100
+  };
+  stopTengah();
+  bukaDetail('scrTengah');
+}
+
+// ================= 3B KELILING AREA =================
+function mulaiKeliling() { S.keliling = { pojok: [] }; renderKeliling(); }
+function hitungArea(pojok) {
+  if (pojok.length < 3) return null;
+  const c = { lat: pojok.reduce((a, p) => a + p.lat, 0) / pojok.length, lng: pojok.reduce((a, p) => a + p.lng, 0) / pojok.length };
+  const maxD = Math.max(...pojok.map((p) => jarak(c, p)));
+  const r = Math.ceil((maxD + BUFFER_KELILING) / 5) * 5;
+  return { ...c, maxD, radiusAsli: r, radius: Math.min(Math.max(r, R_MIN), R_MAX) };
+}
+function tandaiPojok() {
+  const bagus = S.recent.filter((f) => f.acc <= ACC_BUANG && Date.now() - f.t < 6000);
+  if (!bagus.length) { toast('Akurasi belum cukup (>25 m). Tunggu sampai hijau.', 'err'); return; }
+  let w = 0, lat = 0, lng = 0;
+  bagus.forEach((f) => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
+  const acc = bagus.reduce((a, f) => a + f.acc, 0) / bagus.length;
+  S.keliling.pojok.push({ lat: lat / w, lng: lng / w, acc: Math.round(acc * 10) / 10, t: new Date().toISOString() });
+  if (navigator.vibrate) navigator.vibrate(60);
+  renderKeliling();
+}
+function renderKeliling() {
+  const K = S.keliling; if (!K) return;
+  const P = K.pojok, n = P.length, area = hitungArea(P);
+  $('kPojok').textContent = n;
+  $('kRadius').textContent = area ? `${area.radiusAsli} m` : '– m';
+  const a = S.fix ? S.fix.acc : null;
+  $('kAcc').textContent = fmtAcc(a);
+  $('kAcc').className = 'acc ' + accCls(a);
+  $('kList').innerHTML = n ? P.map((p, i) => `<div class="row"><span>P${i + 1} · ±${Math.round(p.acc)} m</span>${i === n - 1 ? '<button type="button" class="hapus" id="btnHapusPojok">Hapus</button>' : '<span class="ok">OK</span>'}</div>`).join('')
+    : '<div class="empty">Belum ada pojok. Jalan ke pojok pertama batas site.</div>';
+  const btnT = $('btnTandai');
+  btnT.textContent = `+ TANDAI POJOK KE-${n + 1}`;
+  btnT.disabled = !(S.fix && S.fix.acc <= ACC_BUANG && Date.now() - S.fix.t < 6000);
+  $('btnHitung').disabled = n < 3;
+  gambarKeliling(area);
+}
+function gambarKeliling(area) {
+  const svg = $('mapKeliling');
+  const P = S.keliling.pojok;
+  const pts = [...P]; if (S.fix) pts.push(S.fix);
+  let out = svgGrid();
+  if (!pts.length) { svg.innerHTML = out + `<text x="195" y="170" text-anchor="middle" font-family="Barlow" font-size="15" fill="#5A6275">Menunggu sinyal GPS...</text>`; $('scaleKeliling').textContent = ''; return; }
+  const o = area || { lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length, lng: pts.reduce((s, p) => s + p.lng, 0) / pts.length };
+  let ext = 20;
+  pts.forEach((p) => { const m = keMeter(p, o); ext = Math.max(ext, Math.abs(m.x) * 0.8, Math.abs(m.y)); });
+  if (area) ext = Math.max(ext, area.radiusAsli);
+  const sc = 140 / ext, cx = 195, cy = 168;
+  const xy = (p) => { const m = keMeter(p, o); return [cx + m.x * sc, cy - m.y * sc]; };
+  $('scaleKeliling').textContent = `kotak ≈ ${Math.round(40 / sc)} m`;
+  if (area) out += `<circle cx="${cx}" cy="${cy}" r="${area.radiusAsli * sc}" fill="rgba(35,52,95,.07)" stroke="#23345F" stroke-width="2" stroke-dasharray="7 6"/>`;
+  if (P.length >= 2) {
+    const d = P.map(xy).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+    out += P.length >= 3 ? `<polygon points="${d}" fill="rgba(217,48,48,.12)" stroke="#D93030" stroke-width="2.5" stroke-linejoin="round"/>`
+      : `<polyline points="${d}" fill="none" stroke="#D93030" stroke-width="2.5"/>`;
+  }
+  if (area) out += `<path d="M${cx - 10} ${cy}h20M${cx} ${cy - 10}v20" stroke="#D93030" stroke-width="3"/>`;
+  if (S.fix) { const [x, y] = xy(S.fix); out += `<circle cx="${x}" cy="${y}" r="20" fill="rgba(31,122,77,.22)"/><circle cx="${x}" cy="${y}" r="10" fill="#1F7A4D" stroke="#fff" stroke-width="3"/>`; }
+  P.forEach((p, i) => { const [x, y] = xy(p); out += `<circle cx="${x}" cy="${y}" r="14" fill="#23345F" stroke="#fff" stroke-width="2.5"/><text x="${x}" y="${y + 5}" text-anchor="middle" font-family="Barlow" font-weight="600" font-size="14" fill="#fff">${i + 1}</text>`; });
+  svg.innerHTML = out;
+}
+function selesaiKeliling() {
+  const area = hitungArea(S.keliling.pojok); if (!area) return;
+  const accs = S.keliling.pojok.map((p) => p.acc);
+  S.titik = {
+    lat: area.lat, lng: area.lng, akurasi: Math.round(accs.reduce((a, b) => a + b, 0) / accs.length * 10) / 10,
+    sampel: S.keliling.pojok.length, mode: 'KELILING', pojok: S.keliling.pojok,
+    waktu: new Date().toISOString(), radiusSaran: area.radius, radiusAsli: area.radiusAsli
+  };
+  bukaDetail('scrKeliling');
+}
+
+// ================= 4 DETAIL =================
+let detailDari = 'scrMenu';
+function bukaDetail(dari, prefill) {
+  detailDari = dari;
+  const t = S.titik;
+  $('dLat').textContent = `LAT ${t.lat.toFixed(6)}`;
+  $('dLng').textContent = `LNG ${t.lng.toFixed(6)}`;
+  $('dQual').textContent = t.mode === 'KELILING' ? `±${Math.round(t.akurasi)} m · ${t.sampel} pojok` : `±${Math.round(t.akurasi)} m · ${t.sampel} sampel`;
+  const upd = S.tujuan === 'UPDATE' && S.target;
+  const f = prefill || (upd ? { kode: S.target.kode, nama: S.target.nama, project: S.target.project } : { kode: '', nama: '', project: '' });
+  $('fKode').value = f.kode || '';
+  $('fKodeHint').textContent = upd ? 'Kode lokasi ini. Ubah hanya kalau perlu.' : 'Kosongkan = otomatis (LOK-xxx).';
+  $('fNama').value = f.nama || '';
+  const sel = $('fProject');
+  sel.innerHTML = '<option value="">[Pilih project]</option>' + (S.profile.projects || []).map((p) => `<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.name)}</option>`).join('');
+  sel.value = f.project || '';
+  const r = prefill?.radius || t.radiusSaran || 100;
+  $('fRadius').value = Math.min(Math.max(r, R_MIN), R_MAX);
+  $('fRadiusVal').textContent = `${$('fRadius').value} m`;
+
+  const geser = $('dGeser');
+  if (upd && S.target.lat != null) {
+    const d = jarak(S.target, t);
+    geser.innerHTML = `Titik lama → baru bergeser <b>${d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(2) + ' km'}</b> · radius lama ${S.target.radius} m`;
+    geser.classList.remove('hidden');
+  } else geser.classList.add('hidden');
+
+  const warn = $('dWarn');
+  if (t.mode === 'KELILING' && t.radiusAsli > R_MAX) {
+    warn.textContent = `Hasil hitung ${t.radiusAsli} m melebihi batas 300 m. Radius dikunci 300 m — site terlalu luas, sebaiknya pecah jadi 2 titik.`;
+    warn.classList.remove('hidden');
+  } else warn.classList.add('hidden');
+
+  $('dErr').classList.add('hidden');
+  $('dFootNote').textContent = navigator.onLine ? 'Langsung dipakai untuk geofence absensi' : 'Offline: masuk antrian, aktif otomatis saat ada sinyal';
+  show('scrDetail');
+}
+
+async function simpan() {
+  const err = $('dErr');
+  err.classList.add('hidden');
+  const t = S.titik;
+  const kode = $('fKode').value.trim().toUpperCase();
+  const nama = $('fNama').value.trim();
+  const project = $('fProject').value;
+  const radius = parseInt($('fRadius').value, 10);
+  const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); err.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+  if (nama.length < 3) return fail('Nama lokasi wajib diisi (min. 3 huruf).');
+  if (kode && !/^[A-Z0-9][A-Z0-9_.-]{1,29}$/.test(kode)) return fail('Kode cuma boleh huruf, angka, - _ . (2–30 karakter).');
+  if (S.tujuan === 'BARU' && !project) return fail('Pilih project dulu.');
+  if (radius < R_MIN) return fail('Radius minimal 50 m.');
+  const lokal = (S.profile.lokasi || []);
+  if (S.tujuan === 'BARU' && lokal.some((l) => (l.nama || '').trim().toLowerCase() === nama.toLowerCase()))
+    return fail(`Nama "${nama}" sudah dipakai lokasi lain. Pakai Update Titik atau ganti nama.`);
+  if (kode && lokal.some((l) => (l.kode || '').toUpperCase() === kode && (!S.target || l.id !== S.target.id)))
+    return fail(`Kode ${kode} sudah dipakai lokasi lain.`);
+
+  const item = {
+    clientId: uuid(), status: 'pending', createdAt: Date.now(),
+    petugasId: S.profile.id, petugasNama: S.profile.nama,
+    aksi: S.tujuan, lokasiId: S.tujuan === 'UPDATE' ? S.target.id : null,
+    kode, nama, project, lat: t.lat, lng: t.lng, radius,
+    akurasi: t.akurasi, sampel: t.sampel, mode: t.mode, pojok: t.pojok, waktu: t.waktu
+  };
+
+  const btn = $('btnSimpan');
+  btn.disabled = true; btn.textContent = 'MENYIMPAN...';
+  try {
+    if (navigator.onLine) {
+      try {
+        const r = await kirim(item, 'ONLINE');
+        if (r.status === 'OK') {
+          item.status = 'sent'; item.result = r;
+          await idbPut('queue', item); await hapusPerbaikan(); await pangkasRiwayat();
+          syncSemua(false);
+          return tampilDone(item, true);
+        }
+        if (r.status !== 'SESSION_EXPIRED') return fail(r.message || 'Gagal menyimpan.');
+        // sesi habis: tetap masuk antrian, kirim ulang setelah PIN dimasukkan online.
+        item.note = r.message;
+      } catch (e) {
+        if (!e.network) return fail('Gagal: ' + e.message);
+      }
+    }
+    await idbPut('queue', item); await hapusPerbaikan();
+    tampilDone(item, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'SIMPAN & AKTIFKAN';
+  }
+}
+async function hapusPerbaikan() { if (S.fixPerbaikan) { await idbDel('queue', S.fixPerbaikan).catch(() => {}); S.fixPerbaikan = null; } }
+
+function kirim(item, via, token) {
+  return rpc('setlokasi_simpan', {
+    p_token: token || S.profile.token, p_client_id: item.clientId, p_aksi: item.aksi, p_lokasi_id: item.lokasiId,
+    p_kode: item.kode, p_nama: item.nama, p_project: item.project || null,
+    p_lat: item.lat, p_lng: item.lng, p_radius: item.radius, p_akurasi: item.akurasi, p_sampel: item.sampel,
+    p_mode: item.mode, p_pojok: item.pojok, p_waktu_ambil: item.waktu, p_via: via
+  }, 15000);
+}
+
+// ================= 5 SELESAI =================
+function tampilDone(item, aktifSekarang) {
+  const r = item.result || {};
+  $('doneCircle').className = 'circle' + (aktifSekarang ? '' : ' wait');
+  $('doneCircle').innerHTML = aktifSekarang
+    ? '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
+    : '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  $('doneTitle').textContent = aktifSekarang ? 'LOKASI AKTIF' : 'TERSIMPAN';
+  $('doneSub').textContent = aktifSekarang
+    ? 'Karyawan sudah bisa absen di titik ini mulai sekarang.'
+    : 'Tersimpan, menunggu sinyal. Lokasi aktif otomatis begitu HP dapat sinyal. Jangan hapus data browser / uninstall sebelum terkirim.';
+  const rows = [
+    ['Nama', esc(item.nama), ''],
+    ['Kode', esc(r.kode || item.kode || 'AUTO'), 'm'],
+    ['Radius', `${item.radius} m`, 'm'],
+    ['Akurasi', item.mode === 'KELILING' ? `±${Math.round(item.akurasi)} m · ${item.sampel} pojok` : `±${Math.round(item.akurasi)} m · ${item.sampel} sampel`, 'm'],
+    ['Diset oleh', esc(item.petugasNama), ''],
+    ['Waktu', fmtWaktu(item.waktu), 'm']
+  ];
+  $('doneSum').innerHTML = rows.map(([k, v, c]) => `<div class="r"><span>${k}</span><b class="${c}">${v}</b></div>`).join('');
+  show('scrDone');
+}
+
+// ================= ANTRIAN =================
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !navigator.onLine) return;
+  flushing = true;
+  try {
+    const items = (await idbAll('queue')).filter((q) => q.status === 'pending').sort((a, b) => a.createdAt - b.createdAt);
+    for (const it of items) {
+      const prof = await idbGet('profile', it.petugasId);
+      if (!prof || !prof.token) { it.note = 'Pemilik titik perlu masukkan PIN lagi selagi ada sinyal.'; await idbPut('queue', it); continue; }
+      let r;
+      try { r = await kirim(it, 'OFFLINE', prof.token); }
+      catch (e) { if (e.network) break; it.note = e.message; await idbPut('queue', it); continue; }
+      if (r.status === 'OK') { it.status = 'sent'; it.result = r; it.note = ''; }
+      else if (r.status === 'SESSION_EXPIRED') { it.note = r.message; prof.expired = true; await idbPut('profile', prof); }
+      else { it.status = 'rejected'; it.note = r.message || r.status; it.rejectCode = r.status; }
+      await idbPut('queue', it);
+    }
+    await pangkasRiwayat();
+  } finally {
+    flushing = false;
+  }
+  renderQueueNote();
+  if (aktif('scrPin')) renderSyncBar();
+  if ($('sheet').classList.contains('open')) renderRiwayat();
+}
+async function pangkasRiwayat() {
+  const sent = (await idbAll('queue')).filter((q) => q.status === 'sent').sort((a, b) => b.createdAt - a.createdAt);
+  for (const x of sent.slice(30)) await idbDel('queue', x.clientId);
+}
+async function renderQueueNote() {
+  if (!S.profile) return;
+  const q = await idbAll('queue').catch(() => []);
+  const pending = q.filter((x) => x.status === 'pending').length;
+  const ditolak = q.filter((x) => x.status === 'rejected').length;
+  const el = $('queueNote');
+  if (!pending && !ditolak) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.classList.toggle('bad', ditolak > 0);
+  $('queueNoteTx').textContent = ditolak ? `⚠ ${ditolak} titik ditolak server — perlu diperbaiki` : `⏳ ${pending} titik menunggu sinyal`;
+}
+
+async function renderRiwayat() {
+  const q = (await idbAll('queue')).sort((a, b) => b.createdAt - a.createdAt);
+  const body = $('sheetBody');
+  if (!q.length) { body.innerHTML = '<p class="tip">Belum ada titik yang diset dari HP ini.</p>'; return; }
+  body.innerHTML = q.map((it) => {
+    const st = it.status === 'sent' ? '<span class="st s">AKTIF</span>' : it.status === 'rejected' ? '<span class="st x">DITOLAK</span>' : '<span class="st p">MENUNGGU SINYAL</span>';
+    const milik = S.profile && it.petugasId === S.profile.id;
+    const act = it.status === 'rejected' && milik
+      ? `<div class="act"><button type="button" data-perbaiki="${esc(it.clientId)}">Perbaiki & kirim ulang</button><button type="button" data-hapus="${esc(it.clientId)}">Hapus</button></div>` : '';
+    return `<div class="qi"><div class="t"><b>${esc(it.nama)}</b>${st}</div>
+      <small>${it.aksi === 'BARU' ? 'Lokasi baru' : 'Update titik'} · ${esc((it.result && it.result.kode) || it.kode || 'AUTO')} · ${it.radius} m · ${fmtWaktu(it.waktu)} · ${esc(it.petugasNama)}</small>
+      ${it.note && it.status !== 'sent' ? `<div class="msg">${esc(it.note)}</div>` : ''}${act}</div>`;
+  }).join('');
+}
+function bukaRiwayat() { $('sheet').classList.add('open'); $('sheetBg').classList.add('open'); renderRiwayat(); }
+function tutupRiwayat() { $('sheet').classList.remove('open'); $('sheetBg').classList.remove('open'); }
+
+async function perbaiki(clientId) {
+  const it = await idbGet('queue', clientId); if (!it) return;
+  tutupRiwayat();
+  S.tujuan = it.aksi; S.mode = it.mode || 'TENGAH';
+  S.target = it.lokasiId ? ((S.profile.lokasi || []).find((l) => l.id === it.lokasiId) || { id: it.lokasiId, nama: it.nama, kode: it.kode, radius: it.radius }) : null;
+  S.titik = { lat: it.lat, lng: it.lng, akurasi: it.akurasi, sampel: it.sampel, mode: it.mode, pojok: it.pojok, waktu: it.waktu, radiusSaran: it.radius };
+  S.fixPerbaikan = clientId;
+  bukaDetail('scrMenu', { kode: it.kode, nama: it.nama, project: it.project, radius: it.radius });
+  const e = $('dErr'); e.textContent = 'Ditolak: ' + (it.note || '-'); e.classList.remove('hidden');
+}
+
+// ================= EVENT =================
+buildKeypad(); renderPin();
+$('btnMasuk').onclick = masuk;
+$('btnSync').onclick = () => syncSemua(true);
+$('btnKeluar').onclick = keluar;
+document.querySelectorAll('[data-tujuan]').forEach((b) => b.onclick = () => { S.tujuan = b.dataset.tujuan; if (S.tujuan === 'BARU') S.target = null; renderPilihan(); });
+document.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => { S.mode = b.dataset.mode; renderPilihan(); });
+$('pickerSearch').oninput = renderPicker;
+$('pickerList').onclick = (e) => {
+  const li = e.target.closest('li[data-id]'); if (!li) return;
+  S.target = (S.profile.lokasi || []).find((l) => String(l.id) === li.dataset.id) || null;
+  renderPilihan();
+};
+$('btnMulai').onclick = () => {
+  if (S.tujuan === 'UPDATE' && !S.target) { toast('Pilih lokasi yang mau di-update dulu.', 'err'); return; }
+  S.fixPerbaikan = null;
+  if (S.mode === 'TENGAH') { show('scrTengah'); mulaiTengah(); }
+  else { show('scrKeliling'); mulaiKeliling(); }
+};
+document.querySelectorAll('[data-back]').forEach((b) => b.onclick = () => {
+  if (aktif('scrKeliling') && S.keliling && S.keliling.pojok.length && !confirm('Pojok yang sudah ditandai akan hilang. Kembali?')) return;
+  stopTengah(); show(b.dataset.back); renderPilihan();
+});
+$('btnUlangi').onclick = mulaiTengah;
+$('btnKunci').onclick = kunciTengah;
+$('btnTandai').onclick = tandaiPojok;
+$('btnHitung').onclick = selesaiKeliling;
+$('kList').onclick = (e) => { if (e.target.id === 'btnHapusPojok') { S.keliling.pojok.pop(); renderKeliling(); } };
+$('btnBackDetail').onclick = () => {
+  if (detailDari === 'scrTengah') { show('scrTengah'); clearInterval(tengahTimer); tengahTimer = setInterval(renderTengah, 1000); renderTengah(); }
+  else if (detailDari === 'scrKeliling') { show('scrKeliling'); renderKeliling(); }
+  else { S.fixPerbaikan = null; show('scrMenu'); renderPilihan(); }
+};
+$('fRadius').oninput = () => { $('fRadiusVal').textContent = `${$('fRadius').value} m`; };
+$('fKode').oninput = (e) => { const p = e.target.selectionStart; e.target.value = e.target.value.toUpperCase().replace(/\s/g, ''); e.target.setSelectionRange(p, p); };
+$('btnSimpan').onclick = simpan;
+$('btnLain').onclick = () => { resetPilihan(); show('scrMenu'); renderQueueNote(); };
+$('btnSelesai').onclick = keluar;
+document.querySelectorAll('[data-open-riwayat]').forEach((b) => b.onclick = bukaRiwayat);
+$('btnTutupSheet').onclick = tutupRiwayat;
+$('sheetBg').onclick = tutupRiwayat;
+$('sheetBody').onclick = async (e) => {
+  const p = e.target.closest('[data-perbaiki]'); if (p) return perbaiki(p.dataset.perbaiki);
+  const h = e.target.closest('[data-hapus]');
+  if (h && confirm('Hapus titik yang ditolak ini dari HP?')) { await idbDel('queue', h.dataset.hapus); renderRiwayat(); renderQueueNote(); }
+};
+window.addEventListener('online', () => { updateUserSub(); renderSyncBar(); syncSemua(false); });
+window.addEventListener('offline', () => { updateUserSub(); renderSyncBar(); });
+setInterval(() => { if (navigator.onLine) flushQueue(); }, 45000);
+
+renderSyncBar();
+if (navigator.onLine) syncSemua(false);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/Fusion4/service-worker.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
