@@ -221,6 +221,26 @@
       margin-top: 8px;
     }
     .btn-row .btn-secondary { margin-top: 0; }
+
+    /* Login petugas (PIN Digital Badge, hak EN) */
+    .petugas-bar {
+      margin-top: 10px; font-size: 11.5px; color: #DCE4EF;
+      display: none; align-items: center; justify-content: center; gap: 8px;
+    }
+    .petugas-bar a { color: #FFA37B; font-weight: 700; text-decoration: underline; cursor: pointer; }
+    #loginOverlay {
+      position: fixed; inset: 0; background: rgba(18, 36, 62, 0.72);
+      display: none; align-items: center; justify-content: center; padding: 20px; z-index: 50;
+    }
+    #loginBox {
+      background: var(--surface); border-radius: 16px; padding: 22px 20px; width: 100%; max-width: 340px; text-align: center;
+    }
+    #loginBox h2 { font-size: 17px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+    #loginBox p { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; line-height: 1.45; }
+    #loginPin {
+      text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 22px; letter-spacing: 8px; margin-bottom: 12px;
+    }
+    #loginMsg { display: none; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -229,6 +249,10 @@
   <div class="header">
     <h1>Face Enrollment (Pendaftaran Wajah)</h1>
     <p>Sistem Presensi AI & SmartGate Biometrik — PT BIMA</p>
+    <div id="petugasBar" class="petugas-bar">
+      <span>👤 Petugas: <b id="petugasNama">-</b></span>
+      <a onclick="logoutPetugas()">Keluar</a>
+    </div>
   </div>
 
   <div class="card">
@@ -291,6 +315,17 @@
   </div>
 </div>
 
+<div id="loginOverlay">
+  <div id="loginBox">
+    <div style="font-size:30px; margin-bottom:6px;">🔐</div>
+    <h2>Login Petugas Enroll</h2>
+    <p>Masukkan PIN Digital Badge Anda.<br>Hanya petugas dengan hak <b>EN</b> yang bisa mendaftarkan wajah.</p>
+    <input type="password" id="loginPin" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••••">
+    <button type="button" id="btnLogin" class="btn-primary" onclick="loginPetugas()">Masuk</button>
+    <div id="loginMsg" class="status-msg error"></div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
@@ -313,7 +348,95 @@
   const statusMsg = document.getElementById('statusMsg');
   const faceOval = document.getElementById('faceOval');
 
+  // ---------- Login petugas (PIN Digital Badge -> token sesi 7 hari) ----------
+  // Yang disimpan di HP cuma token sesi, bukan PIN. Simpan wajah dicek di server
+  // (RPC enroll_simpan_wajah): sesi masih berlaku + petugas punya hak EN/ALL/ADMIN.
+  const ENROLL_TOKEN_KEY = 'fusion4EnrollToken';
+  const ENROLL_DEVICE_KEY = 'fusion4EnrollDevice';
+
+  function storageGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function storageSet(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+  function storageDel(key) { try { localStorage.removeItem(key); } catch (e) {} }
+
+  function getDeviceId() {
+    let id = storageGet(ENROLL_DEVICE_KEY);
+    if (!id) {
+      id = 'EN-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+      storageSet(ENROLL_DEVICE_KEY, id);
+    }
+    return id;
+  }
+
+  function showLogin(msg) {
+    document.getElementById('petugasBar').style.display = 'none';
+    document.getElementById('loginOverlay').style.display = 'flex';
+    const msgEl = document.getElementById('loginMsg');
+    msgEl.style.display = msg ? 'block' : 'none';
+    msgEl.textContent = msg || '';
+    const pin = document.getElementById('loginPin');
+    pin.value = '';
+    setTimeout(() => pin.focus(), 100);
+  }
+
+  function showPetugas(nama) {
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('petugasNama').textContent = nama || '-';
+    document.getElementById('petugasBar').style.display = 'flex';
+  }
+
+  async function cekSesiPetugas() {
+    const token = storageGet(ENROLL_TOKEN_KEY);
+    if (!token) { showLogin(''); return; }
+    try {
+      const { data, error } = await supabaseClient.rpc('enroll_cek_sesi', { p_token: token });
+      if (error) throw error;
+      if (data && data.status === 'OK') { showPetugas(data.nama); return; }
+      storageDel(ENROLL_TOKEN_KEY);
+      showLogin(data && data.message);
+    } catch (e) {
+      showLogin('Gagal cek sesi: ' + e.message);
+    }
+  }
+
+  async function loginPetugas() {
+    const pin = document.getElementById('loginPin').value.trim();
+    if (!/^[0-9]{4,8}$/.test(pin)) { showLogin('Masukkan PIN Digital Badge (angka).'); return; }
+    const btn = document.getElementById('btnLogin');
+    btn.disabled = true;
+    btn.textContent = 'Memeriksa...';
+    try {
+      const { data, error } = await supabaseClient.rpc('enroll_login', { p_pin: pin, p_device: getDeviceId() });
+      if (error) throw error;
+      if (data && data.status === 'OK') {
+        storageSet(ENROLL_TOKEN_KEY, data.token);
+        showPetugas(data.nama);
+      } else {
+        let msg = (data && data.message) || 'Login gagal.';
+        if (data && data.status === 'INVALID' && data.sisa != null) msg += ` Sisa percobaan: ${data.sisa}.`;
+        showLogin(msg);
+      }
+    } catch (e) {
+      showLogin('Gagal login: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Masuk';
+    }
+  }
+
+  async function logoutPetugas() {
+    const token = storageGet(ENROLL_TOKEN_KEY);
+    storageDel(ENROLL_TOKEN_KEY);
+    if (token) await supabaseClient.rpc('enroll_logout', { p_token: token }).catch(() => {});
+    fullReset();
+    showLogin('');
+  }
+
+  document.getElementById('loginPin').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loginPetugas();
+  });
+
   document.addEventListener('DOMContentLoaded', async () => {
+    cekSesiPetugas();
     await loadKaryawanList();
     await startCamera();
     startQrAutoScan();
@@ -644,6 +767,11 @@
       return;
     }
 
+    const sudahAda = allFaceData.some(f => String(f.qrCodeId || '').trim().toUpperCase() === String(kar.QrCodeId).trim().toUpperCase());
+    if (sudahAda && !confirm(`Wajah ${kar.NamaPersonnel} (${kar.QrCodeId}) sudah terdaftar.\n\nTimpa dengan wajah baru? Penggantian ini tercatat di log.`)) {
+      return;
+    }
+
     const btn = document.getElementById('btnSave');
     btn.disabled = true;
     btn.textContent = "Menyimpan ke Database...";
@@ -659,31 +787,28 @@
     }
 
     try {
-      // 1. Simpan ke Supabase via RPC save_face_descriptor
-      const { data, error } = await supabaseClient.rpc('save_face_descriptor', {
+      // Simpan lewat RPC enroll_simpan_wajah -- server cek sesi petugas + hak EN,
+      // dan nyatat ke log (wajah lama ikut disimpan kalau ditimpa).
+      const { data, error } = await supabaseClient.rpc('enroll_simpan_wajah', {
+        p_token: storageGet(ENROLL_TOKEN_KEY) || '',
         p_qrcode: kar.QrCodeId,
-        p_nama: kar.NamaPersonnel,
-        p_descriptor: avgDescriptor
+        p_descriptor: avgDescriptor,
+        p_device: getDeviceId()
       });
+      if (error) throw error;
 
-      if (error) {
-        console.warn('RPC error, fallback to direct table upsert:', error.message);
-        const { error: fallbackError } = await supabaseClient.from('faceData').upsert({
-          QrCodeId: kar.QrCodeId.toUpperCase().trim(),
-          Nama: kar.NamaPersonnel,
-          Descriptor: avgDescriptor,
-          UpdatedAt: new Date().toISOString()
-        }, { onConflict: 'QrCodeId' });
-
-        if (fallbackError) {
-          throw new Error('RPC gagal (' + error.message + ') dan fallback juga gagal: ' + fallbackError.message);
+      if (!data || data.status !== 'OK') {
+        if (data && (data.status === 'SESSION_EXPIRED' || data.status === 'NO_ACCESS')) {
+          storageDel(ENROLL_TOKEN_KEY);
+          showLogin(data.message + ' Sampel foto tetap ada, tinggal Simpan lagi setelah login.');
         }
+        throw new Error((data && data.message) || 'Respon server tidak dikenal.');
       }
 
       // Refresh data lokal
       await loadAllFaceData();
 
-      setStatus(`✅ Sukses! Wajah ${kar.NamaPersonnel} berhasil didaftarkan di Supabase!`, "success");
+      setStatus(`✅ ${data.message}`, "success");
       btn.textContent = "✅ Berhasil Disimpan";
       setTimeout(() => {
         resetSamples();
