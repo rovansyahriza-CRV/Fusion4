@@ -715,32 +715,161 @@ document.addEventListener('DOMContentLoaded', async () => {
       updatePinBoxes();
     }
     await submitPin();
-  } else if (qrParam) {
-    // Ambil PIN berdasarkan QrCodeId untuk auto-load
-    try {
-      const { data: karRow } = await supabaseClient
-        .from('karyawanTbl')
-        .select('DigitalPIN, DigitalPin')
-        .ilike('QrCodeId', qrParam.trim())
-        .maybeSingle();
-      if (karRow && (karRow.DigitalPin || karRow.DigitalPIN)) {
-        const pinRaw = karRow.DigitalPin || String(karRow.DigitalPIN);
-        const pStr = String(pinRaw).padStart(6, '0');
-        if (realPinInput) {
-          realPinInput.value = pStr;
-          updatePinBoxes();
+  } else {
+    // Buka ulang Badge di tab yang sama (mis. "Kembali ke Badge" dari Absen) pakai sesi
+    // dari login PIN sebelumnya -- dulu PIN dibaca langsung dari tabel lewat ?QrCodeId=,
+    // jadi siapa pun yang tahu QrCodeId bisa buka Badge orang lain.
+    const token = badgeTokenGet();
+    if (token) {
+      try {
+        const { data: sesi, error } = await supabaseClient.rpc('badge_sesi_info', { p_token: token });
+        if (error) throw error;
+        if (sesi && sesi.status === 'OK') {
+          await tampilkanBadge(sesi, null);
+          return;
         }
-        await submitPin();
+        badgeTokenSet(null);
+      } catch (e) {
+        console.warn('Cek sesi Badge gagal:', e.message);
       }
-    } catch (e) {
-      console.warn('Auto-load badge error:', e.message);
     }
   }
 });
 
+// Token sesi Badge (hasil badge_login), disimpan per tab -- bukan PIN.
+const BADGE_TOKEN_KEY = 'fusion4BadgeToken';
+function badgeTokenGet() { try { return sessionStorage.getItem(BADGE_TOKEN_KEY); } catch (e) { return null; } }
+function badgeTokenSet(v) { try { v ? sessionStorage.setItem(BADGE_TOKEN_KEY, v) : sessionStorage.removeItem(BADGE_TOKEN_KEY); } catch (e) {} }
+function badgeDeviceId() {
+  try {
+    let id = localStorage.getItem('fusion4BadgeDevice');
+    if (!id) {
+      id = 'BD-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+      localStorage.setItem('fusion4BadgeDevice', id);
+    }
+    return id;
+  } catch (e) { return 'BD-tanpa-storage'; }
+}
+
 setTimeout(() => {
   if (realPinInput) realPinInput.focus();
 }, 200);
+
+// Tampilkan kartu Badge dari data server (badge_login / badge_sesi_info).
+// pin = PIN yang baru diketik (buat hash login offline); null kalau dibuka ulang lewat sesi.
+async function tampilkanBadge(hasil, pin) {
+    const qrId = hasil.qrCodeId || hasil.qrcodeid || hasil.QrCodeId || "";
+    hasil.qrCodeId = qrId;
+    window.currentBadgeData = hasil;
+
+    // LANGSUNG TAMPILKAN BADGE (Hapus overlay PIN)
+    const pageEl = document.getElementById('pageContent') || document.querySelector('.page');
+    const overlayEl = document.getElementById('pinOverlay');
+    if (pageEl) pageEl.style.display = "flex";
+    if (overlayEl) overlayEl.style.display = "none";
+    if (btnSubmitPin) {
+      btnSubmitPin.disabled = false;
+      btnSubmitPin.innerText = "Tampilkan Badge";
+    }
+
+    // Render data teks kartu
+    try {
+      const elNama = document.getElementById('badgeNama');
+      if (elNama) elNama.innerText = hasil.nama || "-";
+      const elJabatan = document.getElementById('badgeJabatan');
+      if (elJabatan) elJabatan.innerText = hasil.kualifikasi || "-";
+      const elId = document.getElementById('badgeId');
+      if (elId) elId.innerText = qrId;
+      const elLink = document.getElementById('linkGantiPassword');
+      if (elLink) elLink.href = "change-password.html?QrCodeId=" + encodeURIComponent(qrId);
+    } catch (eDom) {
+      console.warn("DOM text update warning:", eDom);
+    }
+
+    // Generate QR Code di kartu
+    try {
+      const qrbox = document.getElementById('qrbox');
+      if (qrbox && typeof QRCode !== 'undefined') {
+        qrbox.innerHTML = '';
+        new QRCode(qrbox, {
+          text: qrId,
+          width: 115,
+          height: 115,
+          colorDark: "#000000",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
+    } catch (eQr) {
+      console.warn("QR Code render error:", eQr);
+    }
+
+    // Ambil foto profil terbaru dari database karyawanTbl (asinkron tanpa memblokir badge)
+    (async () => {
+      try {
+        let rawFotoUrl = null;
+        let fileId = null;
+        const { data: karRow } = await supabaseClient
+          .from('karyawanTbl')
+          .select('FotoURL, FotoFileID')
+          .ilike('QrCodeId', qrId.trim())
+          .maybeSingle();
+        if (karRow) {
+          rawFotoUrl = karRow.FotoURL || hasil.fotoUrl || null;
+          fileId = karRow.FotoFileID || null;
+        } else {
+          rawFotoUrl = hasil.fotoUrl;
+        }
+
+        const fotoEl = document.getElementById('badgeFoto');
+        const fallbackEl = document.getElementById('badgeFotoFallback');
+        if (!fotoEl || !fallbackEl) return;
+
+        const directFoto = formatDriveDirectUrl(rawFotoUrl);
+        if (directFoto) {
+          fotoEl.src = directFoto;
+          fotoEl.style.display = "block";
+          fallbackEl.style.display = "none";
+          fotoEl.onerror = () => {
+            if (fileId && !fotoEl.dataset.retried) {
+              fotoEl.dataset.retried = "1";
+              fotoEl.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
+              return;
+            }
+            fotoEl.style.display = "none";
+            fallbackEl.style.display = "flex";
+            fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
+          };
+        } else {
+          fotoEl.style.display = "none";
+          fallbackEl.style.display = "flex";
+          fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
+        }
+      } catch (ePhoto) {
+        console.warn('Direct fetch photo error:', ePhoto);
+      }
+
+      // Foto pribadi lokal (kalau ada) menimpa tampilan foto official -- HANYA di HP ini
+      currentBadgeQrId = qrId;
+      applyFotoPribadiLokal(qrId);
+    })();
+
+    // Load data approval & voucher
+    try { loadApprovalIssues(qrId); } catch (e) { console.warn("loadApprovalIssues error:", e); }
+    try { loadMyVouchers(qrId); } catch (e) { console.warn("loadMyVouchers error:", e); }
+
+    // Siapkan / segarkan paket Absen Offline (wajah sendiri + lokasi + library & model wajah).
+    // Sekalian perbarui profil lain yang dititipkan di HP ini.
+    refreshOfflineReadyBox(qrId, "⏳ Menyiapkan mode offline...");
+    offlinePackError = null;
+    prepareOfflinePack(qrId, pin)
+      .catch(e => {
+        console.warn("Paket offline gagal:", e.message);
+        if (e.code === "PENUH") offlinePackError = e.message;
+      })
+      .then(() => refreshAllOfflineProfiles().catch(() => {}))
+      .finally(() => refreshOfflineReadyBox(qrId));
+}
 
 async function submitPin() {
     const pin = getPinValue().trim();
@@ -778,47 +907,32 @@ async function submitPin() {
       let adaErrorJaringan = false;
       const cekJaringan = (err) => { if (err && /fetch|network|load failed/i.test(String(err.message || err))) adaErrorJaringan = true; };
 
-      // 1. Coba lewat RPC get_digital_badge_by_pin
+      // PIN dicek di server (badge_login): DigitalPIN maupun DigitalPin, salah 5x per HP
+      // dikunci 15 menit, dapat token sesi. Dulu ada fallback query karyawanTbl langsung
+      // yang juga menerima QrCodeId (tercetak di badge fisik) sebagai PIN.
+      let pesanGagal = "⚠️ PIN tidak ditemukan. Pastikan 6 digit PIN Anda benar.";
       try {
-        const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('get_digital_badge_by_pin', { p_pin: pin });
+        const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('badge_login', { p_pin: pin, p_device: badgeDeviceId() });
         cekJaringan(rpcErr);
-        if (!rpcErr && rpcData && rpcData.valid) {
+        if (rpcErr) throw rpcErr;
+        if (rpcData && rpcData.status === 'OK') {
           hasil = rpcData;
+          badgeTokenSet(rpcData.token);
+        } else if (rpcData && rpcData.status === 'LOCKED') {
+          pesanGagal = "🔒 " + rpcData.message;
+        } else if (rpcData && rpcData.sisa != null) {
+          pesanGagal += ` Sisa percobaan: ${rpcData.sisa}.`;
         }
       } catch (e) {
         cekJaringan(e);
-        console.warn('RPC get_digital_badge_by_pin error, trying direct query:', e);
-      }
-
-      // 2. Fallback langsung query ke karyawanTbl jika RPC tidak menghasilkan data
-      if (!hasil || !hasil.valid) {
-        const pinNum = parseInt(pin, 10);
-        let query = supabaseClient.from('karyawanTbl').select('*');
-        if (!isNaN(pinNum)) {
-          query = query.or(`DigitalPIN.eq.${pinNum},DigitalPin.eq.${pin},QrCodeId.eq.${pin}`);
-        } else {
-          query = query.or(`DigitalPin.eq.${pin},QrCodeId.eq.${pin}`);
-        }
-        const { data: karRows, error: karErr } = await query;
-        cekJaringan(karErr);
-        if (!karErr && karRows && karRows.length > 0) {
-          const k = karRows[0];
-          hasil = {
-            valid: true,
-            qrCodeId: k.QrCodeId || '',
-            nama: k.NamaPersonnel || k.Nama || '',
-            kualifikasi: k.Kualifikasi || '',
-            fotoUrl: k.FotoURL || null,
-            fotoFileId: k.FotoFileID || null
-          };
-        }
+        console.warn('badge_login error:', e);
       }
 
       if ((!hasil || !hasil.valid) && adaErrorJaringan && await tryOfflinePinLogin(pin)) return; // sinyal lemot / server gak kejangkau
 
       if (!hasil || !hasil.valid) {
         if (pinMsg) {
-          pinMsg.innerText = "⚠️ PIN tidak ditemukan. Pastikan 6 digit PIN Anda benar.";
+          pinMsg.innerText = pesanGagal;
           pinMsg.style.display = "block";
         }
         if (btnSubmitPin) {
@@ -829,117 +943,7 @@ async function submitPin() {
         return;
       }
 
-      const qrId = hasil.qrCodeId || hasil.qrcodeid || hasil.QrCodeId || "";
-      hasil.qrCodeId = qrId;
-      window.currentBadgeData = hasil;
-
-      // LANGSUNG TAMPILKAN BADGE (Hapus overlay PIN)
-      const pageEl = document.getElementById('pageContent') || document.querySelector('.page');
-      const overlayEl = document.getElementById('pinOverlay');
-      if (pageEl) pageEl.style.display = "flex";
-      if (overlayEl) overlayEl.style.display = "none";
-      if (btnSubmitPin) {
-        btnSubmitPin.disabled = false;
-        btnSubmitPin.innerText = "Tampilkan Badge";
-      }
-
-      // Render data teks kartu
-      try {
-        const elNama = document.getElementById('badgeNama');
-        if (elNama) elNama.innerText = hasil.nama || "-";
-        const elJabatan = document.getElementById('badgeJabatan');
-        if (elJabatan) elJabatan.innerText = hasil.kualifikasi || "-";
-        const elId = document.getElementById('badgeId');
-        if (elId) elId.innerText = qrId;
-        const elLink = document.getElementById('linkGantiPassword');
-        if (elLink) elLink.href = "change-password.html?QrCodeId=" + encodeURIComponent(qrId);
-      } catch (eDom) {
-        console.warn("DOM text update warning:", eDom);
-      }
-
-      // Generate QR Code di kartu
-      try {
-        const qrbox = document.getElementById('qrbox');
-        if (qrbox && typeof QRCode !== 'undefined') {
-          qrbox.innerHTML = '';
-          new QRCode(qrbox, {
-            text: qrId,
-            width: 115,
-            height: 115,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.M
-          });
-        }
-      } catch (eQr) {
-        console.warn("QR Code render error:", eQr);
-      }
-
-      // Ambil foto profil terbaru dari database karyawanTbl (asinkron tanpa memblokir badge)
-      (async () => {
-        try {
-          let rawFotoUrl = null;
-          let fileId = null;
-          const { data: karRow } = await supabaseClient
-            .from('karyawanTbl')
-            .select('FotoURL, FotoFileID')
-            .ilike('QrCodeId', qrId.trim())
-            .maybeSingle();
-          if (karRow) {
-            rawFotoUrl = karRow.FotoURL || hasil.fotoUrl || null;
-            fileId = karRow.FotoFileID || null;
-          } else {
-            rawFotoUrl = hasil.fotoUrl;
-          }
-
-          const fotoEl = document.getElementById('badgeFoto');
-          const fallbackEl = document.getElementById('badgeFotoFallback');
-          if (!fotoEl || !fallbackEl) return;
-
-          const directFoto = formatDriveDirectUrl(rawFotoUrl);
-          if (directFoto) {
-            fotoEl.src = directFoto;
-            fotoEl.style.display = "block";
-            fallbackEl.style.display = "none";
-            fotoEl.onerror = () => {
-              if (fileId && !fotoEl.dataset.retried) {
-                fotoEl.dataset.retried = "1";
-                fotoEl.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
-                return;
-              }
-              fotoEl.style.display = "none";
-              fallbackEl.style.display = "flex";
-              fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
-            };
-          } else {
-            fotoEl.style.display = "none";
-            fallbackEl.style.display = "flex";
-            fallbackEl.innerText = (hasil.nama || "?").trim().charAt(0).toUpperCase();
-          }
-        } catch (ePhoto) {
-          console.warn('Direct fetch photo error:', ePhoto);
-        }
-
-        // Foto pribadi lokal (kalau ada) menimpa tampilan foto official -- HANYA di HP ini
-        currentBadgeQrId = qrId;
-        applyFotoPribadiLokal(qrId);
-      })();
-
-      // Load data approval & voucher
-      try { loadApprovalIssues(qrId); } catch (e) { console.warn("loadApprovalIssues error:", e); }
-      try { loadMyVouchers(qrId); } catch (e) { console.warn("loadMyVouchers error:", e); }
-
-      // Siapkan / segarkan paket Absen Offline (wajah sendiri + lokasi + library & model wajah).
-      // Sekalian perbarui profil lain yang dititipkan di HP ini.
-      refreshOfflineReadyBox(qrId, "⏳ Menyiapkan mode offline...");
-      offlinePackError = null;
-      prepareOfflinePack(qrId, pin)
-        .catch(e => {
-          console.warn("Paket offline gagal:", e.message);
-          if (e.code === "PENUH") offlinePackError = e.message;
-        })
-        .then(() => refreshAllOfflineProfiles().catch(() => {}))
-        .finally(() => refreshOfflineReadyBox(qrId));
+      await tampilkanBadge(hasil, pin);
 
     } catch (e) {
       console.error("Error submitPin:", e);
@@ -978,6 +982,10 @@ async function submitPin() {
   const btnGanti = document.getElementById('btnGantiPin');
   if (btnGanti) {
     btnGanti.onclick = () => {
+      // Keluar dari Badge: hapus sesi supaya tab ini gak bisa buka Badge lagi tanpa PIN.
+      const tokenLama = badgeTokenGet();
+      badgeTokenSet(null);
+      if (tokenLama) supabaseClient.rpc('badge_logout', { p_token: tokenLama }).then(() => {}, () => {});
       if (pageContent) pageContent.style.display = "none";
       if (pinOverlay) pinOverlay.style.display = "flex";
       clearPinBoxes();

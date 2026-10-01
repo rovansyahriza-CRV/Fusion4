@@ -1185,7 +1185,8 @@ function showResultCard(text, kind) {
   if (fromBadge && qrCodeId) {
     // Kalau flow-nya dibuka dari Digital Badge (self-service, bukan kiosk bersama), abis absen
     // gak perlu balik ke halaman scan attendance lagi -- langsung tutup & balik ke Badge dia.
-    // digital-badge.html udah dukung auto-login lewat ?QrCodeId=... (lookup DigitalPIN otomatis).
+    // digital-badge.html kebuka lagi tanpa PIN lewat sesi Badge di tab ini (badge_sesi_info);
+    // ?QrCodeId= cuma dipakai buat mode offline. Tanpa sesi -> minta PIN.
     btnDone.innerText = "✅ Tutup & Kembali ke Badge";
     btnDone.onclick = () => location.href = "digital-badge.html?QrCodeId=" + encodeURIComponent(qrCodeId);
   } else {
