@@ -748,6 +748,7 @@ async function tawarkanSidikJariAtauWajah() {
   setStatus("Menyiapkan pilihan absen...", "info");
   if (!(await sidikJariSiapDiHpIni())) { proceedWithQr(); return; }
   setStatus("Pilih cara absen.", "info");
+  sjTerapkanIstilah(document.getElementById('metodeCard'));
   document.getElementById('metodeCard').style.display = "block";
 }
 
@@ -768,17 +769,18 @@ document.getElementById('btnSjPakaiWajah').onclick = () => {
 function tampilSidikJari(keadaan, judul, sub) {
   const ikon = document.getElementById('sjIkon');
   ikon.style.background = keadaan === "ok" ? "var(--success-bg)" : "var(--danger-bg)";
-  ikon.innerText = keadaan === "fail" ? "❌" : "👆";
+  ikon.innerText = keadaan === "fail" ? "❌" : SJ_ISTILAH.ikon;
   document.getElementById('sjJudul').innerText = judul;
   document.getElementById('sjJudul').style.color = keadaan === "ok" ? "var(--success)" : keadaan === "fail" ? "var(--danger)" : "var(--steel)";
   document.getElementById('sjSub').innerText = sub || "";
   document.getElementById('sjAksiGagal').style.display = keadaan === "fail" ? "block" : "none";
+  sjTerapkanIstilah(document.getElementById('sidikJariCard'));
   document.getElementById('sidikJariCard').style.display = "block";
 }
 
 async function mulaiSidikJari() {
   statusEl.style.display = "none";
-  tampilSidikJari("wait", "Tempel jari Anda", "di sensor HP");
+  tampilSidikJari("wait", SJ_ISTILAH.aksi, SJ_ISTILAH.lokasi);
   let hasil;
   try {
     hasil = await sjVerifikasi(absenTokenGet(), badgeDeviceId());
@@ -799,7 +801,7 @@ async function mulaiSidikJari() {
   faceVerified = true;
   const info = document.getElementById('matchInfo');
   info.style.display = "block";
-  info.innerText = "✅ Terverifikasi sidik jari: " + (hasil.nama || "") + " (" + qrCodeId + ")" + (hasil.perangkat ? " · " + hasil.perangkat : "");
+  info.innerText = "✅ Terverifikasi " + SJ_ISTILAH.kecil + ": " + (hasil.nama || "") + " (" + qrCodeId + ")" + (hasil.perangkat ? " · " + hasil.perangkat : "");
   setTimeout(() => { document.getElementById('sidikJariCard').style.display = "none"; }, 600);
   statusEl.style.display = "";
   checkSpecialFlowsThenProceed();
@@ -1363,7 +1365,7 @@ function showResultCard(text, kind) {
   resultBanner.style.display = "block";
   resultBanner.className = kind === "ok" ? "banner-ok" : "banner-fail";
   resultBanner.innerHTML = (kind === "ok" ? "✅ " : "❌ ") + text +
-    (kind === "ok" && metodeAbsen === "FINGER" ? "<br>👆 Metode: Sidik Jari" : "");
+    (kind === "ok" && metodeAbsen === "FINGER" ? "<br>" + SJ_ISTILAH.ikon + " Metode: " + SJ_ISTILAH.nama : "");
 
   if (pendingPindahReminder) {
     const reminderEl = document.createElement('div');

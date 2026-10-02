@@ -807,6 +807,7 @@ async function refreshSidikJariLine() {
     line.innerHTML = '👆 Sidik jari belum aktif · <a href="javascript:void(0)" id="linkDaftarSidikJari" style="color:var(--orange); font-weight:700; text-decoration:underline;">Daftarkan</a>';
     document.getElementById('linkDaftarSidikJari').onclick = bukaDaftarSidikJari;
   }
+  sjTerapkanIstilah(line);
   line.style.display = 'block';
 }
 
@@ -822,13 +823,13 @@ async function bukaDaftarSidikJari() {
   pesan.style.display = 'none';
   btn.style.display = 'block';
   btn.disabled = true;
-  btn.innerText = 'Lanjut Tempel Jari';
+  btn.innerText = SJ_ISTILAH.tombolDaftar;
   cek1.onchange = cek2.onchange = () => { btn.disabled = !(cek1.checked && cek2.checked); };
   const tutup = () => { ov.style.display = 'none'; };
   document.getElementById('sjBtnBatal').innerText = 'Batal';
   document.getElementById('sjBtnBatal').onclick = tutup;
   const tampilPesan = (teks, ok) => {
-    pesan.innerText = teks;
+    pesan.innerText = sjTeks(teks);
     pesan.style.background = ok ? '#E5F6EC' : '#FBEAE7';
     pesan.style.color = ok ? '#178A4C' : '#C0392B';
     pesan.style.display = 'block';
@@ -836,7 +837,7 @@ async function bukaDaftarSidikJari() {
 
   btn.onclick = async () => {
     btn.disabled = true;
-    btn.innerText = 'Menunggu sidik jari...';
+    btn.innerText = SJ_ISTILAH.menunggu;
     let hasil;
     try {
       hasil = await sjDaftar(badgeTokenGet(), badgeDeviceId());
@@ -845,7 +846,8 @@ async function bukaDaftarSidikJari() {
     }
     if (hasil && hasil.status === 'OK') {
       document.getElementById('sjIcon').innerText = '✅';
-      document.getElementById('sjJudul').innerText = 'Sidik Jari Aktif';
+      sjTerapkanIstilah(ov);
+      document.getElementById('sjJudul').innerText = SJ_ISTILAH.nama + ' Aktif';
       document.getElementById('sjIsi').style.display = 'none';
       tampilPesan('Sidik jari aktif di HP ini' + (hasil.perangkat ? ' (' + hasil.perangkat + ')' : '') + '. Sekarang bisa absen pakai sidik jari.', true);
       btn.style.display = 'none';
@@ -872,6 +874,7 @@ async function bukaDaftarSidikJari() {
     btn.disabled = !(cek1.checked && cek2.checked);
     btn.innerText = 'Coba Lagi';
   };
+  sjTerapkanIstilah(ov);
   ov.style.display = 'flex';
 }
 
