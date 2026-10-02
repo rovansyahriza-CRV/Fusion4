@@ -36,6 +36,8 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:16px;min-height:100%}
+/* Ketuk cepat di keypad PIN (mis. 1-1) jangan dianggap "double-tap zoom" di iPhone; pinch-zoom tetap bisa. */
+html{touch-action:manipulation}
 body{display:flex;justify-content:center}
 .app{width:100%;max-width:480px;min-height:100vh;min-height:100dvh;position:relative;background:var(--bg)}
 .screen{display:none;min-height:100vh;min-height:100dvh;flex-direction:column}
@@ -82,7 +84,7 @@ button:disabled{cursor:not-allowed}
 .pin-box.err{border-color:var(--red);animation:shake .3s}
 @keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;width:100%}
-.key{background:#fff;border-radius:11px;height:54px;font-family:var(--mono);font-size:22px;color:var(--text)}
+.key{background:#fff;border-radius:11px;height:54px;font-family:var(--mono);font-size:22px;color:var(--text);touch-action:manipulation;user-select:none;-webkit-user-select:none}
 .key:active{background:var(--line-2)}
 .key.del{background:var(--line-2);display:grid;place-items:center;color:var(--navy)}
 .key.blank{visibility:hidden}
@@ -121,7 +123,7 @@ button:disabled{cursor:not-allowed}
 .gps b{flex:1;font-weight:600}
 .gps .acc{font-family:var(--mono);font-size:14px}
 .acc.g{color:var(--green)} .acc.y{color:var(--amber)} .acc.r{color:var(--red-d)}
-.picker input{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:15px;background:#fff}
+.picker input{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:16px;background:#fff}
 .picker ul{list-style:none;max-height:230px;overflow:auto;margin-top:8px}
 .picker li{padding:10px 4px;border-bottom:1px solid var(--line-2);display:flex;justify-content:space-between;gap:8px;font-size:14.5px}
 .picker li:last-child{border-bottom:none}
