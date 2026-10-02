@@ -18,6 +18,8 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="offline-absen.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@13.3.0/dist/bundle/index.umd.min.js"></script>
+<script src="sidik-jari.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -149,6 +151,22 @@
     <button id="btnShowQrOption" class="btn-block btn-secondary">📷 Atau Scan QR Code</button>
     <button id="btnGoPindahLokasi" class="btn-block btn-secondary" style="margin-top:16px; border-top:1px solid var(--border); padding-top:15px;">🚚 Pindah Lokasi (Checkout)</button>
     <button id="btnCloseToBadgeEntry" class="btn-block btn-secondary" style="display:none; margin-top:16px; border-top:1px solid var(--border); padding-top:15px;">✅ Tutup & Kembali ke Badge</button>
+  </div>
+
+  <div id="metodeCard" class="card" style="display:none;">
+    <p class="card-label">Absensi</p>
+    <button id="btnMetodeSidikJari" class="btn-block btn-primary">👆 Sidik Jari</button>
+    <button id="btnMetodeWajah" class="btn-block btn-accent">📸 Scan Wajah</button>
+  </div>
+
+  <div id="sidikJariCard" class="card" style="display:none; text-align:center;">
+    <div id="sjIkon" style="width:96px; height:96px; margin:4px auto 10px; border-radius:50%; background:var(--danger-bg); display:flex; align-items:center; justify-content:center; font-size:46px;">👆</div>
+    <div id="sjJudul" style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px; text-transform:uppercase; color:var(--steel);">Tempel jari Anda</div>
+    <div id="sjSub" style="font-size:13px; color:var(--text-muted); margin-top:2px;">di sensor HP</div>
+    <div id="sjAksiGagal" style="display:none; margin-top:12px;">
+      <button id="btnSjCobaLagi" class="btn-block btn-primary">👆 Coba Lagi</button>
+      <button id="btnSjPakaiWajah" class="btn-block btn-accent">📸 Pakai Scan Wajah</button>
+    </div>
   </div>
 
   <div id="qrCard" class="card" style="display:none;">
@@ -702,12 +720,89 @@ function handleLocationResult(result) {
     "ok");
 
   if (qrCodeId) {
-    // Datang dari Digital Badge atau QR fisik -- langsung verifikasi wajah 1:1
-    proceedWithQr();
+    // Datang dari Digital Badge atau QR fisik -- langsung verifikasi wajah 1:1.
+    // Dari Badge & sidik jari aktif di HP ini -> tampilkan pilihan Sidik Jari / Scan Wajah dulu.
+    if (fromBadge) tawarkanSidikJariAtauWajah();
+    else proceedWithQr();
   } else {
     setStatus("Pilih cara absen di bawah ini.", "info");
     document.getElementById('entryCard').style.display = "block";
   }
+}
+
+// ============ 1c. SIDIK JARI (opsional, dari Badge, HP terdaftar, online) ============
+let metodeAbsen = "";
+
+async function sidikJariSiapDiHpIni() {
+  const token = absenTokenGet();
+  if (!token || !supabaseClient || navigator.onLine === false || typeof sjDidukung !== "function") return false;
+  if (!(await sjDidukung())) return false;
+  try {
+    const { data, error } = await withTimeout(
+      supabaseClient.rpc('sidik_jari_status', { p_token: token, p_device: badgeDeviceId() }), 5000, "timeout");
+    return !error && data && data.status === 'OK' && data.diHpIni === true;
+  } catch (e) { return false; }
+}
+
+async function tawarkanSidikJariAtauWajah() {
+  setStatus("Menyiapkan pilihan absen...", "info");
+  if (!(await sidikJariSiapDiHpIni())) { proceedWithQr(); return; }
+  setStatus("Pilih cara absen.", "info");
+  document.getElementById('metodeCard').style.display = "block";
+}
+
+document.getElementById('btnMetodeWajah').onclick = () => {
+  document.getElementById('metodeCard').style.display = "none";
+  proceedWithQr();
+};
+document.getElementById('btnMetodeSidikJari').onclick = () => {
+  document.getElementById('metodeCard').style.display = "none";
+  mulaiSidikJari();
+};
+document.getElementById('btnSjCobaLagi').onclick = () => mulaiSidikJari();
+document.getElementById('btnSjPakaiWajah').onclick = () => {
+  document.getElementById('sidikJariCard').style.display = "none";
+  proceedWithQr();
+};
+
+function tampilSidikJari(keadaan, judul, sub) {
+  const ikon = document.getElementById('sjIkon');
+  ikon.style.background = keadaan === "ok" ? "var(--success-bg)" : "var(--danger-bg)";
+  ikon.innerText = keadaan === "fail" ? "❌" : "👆";
+  document.getElementById('sjJudul').innerText = judul;
+  document.getElementById('sjJudul').style.color = keadaan === "ok" ? "var(--success)" : keadaan === "fail" ? "var(--danger)" : "var(--steel)";
+  document.getElementById('sjSub').innerText = sub || "";
+  document.getElementById('sjAksiGagal').style.display = keadaan === "fail" ? "block" : "none";
+  document.getElementById('sidikJariCard').style.display = "block";
+}
+
+async function mulaiSidikJari() {
+  statusEl.style.display = "none";
+  tampilSidikJari("wait", "Tempel jari Anda", "di sensor HP");
+  let hasil;
+  try {
+    hasil = await sjVerifikasi(absenTokenGet(), badgeDeviceId());
+  } catch (e) {
+    hasil = { status: "ERROR", message: "Gagal terhubung ke server sidik jari: " + e.message };
+  }
+  if (!hasil || hasil.status !== "OK") {
+    tampilSidikJari("fail", "Sidik jari gagal", (hasil && hasil.message) || "Sidik jari tidak dikenali / dibatalkan.");
+    return;
+  }
+  if (String(hasil.qrCodeId || "").toUpperCase() !== String(qrCodeId || "").toUpperCase()) {
+    tampilSidikJari("fail", "Sidik jari gagal", "Sidik jari bukan milik karyawan ini.");
+    return;
+  }
+  tampilSidikJari("ok", "Sidik jari cocok", hasil.nama || "");
+  metodeAbsen = "FINGER";
+  currentPerson = { nama: hasil.nama, qrCodeId: hasil.qrCodeId };
+  faceVerified = true;
+  const info = document.getElementById('matchInfo');
+  info.style.display = "block";
+  info.innerText = "✅ Terverifikasi sidik jari: " + (hasil.nama || "") + " (" + qrCodeId + ")" + (hasil.perangkat ? " · " + hasil.perangkat : "");
+  setTimeout(() => { document.getElementById('sidikJariCard').style.display = "none"; }, 600);
+  statusEl.style.display = "";
+  checkSpecialFlowsThenProceed();
 }
 
 // ============ 2. AMBIL DATA PERSON ============
@@ -1267,7 +1362,8 @@ function showResultCard(text, kind) {
   const badgeMap = { masuk1:"badge-masuk1", istirahat:"badge-istirahat", masuk2:"badge-masuk2", pulang:"badge-pulang" };
   resultBanner.style.display = "block";
   resultBanner.className = kind === "ok" ? "banner-ok" : "banner-fail";
-  resultBanner.innerHTML = (kind === "ok" ? "✅ " : "❌ ") + text;
+  resultBanner.innerHTML = (kind === "ok" ? "✅ " : "❌ ") + text +
+    (kind === "ok" && metodeAbsen === "FINGER" ? "<br>👆 Metode: Sidik Jari" : "");
 
   if (pendingPindahReminder) {
     const reminderEl = document.createElement('div');

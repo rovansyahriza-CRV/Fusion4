@@ -315,11 +315,23 @@
   </div>
 </div>
 
+<div class="container" id="sidikJariAdmin" style="display:none; padding-top:0;">
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+      <b style="font-size:15px;">👆 Perangkat Sidik Jari</b>
+      <a href="javascript:void(0)" onclick="muatPerangkatSidikJari()" style="font-size:12px; font-weight:700; color:var(--muted);">↻ Muat ulang</a>
+    </div>
+    <p style="margin:0 0 10px; font-size:12px; color:var(--muted); line-height:1.5;">Reset kalau karyawan ganti / kehilangan HP. Setelah reset, karyawan daftar ulang dari Digital Badge di HP barunya. Alasan wajib diisi dan tercatat di log.</p>
+    <input type="text" id="sjCari" placeholder="🔎 Cari nama / QrCodeId" oninput="renderPerangkatSidikJari()" style="width:100%; box-sizing:border-box; margin-bottom:8px;">
+    <div id="sjDaftar" style="font-size:13px;">Memuat...</div>
+  </div>
+</div>
+
 <div id="loginOverlay">
   <div id="loginBox">
     <div style="font-size:30px; margin-bottom:6px;">🔐</div>
     <h2>Login Petugas Enroll</h2>
-    <p>Masukkan PIN Digital Badge Anda.<br>Hanya petugas dengan hak <b>EN</b> yang bisa mendaftarkan wajah.</p>
+    <p>Masukkan PIN Digital Badge Anda.<br>Hak <b>EN</b> untuk mendaftarkan wajah, <b>FP</b> untuk reset sidik jari.</p>
     <input type="password" id="loginPin" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••••">
     <button type="button" id="btnLogin" class="btn-primary" onclick="loginPetugas()">Masuk</button>
     <div id="loginMsg" class="status-msg error"></div>
@@ -378,10 +390,69 @@
     setTimeout(() => pin.focus(), 100);
   }
 
-  function showPetugas(nama) {
+  function showPetugas(nama, hak) {
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('petugasNama').textContent = nama || '-';
     document.getElementById('petugasBar').style.display = 'flex';
+    const bolehReset = !!(hak && hak.hakResetJari);
+    document.getElementById('sidikJariAdmin').style.display = bolehReset ? 'block' : 'none';
+    if (bolehReset) muatPerangkatSidikJari();
+    if (hak && hak.hakEnroll === false) setStatus('Akun Anda hanya punya hak Reset Sidik Jari (FP). Pendaftaran wajah butuh hak EN.', 'error');
+  }
+
+  // ---------- Perangkat sidik jari (hak FP / ALL / ADMIN) ----------
+  let daftarPerangkatSJ = [];
+  const escSJ = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const tglSJ = (iso) => iso ? new Date(iso).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '-';
+
+  async function muatPerangkatSidikJari() {
+    const box = document.getElementById('sjDaftar');
+    box.textContent = 'Memuat...';
+    try {
+      const { data, error } = await supabaseClient.rpc('sidik_jari_perangkat', { p_token: storageGet(ENROLL_TOKEN_KEY) || '' });
+      if (error) throw error;
+      if (!data || data.status !== 'OK') { box.textContent = (data && data.message) || 'Gagal memuat.'; return; }
+      daftarPerangkatSJ = data.data || [];
+      renderPerangkatSidikJari();
+    } catch (e) {
+      box.textContent = 'Gagal memuat: ' + e.message;
+    }
+  }
+
+  function renderPerangkatSidikJari() {
+    const box = document.getElementById('sjDaftar');
+    const cari = (document.getElementById('sjCari').value || '').trim().toLowerCase();
+    const rows = daftarPerangkatSJ.filter(r => !cari || String(r.nama || '').toLowerCase().includes(cari) || String(r.qrCodeId || '').toLowerCase().includes(cari));
+    if (!rows.length) { box.textContent = daftarPerangkatSJ.length ? 'Tidak ada yang cocok.' : 'Belum ada karyawan yang mendaftarkan sidik jari.'; return; }
+    box.innerHTML = rows.map(r =>
+      '<div style="border:1px solid #E5DED4; border-radius:10px; padding:10px; margin-bottom:8px;">' +
+        '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">' +
+          '<div><b>' + escSJ(r.nama) + '</b> <span style="font-family:\'IBM Plex Mono\',monospace; font-size:11px; color:var(--muted);">' + escSJ(r.qrCodeId) + '</span><br>' +
+          '<span style="font-size:12px;">📱 ' + escSJ(r.perangkat || '-') + '</span></div>' +
+          '<button type="button" data-reset-sj="' + escSJ(r.employeeId) + '" style="flex:0 0 auto; padding:6px 12px; border-radius:8px; border:1.5px solid #D9312E; color:#D9312E; background:#fff; font-weight:700; font-size:12px; cursor:pointer;">Reset</button>' +
+        '</div>' +
+        '<div style="font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5;">Didaftarkan ' + tglSJ(r.didaftarkan) + ' · Terakhir dipakai ' + tglSJ(r.terakhirDipakai) + ' · Absen via jari (30 hr): ' + escSJ(r.absen30) + '</div>' +
+      '</div>').join('');
+    box.querySelectorAll('[data-reset-sj]').forEach(b => { b.onclick = () => resetSidikJari(b.getAttribute('data-reset-sj')); });
+  }
+
+  async function resetSidikJari(employeeId) {
+    const r = daftarPerangkatSJ.find(x => String(x.employeeId) === String(employeeId));
+    if (!r) return;
+    const alasan = prompt('Reset sidik jari ' + r.nama + '?\nHP ' + (r.perangkat || '-') + ' tidak bisa dipakai absen sidik jari lagi.\n\nAlasan reset (wajib):', 'Ganti HP');
+    if (alasan === null) return;
+    if (alasan.trim().length < 5) { alert('Alasan reset wajib diisi (minimal 5 huruf).'); return; }
+    try {
+      const { data, error } = await supabaseClient.rpc('sidik_jari_reset', {
+        p_token: storageGet(ENROLL_TOKEN_KEY) || '', p_employee_id: Number(employeeId), p_alasan: alasan.trim()
+      });
+      if (error) throw error;
+      alert((data && data.message) || 'Selesai.');
+      if (data && data.status === 'SESSION_EXPIRED') { storageDel(ENROLL_TOKEN_KEY); showLogin(data.message); return; }
+      muatPerangkatSidikJari();
+    } catch (e) {
+      alert('Gagal reset: ' + e.message);
+    }
   }
 
   async function cekSesiPetugas() {
@@ -390,7 +461,7 @@
     try {
       const { data, error } = await supabaseClient.rpc('enroll_cek_sesi', { p_token: token });
       if (error) throw error;
-      if (data && data.status === 'OK') { showPetugas(data.nama); return; }
+      if (data && data.status === 'OK') { showPetugas(data.nama, data); return; }
       storageDel(ENROLL_TOKEN_KEY);
       showLogin(data && data.message);
     } catch (e) {
@@ -409,7 +480,7 @@
       if (error) throw error;
       if (data && data.status === 'OK') {
         storageSet(ENROLL_TOKEN_KEY, data.token);
-        showPetugas(data.nama);
+        showPetugas(data.nama, data);
       } else {
         let msg = (data && data.message) || 'Login gagal.';
         if (data && data.status === 'INVALID' && data.sisa != null) msg += ` Sisa percobaan: ${data.sisa}.`;
@@ -428,6 +499,7 @@
     storageDel(ENROLL_TOKEN_KEY);
     if (token) await supabaseClient.rpc('enroll_logout', { p_token: token }).catch(() => {});
     fullReset();
+    document.getElementById('sidikJariAdmin').style.display = 'none';
     showLogin('');
   }
 

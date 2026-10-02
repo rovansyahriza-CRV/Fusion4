@@ -19,6 +19,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="offline-absen.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@13.3.0/dist/bundle/index.umd.min.js"></script>
+<script src="sidik-jari.js"></script>
 <script src="driveBridge.js"></script>
 <script src="reportPdf.js"></script>
 <style>
@@ -175,6 +177,7 @@
     <div class="badge-id" id="badgeId">-</div>
     <button id="btnAbsenSekarang" class="btn-block" style="display:block; width:100%; padding:14px; margin-top:16px; font-size:15px; font-weight:700; letter-spacing:0.5px; border:none; border-radius:12px; background:linear-gradient(135deg, var(--orange), var(--orange-dark)); color:#fff; cursor:pointer; box-shadow:0 8px 20px rgba(232,86,44,0.38); position:relative; z-index:1;">ABSEN</button>
     <div id="offlineReadyBox" style="display:none; margin-top:10px; font-size:11px; line-height:1.5; text-align:center; color:var(--text-muted);"></div>
+    <div id="sidikJariLine" style="display:none; margin-top:6px; font-size:11px; line-height:1.5; text-align:center; color:var(--text-muted);"></div>
   </div>
 
   <div id="offlineModeBanner" style="display:none; margin:10px 16px 0; padding:10px 12px; border-radius:12px; background:#FBF3DC; color:#8A6508; font-size:12px; line-height:1.5; border-left:3px solid #B8860B;">
@@ -236,6 +239,23 @@
     </div>
     <button type="button" id="btnSubmitPin">Tampilkan Badge</button>
     <div id="pinMsg"></div>
+  </div>
+</div>
+
+<style>#sjBtnLanjut:disabled { opacity: 0.45; cursor: default; }</style>
+<div id="sidikJariOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:340px; box-sizing:border-box; text-align:center;">
+    <div id="sjIcon" style="font-size:30px; margin-bottom:6px;">👆</div>
+    <h3 id="sjJudul" style="margin:0 0 6px; font-size:17px; color:var(--charcoal);">Daftarkan Sidik Jari</h3>
+    <div id="sjIsi">
+      <p style="margin:0 0 12px; font-size:13px; color:var(--text-muted); line-height:1.5;">Sidik jari hanya berlaku di <b>HP ini</b>:<br><b id="sjNamaHp">-</b></p>
+      <label style="display:flex; gap:8px; text-align:left; font-size:13px; color:var(--charcoal); line-height:1.45; margin-top:8px;"><input type="checkbox" id="sjCek1" style="margin-top:3px;"> <span>Ini HP pribadi saya.</span></label>
+      <label style="display:flex; gap:8px; text-align:left; font-size:13px; color:var(--charcoal); line-height:1.45; margin-top:8px;"><input type="checkbox" id="sjCek2" style="margin-top:3px;"> <span>Hanya sidik jari saya yang terdaftar di HP ini. Titip absen = pelanggaran disiplin.</span></label>
+      <div style="margin-top:12px; font-size:12px; color:#8A6508; background:#FBF3DC; border-radius:8px; padding:8px;">Ganti HP nanti → minta reset ke HR/PIC.</div>
+    </div>
+    <div id="sjPesan" style="display:none; margin-top:12px; font-size:13px; line-height:1.5; padding:10px; border-radius:8px; text-align:left;"></div>
+    <button type="button" id="sjBtnLanjut" disabled style="width:100%; margin-top:14px; padding:13px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">Lanjut Tempel Jari</button>
+    <div id="sjBtnBatal" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer;">Batal</div>
   </div>
 </div>
 
@@ -546,6 +566,8 @@ function renderBadgeOffline(profile) {
 
   markOfflineProfileUsed(qrId).catch(() => {});
   refreshOfflineReadyBox(qrId);
+  const sjLine = document.getElementById('sidikJariLine');
+  if (sjLine) sjLine.style.display = 'none';
 }
 
 function formatJamOffline(iso) {
@@ -755,6 +777,104 @@ setTimeout(() => {
   if (realPinInput) realPinInput.focus();
 }, 200);
 
+// ============ SIDIK JARI ============
+// Baris status di kartu (di bawah "Siap Offline") + popup daftar. Disembunyikan kalau HP
+// tidak punya sensor, sedang offline, atau tidak ada sesi Badge.
+async function refreshSidikJariLine() {
+  const line = document.getElementById('sidikJariLine');
+  if (!line) return;
+  line.style.display = 'none';
+  const d = window.currentBadgeData;
+  const token = badgeTokenGet();
+  if (!d || d.offline || !token || navigator.onLine === false || typeof sjDidukung !== 'function') return;
+  if (!(await sjDidukung())) return;
+  let st;
+  try {
+    const { data, error } = await supabaseClient.rpc('sidik_jari_status', { p_token: token, p_device: badgeDeviceId() });
+    if (error) throw error;
+    st = data;
+  } catch (e) { console.warn('sidik_jari_status:', e.message); return; }
+  if (!st || st.status !== 'OK') return;
+
+  const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  if (st.diHpIni) {
+    line.innerHTML = '<span style="color:#178A4C; font-weight:700;">👆 Sidik Jari aktif</span>' + (st.perangkat ? ' · ' + esc(st.perangkat) : '');
+  } else if (st.terdaftar) {
+    line.innerHTML = '👆 Sidik jari terdaftar di HP lain' + (st.perangkat ? ' (' + esc(st.perangkat) + ')' : '') + '. Ganti HP? Minta reset ke HR/PIC.';
+  } else if (st.hpDipakaiOrangLain) {
+    line.innerHTML = '👆 HP ini sudah dipakai sidik jari orang lain.';
+  } else {
+    line.innerHTML = '👆 Sidik jari belum aktif · <a href="javascript:void(0)" id="linkDaftarSidikJari" style="color:var(--orange); font-weight:700; text-decoration:underline;">Daftarkan</a>';
+    document.getElementById('linkDaftarSidikJari').onclick = bukaDaftarSidikJari;
+  }
+  line.style.display = 'block';
+}
+
+async function bukaDaftarSidikJari() {
+  const ov = document.getElementById('sidikJariOverlay');
+  const cek1 = document.getElementById('sjCek1'), cek2 = document.getElementById('sjCek2');
+  const btn = document.getElementById('sjBtnLanjut'), pesan = document.getElementById('sjPesan');
+  document.getElementById('sjIcon').innerText = '👆';
+  document.getElementById('sjJudul').innerText = 'Daftarkan Sidik Jari';
+  document.getElementById('sjIsi').style.display = 'block';
+  document.getElementById('sjNamaHp').innerText = await sjNamaPerangkat();
+  cek1.checked = false; cek2.checked = false;
+  pesan.style.display = 'none';
+  btn.style.display = 'block';
+  btn.disabled = true;
+  btn.innerText = 'Lanjut Tempel Jari';
+  cek1.onchange = cek2.onchange = () => { btn.disabled = !(cek1.checked && cek2.checked); };
+  const tutup = () => { ov.style.display = 'none'; };
+  document.getElementById('sjBtnBatal').innerText = 'Batal';
+  document.getElementById('sjBtnBatal').onclick = tutup;
+  const tampilPesan = (teks, ok) => {
+    pesan.innerText = teks;
+    pesan.style.background = ok ? '#E5F6EC' : '#FBEAE7';
+    pesan.style.color = ok ? '#178A4C' : '#C0392B';
+    pesan.style.display = 'block';
+  };
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.innerText = 'Menunggu sidik jari...';
+    let hasil;
+    try {
+      hasil = await sjDaftar(badgeTokenGet(), badgeDeviceId());
+    } catch (e) {
+      hasil = { status: 'ERROR', message: e.message };
+    }
+    if (hasil && hasil.status === 'OK') {
+      document.getElementById('sjIcon').innerText = '✅';
+      document.getElementById('sjJudul').innerText = 'Sidik Jari Aktif';
+      document.getElementById('sjIsi').style.display = 'none';
+      tampilPesan('Sidik jari aktif di HP ini' + (hasil.perangkat ? ' (' + hasil.perangkat + ')' : '') + '. Sekarang bisa absen pakai sidik jari.', true);
+      btn.style.display = 'none';
+      document.getElementById('sjBtnBatal').innerText = 'Tutup';
+      refreshSidikJariLine();
+      return;
+    }
+    if (hasil && (hasil.status === 'HP_DIPAKAI' || hasil.status === 'SUDAH_TERDAFTAR')) {
+      document.getElementById('sjIcon').innerText = '⛔';
+      document.getElementById('sjJudul').innerText = 'Tidak Bisa Didaftarkan';
+      document.getElementById('sjIsi').style.display = 'none';
+      btn.style.display = 'none';
+      document.getElementById('sjBtnBatal').innerText = 'Mengerti';
+      tampilPesan(hasil.message + (hasil.status === 'HP_DIPAKAI'
+        ? '\n• Daftar di HP pribadi Anda sendiri\n• Kalau HP ini sekarang memang milik Anda (misal HP bekas), minta HR/PIC reset dulu' : ''), false);
+      refreshSidikJariLine();
+      return;
+    }
+    if (hasil && hasil.status === 'SESSION_EXPIRED') {
+      tampilPesan('Sesi Badge habis. Tutup, lalu buka Badge dan masukkan PIN lagi.', false);
+    } else {
+      tampilPesan((hasil && hasil.message) || 'Pendaftaran gagal. Coba lagi.', false);
+    }
+    btn.disabled = !(cek1.checked && cek2.checked);
+    btn.innerText = 'Coba Lagi';
+  };
+  ov.style.display = 'flex';
+}
+
 // Tampilkan kartu Badge dari data server (badge_login / badge_sesi_info).
 // pin = PIN yang baru diketik (buat hash login offline); null kalau dibuka ulang lewat sesi.
 async function tampilkanBadge(hasil, pin) {
@@ -869,6 +989,7 @@ async function tampilkanBadge(hasil, pin) {
       })
       .then(() => refreshAllOfflineProfiles().catch(() => {}))
       .finally(() => refreshOfflineReadyBox(qrId));
+    refreshSidikJariLine();
 }
 
 // submitPin bisa kepicu dobel (auto-submit di digit ke-6, tombol yang terpasang onclick +
