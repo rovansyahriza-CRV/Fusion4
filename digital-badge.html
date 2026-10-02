@@ -2080,13 +2080,16 @@ async function submitPinInti() {
     }
 
     try {
-      const { error } = await supabaseClient.rpc('process_vendor_approval_by_qrcode', {
-        p_qrcode: qrId,
-        p_vendor_id: Number(vendorId),
-        p_decision: decision,
-        p_reason: reason
+      // Lewat vendor_proses pakai sesi Badge (login PIN): tag RV/AV dicek server.
+      const tokenBadge = (typeof badgeTokenGet === 'function' && badgeTokenGet()) || '';
+      const { data: hasil, error } = await supabaseClient.rpc('vendor_proses', {
+        p_token: tokenBadge, p_vendor_id: Number(vendorId), p_decision: decision, p_reason: reason
       });
       if (error) throw error;
+      if (!hasil || hasil.status !== 'OK') {
+        if (hasil && hasil.status === 'SESSION_EXPIRED') throw new Error('Sesi Badge habis. Tutup lalu buka Badge dan masukkan PIN lagi.');
+        throw new Error((hasil && hasil.message) || 'Gagal memproses vendor.');
+      }
       alert('Vendor berhasil diproses.');
       loadApprovalIssues(qrId);
     } catch (e) {
