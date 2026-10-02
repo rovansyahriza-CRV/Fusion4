@@ -141,6 +141,11 @@ button:disabled{cursor:not-allowed}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
 .chip{position:absolute;right:12px;bottom:12px;background:var(--text);color:#fff;font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:7px}
 .scale{position:absolute;left:12px;bottom:12px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.scale.on-map{background:rgba(255,255,255,.9);color:var(--text);padding:4px 8px;border-radius:7px;display:flex;align-items:center;gap:7px}
+.scale .bar{display:inline-block;height:6px;border:2px solid var(--text);border-top:0}
+.maptog{position:absolute;right:12px;top:12px;display:flex;gap:2px;background:#fff;border-radius:9px;padding:3px;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.maptog button{border:0;background:transparent;font-family:var(--body);font-size:12.5px;font-weight:600;color:var(--muted);padding:6px 10px;border-radius:7px}
+.maptog button.on{background:var(--navy);color:#fff}
 .acc-card{display:flex;justify-content:space-between;align-items:center}
 .acc-card .big{font-family:var(--mono);font-weight:500;font-size:38px;line-height:1.1;margin-top:4px}
 .badge{font-family:var(--cond);font-weight:700;font-size:17px;letter-spacing:.05em;border-radius:7px;padding:7px 12px;color:#fff;background:var(--muted-2)}
@@ -297,6 +302,7 @@ input[type=range]{width:100%;margin:14px 0 6px;accent-color:var(--navy);height:2
     <div class="legend"><div><i style="background:var(--navy)"></i>Sampel dipakai</div><div><i style="background:#B9BFCC"></i>Dibuang (&gt;25 m)</div></div>
     <div class="chip" id="chipRadius">Radius awal 100 m</div>
     <div class="scale" id="scaleTengah"></div>
+    <div class="maptog" role="group" aria-label="Jenis peta"><button type="button" data-jenis="sat">Satelit</button><button type="button" data-jenis="peta">Peta</button></div>
   </div>
   <div class="body">
     <div class="card acc-card">
@@ -327,6 +333,8 @@ input[type=range]{width:100%;margin:14px 0 6px;accent-color:var(--navy);height:2
     <svg id="mapKeliling" viewBox="0 0 390 330" preserveAspectRatio="xMidYMid slice"></svg>
     <div class="legend"><div><i style="background:var(--navy)"></i>Pojok ditandai</div><div><i style="background:var(--green)"></i>Posisi kamu</div><div><b style="color:var(--red);margin-right:6px">+</b>Titik tengah (otomatis)</div></div>
     <div class="scale" id="scaleKeliling"></div>
+    <div class="chip" id="chipLuas" style="display:none"></div>
+    <div class="maptog" role="group" aria-label="Jenis peta"><button type="button" data-jenis="sat">Satelit</button><button type="button" data-jenis="peta">Peta</button></div>
   </div>
   <div class="body">
     <div class="stats">
@@ -887,6 +895,96 @@ function renderTengah() {
   $('tTip').textContent = tip;
   gambarTengah(h);
 }
+// ================= LATAR PETA (online) =================
+// Potongan peta (ubin 256 px Web Mercator) dipasang di belakang gambar SVG dengan skala meter yang
+// sama, jadi lingkaran radius di layar = radius sungguhan di peta. Offline / gagal muat -> kotak-kotak.
+// Ubin tidak dibuat ulang tiap update GPS, cuma digeser (tidak berkedip, hemat kuota).
+const PETA_SUMBER = {
+  sat: { url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`, maxZ: 19, atrib: '© Esri' },
+  peta: { url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`, maxZ: 19, atrib: '© OSM' }
+};
+let petaJenis = (() => { try { return localStorage.getItem('sl_peta') === 'peta' ? 'peta' : 'sat'; } catch (e) { return 'sat'; } })();
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function lapisan(svg) {
+  if (!svg._lap) {
+    svg.innerHTML = `${svgGrid()}<g data-l="tiles"></g><g data-l="fg"></g>`;
+    svg._lap = { tiles: svg.querySelector('[data-l="tiles"]'), fg: svg.querySelector('[data-l="fg"]'), img: new Map() };
+  }
+  return svg._lap;
+}
+function skalaLayar(svg) {
+  const r = svg.getBoundingClientRect();
+  return Math.max(r.width / 390, r.height / 330) || 1; // px layar per unit viewBox (slice)
+}
+// o = titik di (cx, cy) viewBox, sc = unit viewBox per meter. Balik true kalau peta dipasang.
+function petaLatar(svg, o, sc, cx, cy) {
+  const L = lapisan(svg);
+  const kosongkan = () => { L.tiles.innerHTML = ''; L.img.clear(); return false; };
+  if (!o || navigator.onLine === false) return kosongkan();
+  const src = PETA_SUMBER[petaJenis];
+  const cosLat = Math.cos(o.lat * Math.PI / 180);
+  const mppIngin = 1 / (sc * skalaLayar(svg));
+  const z = Math.max(3, Math.min(src.maxZ, Math.round(Math.log2(156543.03392 * cosLat / mppIngin))));
+  const max = Math.pow(2, z), n = 256 * max;
+  const latR = o.lat * Math.PI / 180;
+  const gx = (o.lng + 180) / 360 * n;
+  const gy = (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n;
+  const u = 156543.03392 * cosLat / max * sc; // unit viewBox per piksel ubin
+  const tx0 = Math.floor((gx - cx / u) / 256), tx1 = Math.floor((gx + (390 - cx) / u) / 256);
+  const ty0 = Math.floor((gy - cy / u) / 256), ty1 = Math.floor((gy + (330 - cy) / u) / 256);
+  if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 49) return kosongkan();
+  const perlu = new Set(), w = 256 * u;
+  for (let tx = tx0; tx <= tx1; tx++) {
+    for (let ty = ty0; ty <= ty1; ty++) {
+      if (ty < 0 || ty >= max) continue;
+      const txw = ((tx % max) + max) % max;
+      const key = `${petaJenis}/${z}/${txw}/${ty}`;
+      perlu.add(key);
+      let im = L.img.get(key);
+      if (!im) {
+        im = document.createElementNS(SVG_NS, 'image');
+        im.setAttribute('preserveAspectRatio', 'none');
+        im.addEventListener('error', () => { im.style.display = 'none'; });
+        im.setAttribute('href', src.url(z, txw, ty));
+        L.tiles.appendChild(im);
+        L.img.set(key, im);
+      }
+      im.setAttribute('x', (cx + (tx * 256 - gx) * u - 0.3).toFixed(2));
+      im.setAttribute('y', (cy + (ty * 256 - gy) * u - 0.3).toFixed(2));
+      im.setAttribute('width', (w + 0.6).toFixed(2));
+      im.setAttribute('height', (w + 0.6).toFixed(2));
+    }
+  }
+  L.img.forEach((im, key) => { if (!perlu.has(key)) { im.remove(); L.img.delete(key); } });
+  return true;
+}
+function tulisSkala(el, sc, svg, petaOn) {
+  if (!petaOn) { el.classList.remove('on-map'); el.textContent = `kotak ≈ ${Math.round(40 / sc)} m`; return; }
+  const pxPerM = sc * skalaLayar(svg);
+  const m = [5, 10, 20, 25, 50, 100, 200, 500].find((v) => v * pxPerM >= 45) || 500;
+  el.classList.add('on-map');
+  el.innerHTML = `<span class="bar" style="width:${Math.round(m * pxPerM)}px"></span>${m} m · ${PETA_SUMBER[petaJenis].atrib}`;
+}
+function renderTogglePeta() {
+  document.querySelectorAll('.maptog').forEach((t) => {
+    t.style.display = navigator.onLine === false ? 'none' : '';
+    t.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.jenis === petaJenis));
+  });
+}
+function gambarUlangPeta() {
+  try { if (S.tengah) gambarTengah(hasilTengah()); } catch (e) {}
+  try { if (S.keliling) gambarKeliling(hitungArea(S.keliling.pojok)); } catch (e) {}
+}
+document.querySelectorAll('.maptog button').forEach((b) => b.addEventListener('click', () => {
+  petaJenis = b.dataset.jenis;
+  try { localStorage.setItem('sl_peta', petaJenis); } catch (e) {}
+  renderTogglePeta();
+  gambarUlangPeta();
+}));
+window.addEventListener('online', () => { renderTogglePeta(); gambarUlangPeta(); });
+window.addEventListener('offline', () => { renderTogglePeta(); gambarUlangPeta(); });
+renderTogglePeta();
+
 function svgGrid() {
   return `<defs><pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#D3D8E2" stroke-width="1"/></pattern></defs><rect width="390" height="330" fill="url(#g)"/>`;
 }
@@ -896,11 +994,13 @@ function gambarTengah(h) {
   const radius = S.tujuan === 'UPDATE' && S.target ? S.target.radius : 100;
   const o = h || (T.samples[0]) || S.fix;
   const cx = 195, cy = 165;
-  let out = svgGrid();
-  if (!o) { svg.innerHTML = out + `<text x="195" y="170" text-anchor="middle" font-family="Barlow" font-size="15" fill="#5A6275">Menunggu sinyal GPS...</text>`; $('scaleTengah').textContent = ''; return; }
+  let out = '';
+  if (!o) { petaLatar(svg, null); lapisan(svg).fg.innerHTML = `<text x="195" y="170" text-anchor="middle" font-family="Barlow" font-size="15" fill="#5A6275">Menunggu sinyal GPS...</text>`; $('scaleTengah').textContent = ''; $('scaleTengah').classList.remove('on-map'); return; }
   const sc = 135 / radius; // px per meter: lingkaran radius = 135 px
-  $('scaleTengah').textContent = `kotak ≈ ${Math.round(40 / sc)} m`;
-  out += `<circle cx="${cx}" cy="${cy}" r="${radius * sc}" fill="rgba(35,52,95,.07)" stroke="#23345F" stroke-width="2" stroke-dasharray="7 6"/>`;
+  const petaOn = petaLatar(svg, o, sc, cx, cy);
+  tulisSkala($('scaleTengah'), sc, svg, petaOn);
+  if (petaOn) out += `<circle cx="${cx}" cy="${cy}" r="${radius * sc}" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="5"/>`;
+  out += `<circle cx="${cx}" cy="${cy}" r="${radius * sc}" fill="rgba(35,52,95,${petaOn ? '.12' : '.07'})" stroke="#23345F" stroke-width="2" stroke-dasharray="7 6"/>`;
   // Sebaran sampel cuma beberapa meter -> digambar pakai zoom sendiri (skematik) biar gak ketutup
   // titik merah: sampel terjauh ~42 px dari tengah, tetap di dalam lingkaran radius.
   const sampel = T.samples.slice(-60).map((s) => ({ s, m: keMeter(s, o) }));
@@ -909,10 +1009,10 @@ function gambarTengah(h) {
   if (h) out += `<circle cx="${cx}" cy="${cy}" r="${Math.min(Math.max(h.acc * sc, 32), 120)}" fill="rgba(31,122,77,.18)" stroke="#1F7A4D" stroke-width="2.5"/>`;
   sampel.forEach(({ s, m }) => {
     const x = cx + m.x * scS, y = cy - m.y * scS;
-    out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${s.used ? '#23345F' : '#B9BFCC'}"/>`;
+    out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${s.used ? '#23345F' : '#B9BFCC'}" stroke="#fff" stroke-width="${petaOn ? 1.5 : 0}"/>`;
   });
   if (h) out += `<circle cx="${cx}" cy="${cy}" r="11" fill="#D93030" stroke="#fff" stroke-width="4"/>`;
-  svg.innerHTML = out;
+  lapisan(svg).fg.innerHTML = out;
 }
 function kunciTengah() {
   const h = hasilTengah(); if (!h) return;
@@ -931,7 +1031,9 @@ function hitungArea(pojok) {
   const c = { lat: pojok.reduce((a, p) => a + p.lat, 0) / pojok.length, lng: pojok.reduce((a, p) => a + p.lng, 0) / pojok.length };
   const maxD = Math.max(...pojok.map((p) => jarak(c, p)));
   const r = Math.ceil((maxD + BUFFER_KELILING) / 5) * 5;
-  return { ...c, maxD, radiusAsli: r, radius: Math.min(Math.max(r, R_MIN), R_MAX) };
+  const m = pojok.map((p) => keMeter(p, c));
+  const luas = Math.abs(m.reduce((a, q, i) => { const q2 = m[(i + 1) % m.length]; return a + q.x * q2.y - q2.x * q.y; }, 0)) / 2;
+  return { ...c, maxD, radiusAsli: r, radius: Math.min(Math.max(r, R_MIN), R_MAX), luas };
 }
 function tandaiPojok() {
   const bagus = S.recent.filter((f) => f.acc <= ACC_BUANG && Date.now() - f.t < 6000);
@@ -943,11 +1045,18 @@ function tandaiPojok() {
   if (navigator.vibrate) navigator.vibrate(60);
   renderKeliling();
 }
+function fmtLuas(m2) {
+  const r = Math.round(m2);
+  if (r >= 10000) return `${(m2 / 10000).toLocaleString('id-ID', { maximumFractionDigits: 2 })} ha (${r.toLocaleString('id-ID')} m²)`;
+  return `${r.toLocaleString('id-ID')} m²`;
+}
 function renderKeliling() {
   const K = S.keliling; if (!K) return;
   const P = K.pojok, n = P.length, area = hitungArea(P);
   $('kPojok').textContent = n;
   $('kRadius').textContent = area ? `${area.radiusAsli} m` : '– m';
+  $('chipLuas').style.display = area ? '' : 'none';
+  $('chipLuas').textContent = area ? `Luas ${fmtLuas(area.luas)}` : '';
   const a = S.fix ? S.fix.acc : null;
   $('kAcc').textContent = fmtAcc(a);
   $('kAcc').className = 'acc ' + accCls(a);
@@ -963,15 +1072,17 @@ function gambarKeliling(area) {
   const svg = $('mapKeliling');
   const P = S.keliling.pojok;
   const pts = [...P]; if (S.fix) pts.push(S.fix);
-  let out = svgGrid();
-  if (!pts.length) { svg.innerHTML = out + `<text x="195" y="170" text-anchor="middle" font-family="Barlow" font-size="15" fill="#5A6275">Menunggu sinyal GPS...</text>`; $('scaleKeliling').textContent = ''; return; }
+  let out = '';
+  if (!pts.length) { petaLatar(svg, null); lapisan(svg).fg.innerHTML = `<text x="195" y="170" text-anchor="middle" font-family="Barlow" font-size="15" fill="#5A6275">Menunggu sinyal GPS...</text>`; $('scaleKeliling').textContent = ''; $('scaleKeliling').classList.remove('on-map'); return; }
   const o = area || { lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length, lng: pts.reduce((s, p) => s + p.lng, 0) / pts.length };
   let ext = 20;
   pts.forEach((p) => { const m = keMeter(p, o); ext = Math.max(ext, Math.abs(m.x) * 0.8, Math.abs(m.y)); });
   if (area) ext = Math.max(ext, area.radiusAsli);
   const sc = 140 / ext, cx = 195, cy = 168;
   const xy = (p) => { const m = keMeter(p, o); return [cx + m.x * sc, cy - m.y * sc]; };
-  $('scaleKeliling').textContent = `kotak ≈ ${Math.round(40 / sc)} m`;
+  const petaOn = petaLatar(svg, o, sc, cx, cy);
+  tulisSkala($('scaleKeliling'), sc, svg, petaOn);
+  if (area && petaOn) out += `<circle cx="${cx}" cy="${cy}" r="${area.radiusAsli * sc}" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="5"/>`;
   if (area) out += `<circle cx="${cx}" cy="${cy}" r="${area.radiusAsli * sc}" fill="rgba(35,52,95,.07)" stroke="#23345F" stroke-width="2" stroke-dasharray="7 6"/>`;
   if (P.length >= 2) {
     const d = P.map(xy).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
@@ -981,7 +1092,7 @@ function gambarKeliling(area) {
   if (area) out += `<path d="M${cx - 10} ${cy}h20M${cx} ${cy - 10}v20" stroke="#D93030" stroke-width="3"/>`;
   if (S.fix) { const [x, y] = xy(S.fix); out += `<circle cx="${x}" cy="${y}" r="20" fill="rgba(31,122,77,.22)"/><circle cx="${x}" cy="${y}" r="10" fill="#1F7A4D" stroke="#fff" stroke-width="3"/>`; }
   P.forEach((p, i) => { const [x, y] = xy(p); out += `<circle cx="${x}" cy="${y}" r="14" fill="#23345F" stroke="#fff" stroke-width="2.5"/><text x="${x}" y="${y + 5}" text-anchor="middle" font-family="Barlow" font-weight="600" font-size="14" fill="#fff">${i + 1}</text>`; });
-  svg.innerHTML = out;
+  lapisan(svg).fg.innerHTML = out;
 }
 function selesaiKeliling() {
   const area = hitungArea(S.keliling.pojok); if (!area) return;
@@ -989,7 +1100,7 @@ function selesaiKeliling() {
   S.titik = {
     lat: area.lat, lng: area.lng, akurasi: Math.round(accs.reduce((a, b) => a + b, 0) / accs.length * 10) / 10,
     sampel: S.keliling.pojok.length, mode: 'KELILING', pojok: S.keliling.pojok,
-    waktu: new Date().toISOString(), radiusSaran: area.radius, radiusAsli: area.radiusAsli
+    waktu: new Date().toISOString(), radiusSaran: area.radius, radiusAsli: area.radiusAsli, luas: area.luas
   };
   bukaDetail('scrKeliling');
 }
@@ -1001,7 +1112,7 @@ function bukaDetail(dari, prefill) {
   const t = S.titik;
   $('dLat').textContent = `LAT ${t.lat.toFixed(6)}`;
   $('dLng').textContent = `LNG ${t.lng.toFixed(6)}`;
-  $('dQual').textContent = t.mode === 'KELILING' ? `±${Math.round(t.akurasi)} m · ${t.sampel} pojok` : `±${Math.round(t.akurasi)} m · ${t.sampel} sampel`;
+  $('dQual').textContent = t.mode === 'KELILING' ? `±${Math.round(t.akurasi)} m · ${t.sampel} pojok${t.luas ? ' · luas ' + fmtLuas(t.luas) : ''}` : `±${Math.round(t.akurasi)} m · ${t.sampel} sampel`;
   const upd = S.tujuan === 'UPDATE' && S.target;
   const f = prefill || (upd ? { kode: S.target.kode, nama: S.target.nama, project: S.target.project } : { kode: '', nama: '', project: '' });
   $('fKode').value = f.kode || '';
