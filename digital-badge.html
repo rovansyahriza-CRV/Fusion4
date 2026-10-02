@@ -1608,7 +1608,7 @@ async function submitPinInti() {
         safeRpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_vendor_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_rfq_approvals_by_qrcode', { p_qrcode: qrId }),
-        safeRpc('get_pending_po_approvals_by_qrcode', { p_qrcode: qrId }),
+        Promise.resolve(null), // daftar PO dibaca langsung di bawah (tag APO); RPC lama dicabut di S4
         safeRpc('get_today_attendance_status', { p_qrcode: qrId }),
         safeRpc('get_delivery_trigger_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_payroll_slip_by_qrcode', { p_qrcode: qrId })
@@ -2309,32 +2309,14 @@ async function submitPinInti() {
     }
 
     try {
-      let rpcSuccess = false;
-      try {
-        const { error } = await supabaseClient.rpc('process_po_approval_by_qrcode', {
-          p_qrcode: qrId,
-          p_poid: Number(poId),
-          p_decision: decision,
-          p_reason: reason
-        });
-        if (!error) rpcSuccess = true;
-      } catch (rpcErr) {
-        console.warn('RPC process_po_approval_by_qrcode error:', rpcErr);
-      }
-
-      const approverName = (window.currentBadgeData && window.currentBadgeData.nama) || 'Direktur';
-      if (!rpcSuccess) {
-        const { error: updErr } = await supabaseClient
-          .from('purchaseOrder')
-          .update({
-            Status: decision === 'Approve' ? 'Approved' : 'Ditolak Management',
-            ManagementApproval: decision === 'Approve' ? 'Approved' : 'Rejected',
-            ManagementApprovalBy: approverName,
-            ManagementApprovalDate: new Date().toISOString(),
-            Notes: reason
-          })
-          .eq('POID', Number(poId));
-        if (updErr) throw updErr;
+      // Lewat po_proses pakai sesi Badge (login PIN): tag APO / ALL dicek server (S4).
+      const { data: hasilPo, error: errPo } = await supabaseClient.rpc('po_proses', {
+        p_token: badgeTokenGet() || '', p_poid: Number(poId), p_decision: decision, p_reason: reason
+      });
+      if (errPo) throw errPo;
+      if (!hasilPo || hasilPo.status !== 'OK') {
+        if (hasilPo && hasilPo.status === 'SESSION_EXPIRED') throw new Error('Sesi Badge habis. Tutup lalu buka Badge dan masukkan PIN lagi.');
+        throw new Error((hasilPo && hasilPo.message) || 'Gagal memproses PO/SO.');
       }
 
       if (decision === 'Approve') {
@@ -2765,10 +2747,10 @@ async function sendPoApprovalEmail(extra) {
       'application/pdf',
       pdfBase64
     );
-    await supabaseClient
-      .from('purchaseOrder')
-      .update({ ReportURL: uploadedPoPdf.directUrl, ReportFileID: uploadedPoPdf.fileId })
-      .eq('POID', poid);
+    const { data: hasilReport, error: errReport } = await supabaseClient.rpc('po_set_report', {
+      p_token: badgeTokenGet() || '', p_poid: Number(poid), p_file_id: uploadedPoPdf.fileId
+    });
+    if (errReport || !hasilReport || hasilReport.status !== 'OK') throw new Error((errReport && errReport.message) || (hasilReport && hasilReport.message) || 'Gagal simpan link PDF');
   } catch (reportErr) {
     console.warn('Gagal upload/simpan report PDF PO/SO ke Drive:', reportErr);
   }
@@ -2795,7 +2777,7 @@ async function sendPoApprovalEmail(extra) {
   const result = await res.json();
   if (!result.success) throw new Error(result.error || "Gagal mengirim PDF PO/SO");
 
-  await supabaseClient.from('purchaseOrder').update({ SentDate: new Date().toISOString() }).eq('POID', poid);
+  await supabaseClient.rpc('po_tandai_terkirim', { p_token: badgeTokenGet() || '', p_poid: Number(poid) });
 }
 
   async function handleRequestApprovalDecision(refno, decision, qrId) {
