@@ -3507,7 +3507,7 @@ async function loadEmployeeRequestPage(tab = 'ALL', tabBtn = null) {
   if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#777;">Memuat data...</td></tr>';
 
   try {
-    const { data, error } = await supabaseClient.rpc('list_employee_requests', { p_status: tab });
+    const { data, error } = await fusionAdminRpc('list_employee_requests', { p_status: tab });
     if (error) throw error;
     empReqState.rows = data || [];
     renderEmployeeRequestTable();
@@ -3520,7 +3520,7 @@ async function loadEmployeeRequestPage(tab = 'ALL', tabBtn = null) {
 
 async function updateEmpReqBadgeCounts() {
   try {
-    const { data, error } = await supabaseClient.rpc('list_employee_requests', { p_status: 'ALL' });
+    const { data, error } = await fusionAdminRpc('list_employee_requests', { p_status: 'ALL' });
     if (error || !data) return;
 
     const all = data.length;
@@ -3696,9 +3696,8 @@ async function submitEmployeeRequest() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Mengirim...'; }
 
   try {
-    const { data, error } = await supabaseClient.rpc('submit_employee_request', {
-      p_pemohon_id: currentUser.id,
-      p_pemohon_nama: currentUser.nama,
+    // Pemohon diambil server dari sesi login (S7).
+    const { data, error } = await fusionAdminRpc('submit_employee_request', {
       p_divisi: divisi,
       p_departemen: dept,
       p_project_code: proj,
@@ -4003,7 +4002,7 @@ async function loadKandidatRekrutmen(reqId) {
   if (!panel) return;
 
   try {
-    const { data, error } = await supabaseClient.rpc('list_kandidat_rekrutmen', { p_request_id: reqId });
+    const { data, error } = await fusionAdminRpc('list_kandidat_rekrutmen', { p_request_id: reqId });
     if (error) throw error;
     renderKandidatRekrutmenPanel(reqId, data);
   } catch (err) {
@@ -4125,13 +4124,12 @@ async function submitKandidatBaru(reqId) {
     }
 
     const actor = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'System';
-    const { data, error } = await supabaseClient.rpc('submit_kandidat_rekrutmen', {
+    const { data, error } = await fusionAdminRpc('submit_kandidat_rekrutmen', {
       p_request_id: reqId,
       p_nama_kandidat: nama,
       p_tgl_interview: tgl,
       p_status: 'PROSES',
       p_notes: null,
-      p_actor_name: actor,
       p_cv_url: cvUrl,
       p_cv_fileid: cvFileId,
       p_cv_filename: cvFileName
@@ -4156,14 +4154,14 @@ async function kirimUndanganInterview(kandidatId, namaKandidat, reqId) {
   if (!email) return;
 
   try {
-    const { data: reqRes, error: reqErr } = await supabaseClient.rpc('kirim_undangan_interview_kandidat', { p_kandidat_id: kandidatId });
+    const { data: reqRes, error: reqErr } = await fusionAdminRpc('kirim_undangan_interview_kandidat', { p_kandidat_id: kandidatId });
     if (reqErr) throw reqErr;
     if (reqRes?.status !== 'SUCCESS') {
       showToast(reqRes?.message || 'Gagal generate undangan interview.', 'error');
       return;
     }
 
-    const { data: listData } = await supabaseClient.rpc('list_kandidat_rekrutmen', { p_request_id: reqId });
+    const { data: listData } = await fusionAdminRpc('list_kandidat_rekrutmen', { p_request_id: reqId });
     const kandidat = (listData?.kandidat || []).find(k => k.Id === kandidatId);
     const tglInterview = kandidat?.TglInterview || '(jadwal menyusul)';
     const link = `https://rovansyahriza-crv.github.io/Fusion4/konfirmasi-interview.html?kandidat=${kandidatId}`;
@@ -4304,7 +4302,7 @@ async function konfirmasiHasilInterview(hasil) {
     }
 
     const actor = currentUser ? `${currentUser.nama} (${currentUser.id})` : 'System';
-    const { data, error } = await supabaseClient.rpc('submit_hasil_interview', {
+    const { data, error } = await fusionAdminRpc('submit_hasil_interview', {
       p_kandidat_id: kandidatId,
       p_interviewer_nama: interviewerNama,
       p_tanggal_pelaksanaan: tglPelaksanaan,
@@ -4314,8 +4312,7 @@ async function konfirmasiHasilInterview(hasil) {
       p_kriteria_json: kriteriaJson,
       p_dokumen_url: dokUrl,
       p_dokumen_fileid: dokFileId,
-      p_dokumen_filename: dokFileName,
-      p_actor_name: actor
+      p_dokumen_filename: dokFileName
     });
     if (error) throw error;
 
@@ -4334,7 +4331,7 @@ async function kirimLinkKonfirmasi(kandidatId, namaKandidat, reqId) {
 
   try {
     // Ambil PIN & detail terbaru dari list (supaya PIN akurat, bukan tebakan client)
-    const { data: listData, error: listErr } = await supabaseClient.rpc('list_kandidat_rekrutmen', { p_request_id: reqId });
+    const { data: listData, error: listErr } = await fusionAdminRpc('list_kandidat_rekrutmen', { p_request_id: reqId });
     if (listErr) throw listErr;
     const kandidat = (listData?.kandidat || []).find(k => k.Id === kandidatId);
     if (!kandidat) {
@@ -4342,7 +4339,7 @@ async function kirimLinkKonfirmasi(kandidatId, namaKandidat, reqId) {
       return;
     }
 
-    const { data: sendRes, error: sendErr } = await supabaseClient.rpc('catat_pengiriman_konfirmasi_kandidat', { p_kandidat_id: kandidatId });
+    const { data: sendRes, error: sendErr } = await fusionAdminRpc('catat_pengiriman_konfirmasi_kandidat', { p_kandidat_id: kandidatId });
     if (sendErr) throw sendErr;
     if (sendRes?.status !== 'SUCCESS') {
       showToast(sendRes?.message || 'Kandidat belum berstatus Lulus Interview.', 'error');
@@ -4372,7 +4369,7 @@ async function kirimLinkKonfirmasi(kandidatId, namaKandidat, reqId) {
 
 async function cetakLembarInterview(kandidatId) {
   try {
-    const { data, error } = await supabaseClient.rpc('get_lembar_interview_data', { p_kandidat_id: kandidatId });
+    const { data, error } = await fusionAdminRpc('get_lembar_interview_data', { p_kandidat_id: kandidatId });
     if (error) throw error;
     if (data.status !== 'SUCCESS') {
       showToast(data.message || 'Gagal mengambil data lembar interview.', 'error');
@@ -4639,7 +4636,7 @@ async function deleteEmployeeRequest(id) {
   if (!confirm('Apakah Anda yakin ingin menghapus pengajuan permintaan karyawan ini?')) return;
 
   try {
-    const { data, error } = await supabaseClient.rpc('delete_employee_request', { p_id: id });
+    const { data, error } = await fusionAdminRpc('delete_employee_request', { p_id: id });
     if (error) throw error;
     showToast(data?.message || 'Permintaan karyawan berhasil dihapus.', 'success');
     await loadEmployeeRequestPage(empReqState.currentTab);

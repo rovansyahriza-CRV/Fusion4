@@ -2369,8 +2369,9 @@ async function submitPinInti() {
     }
 
     try {
-      const { data, error } = await supabaseClient.rpc('process_employee_request_step_by_qrcode', {
-        p_qrcode: qrId,
+      // Lewat sesi Badge (login PIN): aturan tahap AER/HRD/APER dicek server (S7).
+      const { data, error } = await supabaseClient.rpc('process_employee_request_step_badge', {
+        p_token: badgeTokenGet() || '',
         p_id: Number(id),
         p_step_action: action,
         p_notes: notes
