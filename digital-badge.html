@@ -1495,18 +1495,16 @@ async function submitPinInti() {
 
       // 1. Dapatkan otorisasi user (karyawanTbl & paswordTbl) untuk fallback jika RPC tidak return
       let authorTokens = [];
-      let isDirektur = false;
       let isSuper = false;
       try {
         const { data: userKar } = await supabaseClient.from('karyawanTbl').select('Id, Author, Kualifikasi').ilike('QrCodeId', qrId.trim()).maybeSingle();
         if (userKar) {
-          const kualifikasi = (userKar.Kualifikasi || '').toLowerCase();
           const { data: userPas } = await supabaseClient.from('paswordTbl').select('Author, pic, PIC').eq('Id', userKar.Id).maybeSingle();
           const rawA = (userKar.Author || '') + ',' + (userPas ? (userPas.Author || '') : '');
           const rawP = userPas ? (userPas.pic || userPas.PIC || '') : '';
           authorTokens = [...rawA.split(','), ...rawP.split(',')].map(s => s.trim().toUpperCase()).filter(Boolean);
-          isDirektur = kualifikasi.includes('direktur');
-          isSuper = isDirektur || authorTokens.includes('ALL') || authorTokens.includes('*');
+          // Approval murni dari tag (Author/PIC), bukan jabatan -- sama dengan aturan server.
+          isSuper = authorTokens.includes('ALL') || authorTokens.includes('*');
         }
       } catch (authErr) {
         console.warn('Error fetching user auth in loadApprovalIssues:', authErr);
@@ -1571,12 +1569,13 @@ async function submitPinInti() {
       }
 
       // Fallback akurat untuk Seleksi Vendor RFQ jika RPC belum return
-      const canApproveRfq = isSuper || authorTokens.some(t => t.startsWith('ASV') || t.includes('SELEKSI') || t.includes('RFQ'));
+      // Tag ASV saja (dulu tag apa pun yang mengandung SELEKSI/RFQ ikut lolos, mis. pembuat RFQ).
+      const canApproveRfq = isSuper || authorTokens.some(t => t === 'ASV' || t.startsWith('ASV-') || t.startsWith('ASV ') || t.startsWith('APPROVAL SELEKSI VENDOR'));
       if (canApproveRfq && (!rfqData || rfqData.length === 0)) {
         try {
           const { data: rvRows } = await supabaseClient
             .from('rfqVendor')
-            .select('RFQVendorID, RFQID, VendorID, PIN, Notes')
+            .select('RFQVendorID, RFQID, VendorID, Notes')
             .eq('Status', 'Diusulkan')
             .is('ManagementApproval', null);
 
@@ -1632,7 +1631,6 @@ async function submitPinInti() {
                 rfqvendorid: rv.RFQVendorID,
                 rfqid: rv.RFQID,
                 vendorid: rv.VendorID,
-                pin: rv.PIN,
                 norfq: rfqObj.NoRFQ || ('RFQID-' + rv.RFQID),
                 diusulkanoleh: rfqObj.CreatedBy || '-',
                 vendorname: vendorObj.VendorName || ('Vendor #' + rv.VendorID),
@@ -1647,7 +1645,8 @@ async function submitPinInti() {
       }
 
       // Fallback akurat untuk PO/SO jika RPC belum return
-      const canApprovePo = isSuper || authorTokens.some(t => t.startsWith('APO') || t.includes('PO') || t.includes('SO'));
+      // Tag APO saja, sama dengan menu SMMS (dulu tag apa pun yang mengandung huruf PO/SO ikut lolos).
+      const canApprovePo = isSuper || authorTokens.some(t => t === 'APO' || t.startsWith('APO-') || t.startsWith('APO ') || t.startsWith('APPROVAL PO/SO'));
       if (canApprovePo && (!poData || poData.length === 0)) {
         try {
           const { data: poRows } = await supabaseClient
@@ -2105,168 +2104,29 @@ async function submitPinInti() {
     }
 
     try {
-      let rpcSuccess = false;
-      try {
-        const { error } = await supabaseClient.rpc('process_rfq_approval_by_qrcode', {
-          p_qrcode: qrId,
-          p_rfqvendorid: Number(rfqVendorId),
-          p_decision: decision,
-          p_reason: reason
-        });
-        if (!error) rpcSuccess = true;
-      } catch (rpcErr) {
-        console.warn('RPC process_rfq_approval_by_qrcode error:', rpcErr);
+      // Approve/tolak lewat RPC rfq_proses_seleksi pakai sesi Badge (login PIN): wewenang ASV
+      // dicek server, vendor lain jadi "Tidak Terpilih", draft PO/SO dibuat server dari harga
+      // di database. Data email (termasuk PIN vendor) dikembalikan server ke approver.
+      const tokenBadge = (typeof badgeTokenGet === 'function' && badgeTokenGet()) || '';
+      const { data: hasil, error: rpcErr } = await supabaseClient.rpc('rfq_proses_seleksi', {
+        p_token: tokenBadge, p_rfqvendor_id: Number(rfqVendorId), p_decision: decision, p_reason: reason
+      });
+      if (rpcErr) throw rpcErr;
+      if (!hasil || hasil.status !== 'OK') {
+        if (hasil && hasil.status === 'SESSION_EXPIRED') throw new Error('Sesi Badge habis. Tutup lalu buka Badge dan masukkan PIN lagi.');
+        throw new Error((hasil && hasil.message) || 'Gagal memproses seleksi vendor.');
       }
 
-      const approverName = (window.currentBadgeData && window.currentBadgeData.nama) || 'Direktur';
-      if (!rpcSuccess) {
-        const { error: updErr } = await supabaseClient
-          .from('rfqVendor')
-          .update({
-            Status: decision === 'Approve' ? 'Approved' : 'Ditolak Management',
-            ManagementApproval: decision === 'Approve' ? 'Approved' : 'Rejected',
-            ManagementApprovalBy: approverName,
-            ManagementApprovalDate: new Date().toISOString(),
-            Notes: reason
-          })
-          .eq('RFQVendorID', Number(rfqVendorId));
-        if (updErr) throw updErr;
+      if (decision === 'Approve' && hasil.email && hasil.email.vendoremail) {
+        sendRfqApprovalEmail(hasil.email).catch(e => console.warn('Gagal kirim email hasil seleksi ke vendor:', e.message));
       }
 
-      if (decision === 'Approve') {
-        try {
-          const { data: rvRow } = await supabaseClient.from('rfqVendor').select('RFQID').eq('RFQVendorID', Number(rfqVendorId)).maybeSingle();
-          if (rvRow && rvRow.RFQID) {
-            await supabaseClient.from('rfqVendor').update({ Status: 'Tidak Terpilih' }).eq('RFQID', rvRow.RFQID).neq('RFQVendorID', Number(rfqVendorId));
-            await supabaseClient.from('rfq').update({ Status: 'Seleksi Vendor Disetujui' }).eq('RFQID', rvRow.RFQID);
-          }
-        } catch (linkErr) {
-          console.warn('Gagal sinkronisasi status RFQ:', linkErr);
-        }
-
-        // Otomatis buat Draft PO/SO agar langsung masuk ke menu "Ajukan PO/SO"
-        try {
-          await generateDraftPoFromRfqVendor(rfqVendorId);
-        } catch (poGenErr) {
-          console.warn('Gagal generate draft PO:', poGenErr);
-        }
-
-        if (extra && extra.vendoremail) {
-          sendRfqApprovalEmail(extra).catch(e => console.warn('Gagal kirim email hasil seleksi ke vendor:', e.message));
-        }
-      }
-
-      alert('Seleksi Vendor RFQ berhasil diproses & Draft PO/SO telah dibuat.');
+      alert(decision === 'Approve'
+        ? 'Seleksi Vendor RFQ berhasil diproses & Draft PO/SO telah dibuat.'
+        : 'Seleksi Vendor RFQ ditolak.');
       loadApprovalIssues(qrId);
     } catch (e) {
       alert("Gagal memproses: " + e.message);
-    }
-  }
-
-  async function generateDraftPoFromRfqVendor(rfqVendorId) {
-    try {
-      const { data: rvRow, error: rvErr } = await supabaseClient
-        .from('rfqVendor')
-        .select('*')
-        .eq('RFQVendorID', Number(rfqVendorId))
-        .maybeSingle();
-      if (rvErr || !rvRow) return;
-
-      // Cek jika PO sudah ada
-      const { data: existingPo } = await supabaseClient
-        .from('purchaseOrder')
-        .select('POID')
-        .eq('RFQID', rvRow.RFQID)
-        .eq('VendorID', rvRow.VendorID)
-        .maybeSingle();
-      if (existingPo) return;
-
-      // Ambil RFQ header, Details, Quotes pemenang, dan Term
-      const [
-        { data: rfqRow },
-        { data: details },
-        { data: quotes },
-        { data: termRows }
-      ] = await Promise.all([
-        supabaseClient.from('rfq').select('*').eq('RFQID', rvRow.RFQID).maybeSingle(),
-        supabaseClient.from('rfqDetail').select('*').eq('RFQID', rvRow.RFQID),
-        supabaseClient.from('rfqQuote').select('*').eq('VendorID', rvRow.VendorID).eq('IsSelected', 'Yes'),
-        supabaseClient.from('rfqVendorTerm').select('*').eq('RFQVendorID', rvRow.RFQVendorID)
-      ]);
-
-      const termRow = (termRows || []).sort((a, b) => (Number(b.RFQVendorTermID) || 0) - (Number(a.RFQVendorTermID) || 0))[0];
-
-      const detailById = {};
-      (details || []).forEach(d => { detailById[String(d.RFQDetailID)] = d; });
-
-      let itemSubtotal = 0;
-      const winningQuotes = (quotes || []).filter(q => detailById[String(q.RFQDetailID)]);
-      winningQuotes.forEach(q => {
-        itemSubtotal += (Number(q.Qty) || 0) * (Number(q.UnitPrice) || 0);
-      });
-
-      const mobilisasi = Number(termRow?.MobilisasiCost) || 0;
-      const otherService = Number(termRow?.OtherServiceCost) || 0;
-      const ppn = Number(termRow?.PPNAmount) || 0;
-      const totalAmount = itemSubtotal + mobilisasi + otherService + ppn;
-
-      const { data: maxPo } = await supabaseClient
-        .from('purchaseOrder')
-        .select('POID')
-        .order('POID', { ascending: false })
-        .limit(1);
-      const nextPoNum = (maxPo && maxPo.length > 0 && maxPo[0].POID != null) ? (Number(maxPo[0].POID) || 0) + 1 : 1;
-
-      const isSO = winningQuotes.some(q => {
-        const d = detailById[String(q.RFQDetailID)] || {};
-        return (d.ItemGroup || '').toLowerCase().includes('service') || (d.ItemDescription || '').toLowerCase().includes('jasa');
-      });
-      const docType = isSO ? 'SO' : 'PO';
-      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const docNumber = `${docType}-${dateStr}-${String(nextPoNum).padStart(4, '0')}`;
-
-      const { data: insertedPo, error: poInsErr } = await supabaseClient
-        .from('purchaseOrder')
-        .insert({
-          RFQID: rvRow.RFQID,
-          RFQVendorID: rvRow.RFQVendorID,
-          VendorID: rvRow.VendorID,
-          DocType: docType,
-          DocNumber: docNumber,
-          TotalAmount: totalAmount,
-          Status: 'Draft',
-          CreatedDate: new Date().toISOString(),
-          DeliveryPoint: rfqRow ? rfqRow.DeliveryPoint : null
-        })
-        .select('POID')
-        .single();
-
-      if (!poInsErr && insertedPo) {
-        const newPoId = insertedPo.POID;
-        const podItems = winningQuotes.map(q => {
-          const d = detailById[String(q.RFQDetailID)] || {};
-          const qty = Number(q.Qty) || 0;
-          const unitPrice = Number(q.UnitPrice) || 0;
-          return {
-            POID: newPoId,
-            RFQDetailID: q.RFQDetailID,
-            ItemDescription: d.ItemDescription || '-',
-            Unit: d.Unit || '',
-            Qty: qty,
-            UnitPrice: unitPrice,
-            Subtotal: qty * unitPrice,
-            VendorDeliveryDate: q.VendorDeliveryDate || null,
-            ItemGroup: d.ItemGroup || null,
-            ItemID: d.ItemID || null
-          };
-        });
-
-        if (podItems.length > 0) {
-          await supabaseClient.from('purchaseOrderDetail').insert(podItems);
-        }
-      }
-    } catch (err) {
-      console.warn('generateDraftPoFromRfqVendor error:', err);
     }
   }
 
@@ -2354,7 +2214,7 @@ async function submitPinInti() {
         try {
           const { data: poRow } = await supabaseClient.from('purchaseOrder').select('RFQID').eq('POID', Number(poId)).maybeSingle();
           if (poRow && poRow.RFQID) {
-            await supabaseClient.from('rfq').update({ Status: 'PO Diterbitkan' }).eq('RFQID', poRow.RFQID);
+            await supabaseClient.rpc('rfq_sinkron_status', { p_rfqid: Number(poRow.RFQID) }); // dihitung server dari PO approved (S3b)
             const { data: rfqDetails } = await supabaseClient.from('rfqDetail').select('RequestID').eq('RFQID', poRow.RFQID);
             const reqIds = [...new Set((rfqDetails || []).map(d => d.RequestID).filter(Boolean))];
             if (reqIds.length > 0) {
