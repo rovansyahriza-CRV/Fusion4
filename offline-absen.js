@@ -12,6 +12,8 @@
 //      Pemilik HP = profil yang paling dulu disimpan.
 //   2. Offline -> attendance-fusion4.html cek geofence lokal + wajah 1:1, lalu queueOfflineAbsen().
 //   3. Sinyal balik -> syncQueuedAbsen() kirim ke RPC submit_absensi_offline (idempotent per clientId).
+//      Tiap profil punya "kunci offline" (absen_offline_kunci_buat, 30 hari) yang dibuat saat orangnya
+//      login Badge online di HP ini -- ikut dikirim saat sync supaya server tahu absennya sah.
 //      Hasil (diterima/ditolak) disimpan di store "history" buat ditampilkan di Badge.
 
 const OFFLINE_SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
@@ -165,6 +167,8 @@ function profileFromPack(pack, lama, pinHash) {
     descriptor: pack.descriptor || null,
     lokasi: pack.lokasi || [],
     pinHash: pinHash || (lama && lama.pinHash) || null,
+    kunciOffline: (lama && lama.kunciOffline) || null,
+    kunciExpiresAt: (lama && lama.kunciExpiresAt) || null,
     clockOffsetMs: Date.parse(pack.serverTime) - Date.now(),
     addedAt: (lama && lama.addedAt) || now,
     lastUsedAt: (lama && lama.lastUsedAt) || now,
@@ -189,11 +193,28 @@ async function prepareOfflinePack(qrCodeId, pin) {
 
   const profile = profileFromPack(pack, lama, pin ? await sha256Hex(pack.qrCodeId + ":" + pin) : null);
   profile.lastUsedAt = new Date().toISOString();
+  await siapkanKunciOffline(profile).catch(e => console.warn("Kunci offline gagal dibuat:", e.message));
   await idbRequest(STORE_PROFILE, "readwrite", s => s.put(profile, profile.qrCodeId));
 
   let assetsReady = false;
   try { assetsReady = await precacheOfflineAssets(); } catch (e) { console.warn("Precache aset offline gagal:", e); }
   return { profile, assetsReady };
+}
+
+// Kunci offline dibuat pakai sesi Badge tab ini (hanya pemilik sesi = orang yang login PIN).
+// Diperbarui kalau belum ada atau sisa < 7 hari.
+async function siapkanKunciOffline(profile) {
+  const sisa = Date.parse(profile.kunciExpiresAt || 0) - Date.now();
+  if (profile.kunciOffline && sisa > 7 * 24 * 3600 * 1000) return;
+  let token = "", device = "unknown";
+  try { token = sessionStorage.getItem("fusion4BadgeToken") || ""; } catch (e) {}
+  try { device = localStorage.getItem("fusion4BadgeDevice") || "unknown"; } catch (e) {}
+  if (!token) return;
+  const hasil = await offlineRpc("absen_offline_kunci_buat", { p_token: token, p_device: device });
+  if (hasil && hasil.status === "OK" && normQr(hasil.qrCodeId) === profile.qrCodeId) {
+    profile.kunciOffline = hasil.kunci;
+    profile.kunciExpiresAt = hasil.expiresAt;
+  }
 }
 
 // Perbarui semua profil di HP ini dari server (wajah enroll ulang, lokasi, AuthCheck).
@@ -275,7 +296,9 @@ function newClientId() {
 }
 
 async function queueOfflineAbsen({ qrCodeId, nama, gps, lokasi }) {
+  const profil = await getOfflineProfile(qrCodeId).catch(() => null);
   const record = {
+    kunci: (profil && profil.kunciOffline) || null,
     clientId: newClientId(),
     qrCodeId,
     nama,
@@ -323,8 +346,14 @@ async function syncQueuedAbsen() {
     const all = await getPendingQueue();
     for (const record of all) {
       let hasil;
+      let kunci = record.kunci;
+      if (!kunci) {
+        const profil = await getOfflineProfile(record.qrCodeId).catch(() => null);
+        kunci = profil && profil.kunciOffline;
+      }
       try {
         hasil = await offlineRpc("submit_absensi_offline", {
+          p_kunci: kunci || null,
           p_client_id: record.clientId,
           p_qrcodeid: record.qrCodeId,
           p_waktu_hp: record.timestampOffline,

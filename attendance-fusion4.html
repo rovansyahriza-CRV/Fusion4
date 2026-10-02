@@ -196,6 +196,15 @@
     <button id="btnLewatiIjin" class="btn-block btn-secondary">Tidak, Absen Biasa</button>
   </div>
 
+  <div id="pinBadgeCard" class="card" style="display:none; border-color: var(--steel-light);">
+    <p class="card-label">🔐 PIN Digital Badge</p>
+    <p id="pinBadgeInfo" style="margin:0 0 12px; font-size:14px; color:var(--text);"></p>
+    <input type="password" id="txtPinBadge" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="6 digit PIN Badge">
+    <p id="pinBadgeError" style="display:none; margin:8px 0 0; font-size:13px; color:var(--fail, #e5484d);"></p>
+    <button id="btnSubmitPinBadge" class="btn-block btn-primary">Lanjut Absen</button>
+    <button id="btnBatalPinBadge" class="btn-block btn-secondary">Batal</button>
+  </div>
+
   <div id="voucherCard" class="card" style="display:none;">
     <p class="card-label">Voucher PIN Lembur (SPKL)</p>
     <input type="text" id="txtVoucherPIN" placeholder="Contoh: SPKL-MAJU" style="text-transform:uppercase;">
@@ -373,32 +382,26 @@ async function callApi(action, extra) {
 
   // 5. SUBMIT_IJIN_KELUAR -- Supabase RPC
   if (action === "SUBMIT_IJIN_KELUAR") {
-    const { data, error } = await supabaseClient.rpc('submit_ijin_keluar', {
+    return rpcAbsen('submit_ijin_keluar', {
       p_qrcodeid: extra.qrCodeId, p_lokasi: extra.lokasi, p_kodeijin: extra.kodeIjin
     });
-    if (error) throw new Error(error.message);
-    return data;
   }
 
   // 6. SUBMIT_LEMBUR -- Supabase RPC
   if (action === "SUBMIT_LEMBUR") {
-    const { data, error } = await supabaseClient.rpc('submit_absensi_lembur', {
+    return rpcAbsen('submit_absensi_lembur', {
       p_qrcodeid: extra.qrCodeId, p_lokasi: extra.lokasi, p_pinvoucher: extra.pinVoucher || ""
     });
-    if (error) throw new Error(error.message);
-    return data;
   }
 
   // 7. PINDAH LOKASI -- Supabase RPC
   if (action === "SUBMIT_PINDAH_LOKASI") {
-    const { data, error } = await supabaseClient.rpc('submit_pindah_lokasi', {
+    return rpcAbsen('submit_pindah_lokasi', {
       p_qrcode: extra.qrCodeId,
       p_lokasi_tujuan: extra.lokasiTujuan,
       p_alasan: extra.alasan || "",
       p_lokasi_lama: extra.lokasiLama || ""
     });
-    if (error) throw new Error(error.message);
-    return data;
   }
 
   if (action === "GET_PINDAH_STATUS") {
@@ -419,13 +422,108 @@ async function callApi(action, extra) {
   return await res.json();
 }
 
-// SUBMIT_ABSENSI (reguler + lembur) -- sudah dipindah ke Supabase RPC submit_absensi()
-async function submitAbsensiCall(qrCodeId, lokasi, password) {
-  const { data, error } = await supabaseClient.rpc('submit_absensi', {
-    p_qrcodeid: qrCodeId, p_lokasi: lokasi, p_password: password || ""
+// ============ SESI BADGE UNTUK ABSEN ============
+// Server mencocokkan token sesi Badge (hasil badge_login) dengan karyawan yang diabsen.
+// - Dari Digital Badge: token tab ini (sessionStorage, sama dengan Badge).
+// - Dibuka langsung (kiosk / HP bersama): token hasil PIN disimpan di memori saja dan
+//   di-logout setelah selesai, supaya orang berikutnya gak bisa pakai sesi orang lain.
+// Kalau server balas NEED_PIN, halaman minta PIN Badge lalu kirim ulang.
+const BADGE_TOKEN_KEY = 'fusion4BadgeToken';
+let kioskToken = null;
+function absenTokenGet() {
+  if (kioskToken) return kioskToken;
+  try { return sessionStorage.getItem(BADGE_TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
+function badgeDeviceId() {
+  try {
+    let id = localStorage.getItem('fusion4BadgeDevice');
+    if (!id) {
+      id = 'BD-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+      localStorage.setItem('fusion4BadgeDevice', id);
+    }
+    return id;
+  } catch (e) { return 'BD-tanpa-storage'; }
+}
+function kioskLogout() {
+  if (!kioskToken) return Promise.resolve();
+  const tok = kioskToken;
+  kioskToken = null;
+  return supabaseClient.rpc('badge_logout', { p_token: tok }).then(() => {}, () => {});
+}
+
+// Tampilkan kartu PIN. Resolve true kalau PIN sah milik karyawan yang diabsen, false kalau batal.
+function mintaPinBadge(pesan) {
+  return new Promise((resolve) => {
+    const card = document.getElementById('pinBadgeCard');
+    const input = document.getElementById('txtPinBadge');
+    const errEl = document.getElementById('pinBadgeError');
+    const btnOk = document.getElementById('btnSubmitPinBadge');
+    const nama = (currentPerson && (currentPerson.nama || currentPerson.NamaPersonnel)) || qrCodeId;
+    document.getElementById('pinBadgeInfo').innerText = (pesan || 'Masukkan PIN Badge untuk melanjutkan absen.') + '\nKaryawan: ' + nama;
+    errEl.style.display = 'none';
+    input.value = '';
+    statusEl.style.display = 'none';
+    card.style.display = 'block';
+    input.focus();
+
+    const tampilError = (t) => { errEl.innerText = t; errEl.style.display = 'block'; };
+    const selesai = (hasil) => {
+      card.style.display = 'none';
+      btnOk.onclick = null;
+      document.getElementById('btnBatalPinBadge').onclick = null;
+      resolve(hasil);
+    };
+
+    document.getElementById('btnBatalPinBadge').onclick = () => selesai(false);
+    btnOk.onclick = async () => {
+      const pin = input.value.trim();
+      if (!/^\d{6}$/.test(pin)) { tampilError('PIN harus 6 digit angka.'); return; }
+      btnOk.disabled = true;
+      try {
+        const { data, error } = await supabaseClient.rpc('badge_login', { p_pin: pin, p_device: badgeDeviceId() });
+        if (error) throw new Error(error.message);
+        if (!data || data.status !== 'OK') {
+          tampilError(((data && data.message) || 'PIN tidak ditemukan.') + (data && data.sisa != null ? ' Sisa percobaan: ' + data.sisa + '.' : ''));
+          return;
+        }
+        if (String(data.qrCodeId || '').trim().toUpperCase() !== String(qrCodeId || '').trim().toUpperCase()) {
+          supabaseClient.rpc('badge_logout', { p_token: data.token }).then(() => {}, () => {});
+          tampilError('PIN ini milik ' + (data.nama || 'karyawan lain') + ', bukan ' + nama + '.');
+          return;
+        }
+        if (fromBadge) {
+          // HP pribadi dari Badge: simpan sebagai sesi Badge tab ini (sama seperti login di Badge).
+          try { sessionStorage.setItem(BADGE_TOKEN_KEY, data.token); } catch (e) { kioskToken = data.token; }
+        } else {
+          kioskLogout();
+          kioskToken = data.token;
+        }
+        selesai(true);
+      } catch (e) {
+        tampilError('Gagal cek PIN: ' + e.message);
+      } finally {
+        btnOk.disabled = false;
+      }
+    };
   });
-  if (error) throw new Error(error.message);
-  return data;
+}
+
+async function rpcAbsen(fnName, params) {
+  for (let coba = 0; coba < 3; coba++) {
+    const { data, error } = await supabaseClient.rpc(fnName, Object.assign({}, params, { p_token: absenTokenGet() }));
+    if (error) throw new Error(error.message);
+    if (!data || data.status !== 'NEED_PIN') return data;
+    const lanjut = await mintaPinBadge(data.message);
+    if (!lanjut) return { status: 'ERROR', message: 'Absen dibatalkan: PIN Badge tidak dimasukkan.' };
+    statusEl.style.display = '';
+    setStatus('Mengirim ulang...', 'info');
+  }
+  return { status: 'ERROR', message: 'Sesi Badge tidak cocok dengan karyawan yang absen.' };
+}
+
+// SUBMIT_ABSENSI (reguler) -- RPC submit_absensi() + token sesi Badge
+async function submitAbsensiCall(qrCodeId, lokasi, password) {
+  return rpcAbsen('submit_absensi', { p_qrcodeid: qrCodeId, p_lokasi: lokasi, p_password: password || "" });
 }
 
 function getGeolocationPromise(options) {
@@ -1191,7 +1289,7 @@ function showResultCard(text, kind) {
     btnDone.onclick = () => location.href = "digital-badge.html?QrCodeId=" + encodeURIComponent(qrCodeId);
   } else {
     btnDone.innerText = "Selesai";
-    btnDone.onclick = () => location.href = location.pathname;
+    btnDone.onclick = () => kioskLogout().finally(() => { location.href = location.pathname; });
   }
   resultBanner.parentNode.insertBefore(btnDone, resultBanner.nextSibling);
 
