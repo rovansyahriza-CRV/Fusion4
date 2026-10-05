@@ -27,8 +27,13 @@ jobs:
             --output /dev/null \
             "${SUPABASE_URL_1}/rest/v1/rpc/get_active_karyawan"
 
+          # HSSE-Fusion4: RPC read-only (baca departemenTbl) supaya benar-benar
+          # menyentuh database, bukan cuma cek layanan auth.
           curl --fail-with-body --silent --show-error \
-            --request GET \
+            --request POST \
             --header "apikey: ${SUPABASE_KEY_2}" \
+            --header "Authorization: Bearer ${SUPABASE_KEY_2}" \
+            --header "Content-Type: application/json" \
+            --data '{}' \
             --output /dev/null \
-            "${SUPABASE_URL_2}/auth/v1/health"
+            "${SUPABASE_URL_2}/rest/v1/rpc/get_departemen_list"
