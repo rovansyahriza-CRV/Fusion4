@@ -152,6 +152,14 @@
             style="flex:1;min-width:180px;max-width:320px;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
           <input type="date" id="monitoringDateFilter" onchange="loadMonitoringPage(monitoringState.category)"
             style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;">
+          <select id="monitoringProjectFilter" onchange="renderMonitoringTable()" aria-label="Filter project karyawan"
+            style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:190px;max-width:280px;">
+            <option value="">Semua Project</option>
+          </select>
+          <select id="monitoringAreaFilter" onchange="renderMonitoringTable()" aria-label="Filter area / lokasi absen"
+            style="padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:190px;max-width:280px;">
+            <option value="">Semua Area</option>
+          </select>
           <select id="monitoringEnrollFilter" onchange="renderMonitoringTable()" aria-label="Filter status enroll"
             style="display:none;padding:8px 12px;border-radius:8px;border:1.5px solid #e6ded9;background:#fff;min-width:190px;">
             <option value="">Semua Status Enroll</option>

@@ -432,6 +432,11 @@ async function loadMonitoringPage(category, btnEl) {
     enrollEl.style.display = category === 'enroll' ? '' : 'none';
     if (category !== 'enroll') enrollEl.value = '';
   }
+  // Filter Project (penempatan karyawan) & Area (lokasi absen) cuma di tab Attendance.
+  ['monitoringProjectFilter', 'monitoringAreaFilter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = category === 'attendance' ? '' : 'none';
+  });
 
   const tbody = document.getElementById('monitoringTableBody');
   const thead = document.getElementById('monitoringTableHead');
@@ -446,8 +451,9 @@ async function loadMonitoringPage(category, btnEl) {
 
       const [{ data, error }, { data: karyawanRows, error: karErr }, { data: offlineRows }] = await Promise.all([
         supabaseClient.from('absensiTbl').select('*').eq('Tanggal', tglFilter).order('Id', { ascending: false }).limit(500),
-        supabaseClient.from('karyawanTbl').select('QrCodeId, NamaPersonnel'),
+        supabaseClient.from('karyawanTbl').select('QrCodeId, NamaPersonnel, Type'),
         fusionAdminRpc('list_absensi_offline_log', { p_tanggal: tglFilter }),
+        loadKaryawanProjectNames(),
       ]);
       if (error) throw error;
       if (karErr) throw karErr;
@@ -461,16 +467,21 @@ async function loadMonitoringPage(category, btnEl) {
       });
 
       // Join manual ke karyawanTbl -- absensiTbl cuma nyimpen QrCodeId, gak ada Nama.
-      const namaMap = {};
+      const namaMap = {}, projectMap = {};
       (karyawanRows || []).forEach(k => {
-        namaMap[String(k.QrCodeId || '').trim().toUpperCase()] = k.NamaPersonnel;
+        const key = String(k.QrCodeId || '').trim().toUpperCase();
+        namaMap[key] = k.NamaPersonnel;
+        projectMap[key] = String(k.Type || '').trim();
       });
 
       const rows = (data || []).map(r => {
-        const lokasiList = [r.LokasiMasuk1, r.LokasiIstirahat, r.LokasiMasuk2, r.LokasiPulang].filter(Boolean);
-        const lokasiUnik = [...new Set(lokasiList)].join(', ') || '-';
+        const lokasiList = [r.LokasiMasuk1, r.LokasiIstirahat, r.LokasiMasuk2, r.LokasiPulang].map(l => String(l || '').trim()).filter(Boolean);
+        const lokasiSet = [...new Set(lokasiList)];
+        const lokasiUnik = lokasiSet.join(', ') || '-';
 
         return {
+          _project: projectMap[String(r.QrCodeId || '').trim().toUpperCase()] || '',
+          _lokasiList: lokasiSet,
           Nama: namaMap[String(r.QrCodeId || '').trim().toUpperCase()] || r.QrCodeId,
           QrCodeId: r.QrCodeId,
           Tanggal: r.Tanggal,
@@ -572,7 +583,39 @@ function renderMonitoringTable() {
       enrollEl.options[2].textContent = `❌ Belum Enroll (${belum})`;
     }
   }
+  // Project = penempatan karyawan (karyawanTbl.Type); Area = lokasi absen (salah satu slot cocok).
+  // Opsi Area menyempit ikut project yang dipilih. Jumlah di opsi = jumlah orang.
+  const isAttendance = monitoringState.category === 'attendance';
+  const projEl = document.getElementById('monitoringProjectFilter');
+  const areaEl = document.getElementById('monitoringAreaFilter');
+  const matchProject = (r, p) => !p || (p === '__none__' ? !r._project : r._project === p);
+  let projectFilter = '', areaFilter = '';
+  if (isAttendance && projEl && areaEl) {
+    const countBy = (list, keysOf) => {
+      const m = new Map();
+      list.forEach(r => keysOf(r).forEach(k => m.set(k, (m.get(k) || 0) + 1)));
+      return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    };
+    const curProj = projEl.value;
+    const projCounts = countBy(rows || [], r => r._project ? [r._project] : []);
+    const noProj = (rows || []).filter(r => !r._project).length;
+    projEl.innerHTML = '<option value="">Semua Project</option>' +
+      projCounts.map(([c, n]) => `<option value="${escapeHtml(c)}">${escapeHtml(karyawanProjectLabel(c))} (${n})</option>`).join('') +
+      (noProj ? `<option value="__none__">(Belum ada project) (${noProj})</option>` : '');
+    projEl.value = [...projEl.options].some(o => o.value === curProj) ? curProj : '';
+    projectFilter = projEl.value;
+
+    const curArea = areaEl.value;
+    const areaCounts = countBy((rows || []).filter(r => matchProject(r, projectFilter)), r => r._lokasiList || []);
+    areaEl.innerHTML = '<option value="">Semua Area</option>' +
+      areaCounts.map(([l, n]) => `<option value="${escapeHtml(l)}">📍 ${escapeHtml(l)} (${n})</option>`).join('');
+    areaEl.value = [...areaEl.options].some(o => o.value === curArea) ? curArea : '';
+    areaFilter = areaEl.value;
+  }
+
   const filtered = (rows || []).filter(r => {
+    if (isAttendance && !matchProject(r, projectFilter)) return false;
+    if (isAttendance && areaFilter && !(r._lokasiList || []).includes(areaFilter)) return false;
     if (enrollFilter === 'SUDAH' && !isEnrolled(r)) return false;
     if (enrollFilter === 'BELUM' && isEnrolled(r)) return false;
     if (!keyword) return true;
