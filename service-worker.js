@@ -9,7 +9,7 @@
 
 importScripts('offline-absen.js');
 
-const CACHE_NAME = 'fusion4-shell-v5';
+const CACHE_NAME = 'fusion4-shell-v6';
 const RUNTIME_CDN_CACHE = 'fusion4-cdn-runtime-v1';
 const KEEP_CACHES = [CACHE_NAME, RUNTIME_CDN_CACHE, OFFLINE_ASSET_CACHE];
 
