@@ -229,7 +229,12 @@
     <button id="btnSubmitVoucher" class="btn-block btn-accent">Mulai Lembur</button>
   </div>
 
-  <button id="btnRetry" class="btn-block btn-secondary" style="display:none;">🔁 Ulangi</button>
+  <div id="gpsHelpCard" class="card" style="display:none; border-color: var(--danger); background: #fff;">
+    <p class="card-label" style="color: var(--danger); font-weight: 700;">🛠️ Cara Mengaktifkan Izin Lokasi / GPS</p>
+    <div id="gpsHelpContent" style="font-size: 13.5px; line-height: 1.55; color: var(--text);"></div>
+  </div>
+
+  <button id="btnRetry" class="btn-block btn-secondary" style="display:none;">🔁 Coba Lagi Setelah Diaktifkan</button>
 
   <footer class="hint">Pastikan GPS aktif dan wajah terlihat jelas di kamera.</footer>
 
@@ -359,7 +364,13 @@ function setStatus(text, kind) {
 function showRetry() {
   btnRetry.style.display = "block";
 }
-btnRetry.onclick = () => location.reload();
+btnRetry.onclick = () => {
+  if (!activeLocation) {
+    initGPS();
+  } else {
+    location.reload();
+  }
+};
 
 async function callApi(action, extra) {
   extra = extra || {};
@@ -553,8 +564,125 @@ function getGeolocationPromise(options) {
   });
 }
 
+function getWatchPositionPromise(options) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      return reject(new Error("Browser tidak mendukung GPS."));
+    }
+    let settled = false;
+    let watchId = null;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      const err = new Error("Waktu pencarian GPS habis.");
+      err.code = 3;
+      reject(err);
+    }, (options && options.timeout) || 12000);
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        resolve(pos);
+      },
+      (err) => {
+        // Jika izin lokasi ditolak (code 1), langsung hentikan tanpa tunggu timer
+        if (err && err.code === 1) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+          reject(err);
+        }
+      },
+      options
+    );
+  });
+}
+
+async function tampilkanPanduanGps(errCode) {
+  const helpCard = document.getElementById('gpsHelpCard');
+  const helpContent = document.getElementById('gpsHelpContent');
+  if (!helpCard || !helpContent) return;
+
+  const ua = navigator.userAgent || "";
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isWhatsApp = /WhatsApp/i.test(ua);
+
+  let permState = "unknown";
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const p = await navigator.permissions.query({ name: 'geolocation' });
+      permState = p.state; // 'granted' | 'prompt' | 'denied'
+    }
+  } catch (e) {}
+
+  let html = "";
+
+  if (isWhatsApp) {
+    html += `<div style="background:#FCEAE8; border-left:3px solid #D9312E; padding:10px; border-radius:6px; margin-bottom:10px;">
+      <b>⚠️ Anda membuka dari dalam WhatsApp!</b><br>
+      Browser internal WhatsApp sering memblokir GPS. Ketuk ikon <b>titik tiga (⋮)</b> atau <b>kompas</b> di pojok kanan atas, lalu pilih <b>"Buka di Chrome / Browser / Safari"</b>.
+    </div>`;
+  }
+
+  if (errCode === 1) {
+    if (permState === "granted") {
+      html += `<div style="background:#FBF3DC; border-left:3px solid #B8860B; padding:10px; border-radius:6px; margin-bottom:10px;">
+        <b>💡 Izin di Situs Sudah Aktif, tetapi Sistem HP Menolak!</b><br>
+        Ini artinya GPS/Lokasi di HP Anda mati, atau aplikasi Browser belum diberi izin Lokasi di Pengaturan HP.
+      </div>`;
+    } else {
+      html += `<div style="background:#FCEAE8; border-left:3px solid #D9312E; padding:10px; border-radius:6px; margin-bottom:10px;">
+        <b>🔒 Akses Lokasi Situs Ini Terkunci / Diblokir di Browser</b><br>
+        Karena sebelumnya pernah tertutup/tertolak, browser tidak memunculkan popup lagi sampai dibuka kuncinya.
+      </div>`;
+    }
+
+    if (isIOS) {
+      html += `<b>📱 Langkah di iPhone (iOS):</b>
+      <ol style="margin:6px 0 0; padding-left:20px;">
+        <li>Buka <b>Settings (Pengaturan HP)</b> ➔ <b>Privacy &amp; Security</b> ➔ <b>Location Services</b> (Pastikan <b>ON</b>).</li>
+        <li>Scroll ke bawah, pilih <b>Safari Websites</b> ➔ ubah ke <b>"While Using the App"</b> &amp; aktifkan <b>Precise Location (Lokasi Akurat)</b>.</li>
+        <li>Kembali ke Safari, ketuk ikon <b>aA</b> atau ikon di kiri alamat web atas ➔ <b>Website Settings</b> ➔ <b>Location</b> ➔ pilih <b>Allow (Izinkan)</b>.</li>
+      </ol>`;
+    } else if (isStandalone) {
+      html += `<b>📱 Langkah di Aplikasi Layar Utama (Android):</b>
+      <ol style="margin:6px 0 0; padding-left:20px;">
+        <li>Keluar ke layar utama HP, <b>tekan &amp; tahan ikon aplikasi BiMa / Fusion4</b> ➔ ketuk <b>Info Aplikasi (ⓘ)</b>.</li>
+        <li>Pilih <b>Setelan Situs (Site Settings)</b> atau <b>Izin (Permissions)</b> ➔ <b>Lokasi</b> ➔ pilih <b>Izinkan (Allow)</b>.</li>
+        <li>Pastikan juga di <b>Pengaturan HP ➔ Aplikasi ➔ Chrome ➔ Izin ➔ Lokasi</b> dipilih <b>"Izinkan hanya saat aplikasi digunakan"</b> &amp; aktifkan <b>Gunakan lokasi akurat</b>.</li>
+      </ol>`;
+    } else {
+      html += `<b>📱 Langkah Cepat di HP Android (Chrome):</b>
+      <ol style="margin:6px 0 0; padding-left:20px;">
+        <li>Ketuk <b>ikon Gembok (🔒) atau ikon Pengaturan</b> di sebelah kiri alamat web bagian paling atas layar Chrome.</li>
+        <li>Ketuk menu <b>Izin (Permissions)</b> ➔ <b>Lokasi (Location)</b> ➔ ubah menjadi <b>Izinkan (Allow)</b> atau ketuk <b>Reset Izin</b>.</li>
+        <li>Jika masih ditolak, buka <b>Pengaturan HP ➔ Aplikasi ➔ Chrome ➔ Izin ➔ Lokasi</b> ➔ pilih <b>"Izinkan saat aplikasi digunakan"</b> &amp; nyalakan <b>Lokasi Akurat</b>.</li>
+      </ol>`;
+    }
+  } else {
+    html += `<b>📡 Sinyal GPS Tidak Terbaca / Timeout:</b>
+    <ol style="margin:6px 0 0; padding-left:20px;">
+      <li>Pastikan ikon <b>Lokasi / GPS</b> di panel atas HP sudah <b>Aktif (Menyala)</b>.</li>
+      <li>Matikan <b>Mode Hemat Daya / Battery Saver</b> (sering mematikan GPS latar belakang).</li>
+      <li>Jika di dalam ruangan tertutup, bergeser sedikit ke dekat jendela/area terbuka lalu tekan tombol di bawah.</li>
+    </ol>`;
+  }
+
+  helpContent.innerHTML = html;
+  helpCard.style.display = "block";
+}
+
 // ============ 1. GPS ============
 async function initGPS() {
+  const helpCard = document.getElementById('gpsHelpCard');
+  if (helpCard) helpCard.style.display = "none";
+  btnRetry.style.display = "none";
   showBanner(locBanner, "📍 Mendeteksi lokasi GPS Anda...", "info");
 
   if (!navigator.geolocation) {
@@ -564,37 +692,59 @@ async function initGPS() {
 
   let pos = null;
 
-  // Tier 1: Coba High Accuracy (Satelit) dengan timeout 7 detik & cache 30s
+  // Tier 1: Coba High Accuracy (Satelit) dengan timeout 10 detik & cache 45s
   try {
     pos = await getGeolocationPromise({
       enableHighAccuracy: true,
-      timeout: 7000,
-      maximumAge: 30000
+      timeout: 10000,
+      maximumAge: 45000
     });
   } catch (err1) {
-    console.warn("GPS High Accuracy lambat/indoor, fallback ke Network Location...", err1.message);
-    // Tier 2: Fallback ke Network / WiFi / Cell Location (cepat & tembus indoor)
+    // Jika error adalah PERMISSION_DENIED (code 1), periksa apakah benar-benar ditolak
+    // sebelum membuang waktu atau mencoba watchPosition sekali lagi
+    console.warn("GPS Tier 1 gagal (" + err1.code + "):", err1.message);
+
+    // Tier 2: Coba Network / Coarse Location (cepat di indoor/WiFi)
     try {
       pos = await getGeolocationPromise({
         enableHighAccuracy: false,
-        timeout: 6000,
-        maximumAge: 60000
+        timeout: 7000,
+        maximumAge: 120000
       });
     } catch (err2) {
-      console.error("GPS Fallback gagal:", err2.message);
-      let pesan = "Gagal membaca lokasi GPS.";
-      if (err2.code === 1) pesan = "Izin lokasi ditolak. Aktifkan GPS & Izin Lokasi di browser HP.";
-      else if (err2.code === 2) pesan = "Sinyal GPS tidak terdeteksi. Nyalakan WiFi/GPS di HP.";
-      else if (err2.code === 3) pesan = "Waktu pencarian GPS habis. Pastikan GPS HP aktif.";
+      // Tier 3: Jika bukan karena izin ditolak (misal offline / sinyal satelit butuh pemanasan),
+      // bangunkan sensor GPS dengan watchPosition selama 10 detik
+      if (err2.code !== 1) {
+        showBanner(locBanner, "🛰️ Mengunci sinyal satelit GPS (pastikan di area terbuka)...", "info");
+        try {
+          pos = await getWatchPositionPromise({
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 120000
+          });
+        } catch (err3) {
+          err2 = err3;
+        }
+      }
 
-      showBanner(locBanner, "🔴 " + pesan, "fail");
-      showRetry();
-      return;
+      if (!pos) {
+        console.error("GPS gagal total:", err2.message);
+        let pesan = "Gagal membaca lokasi GPS.";
+        if (err2.code === 1) pesan = "Izin lokasi ditolak. Aktifkan GPS & Izin Lokasi di browser HP.";
+        else if (err2.code === 2) pesan = "Sinyal GPS tidak terdeteksi. Nyalakan WiFi/GPS di HP.";
+        else if (err2.code === 3) pesan = "Waktu pencarian GPS habis. Pastikan GPS HP aktif.";
+
+        showBanner(locBanner, "🔴 " + pesan, "fail");
+        await tampilkanPanduanGps(err2.code);
+        showRetry();
+        return;
+      }
     }
   }
 
   if (!pos || !pos.coords) {
     showBanner(locBanner, "🔴 Gagal mengunci koordinat GPS. Coba lagi.", "fail");
+    await tampilkanPanduanGps(2);
     showRetry();
     return;
   }
