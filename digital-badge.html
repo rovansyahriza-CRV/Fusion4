@@ -285,6 +285,11 @@
       </select>
       <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Selain "Keperluan pribadi", ijin ini hak karyawan sesuai UU dan tidak memotong cuti.</div>
     </div>
+    <div id="requestRencanaJamContainer" style="display:none; margin-bottom:10px;">
+      <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Rencana jam pulang <span style="font-weight:400; color:var(--text-muted);">(opsional)</span></label>
+      <input type="time" id="requestRencanaJam" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Hanya perkiraan untuk atasan. Jam pulang sebenarnya tetap tercatat saat Anda scan pulang.</div>
+    </div>
     <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Alasan / Keterangan</label>
     <textarea id="requestAlasan" rows="4" placeholder="Tulis alasan..." style="width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box;"></textarea>
     <button id="btnSubmitRequest" style="width:100%; margin-top:14px; padding:13px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">Kirim Pengajuan</button>
@@ -1164,6 +1169,8 @@ async function submitPinInti() {
     document.getElementById('requestAreaContainer').style.display = type === "LEMBUR" ? "block" : "none";
     document.getElementById('requestKategoriIjinContainer').style.display = type === "IJIN" ? "block" : "none";
     document.getElementById('requestKategoriIjin').value = "PRIBADI";
+    document.getElementById('requestRencanaJamContainer').style.display = type === "IJIN" ? "block" : "none";
+    document.getElementById('requestRencanaJam').value = "";
     document.getElementById('requestAlasan').value = "";
     document.getElementById('requestMsg').style.display = "none";
     if (type === "LEMBUR") {
@@ -1215,7 +1222,8 @@ async function submitPinInti() {
         p_durasi_jam: durasi,
         p_lokasi: area,
         p_jenis_hari: null, // server deteksi hari kerja / OFF (termasuk Off yang disetujui)
-        p_kategori_ijin: currentRequestType === "IJIN" ? document.getElementById('requestKategoriIjin').value : null
+        p_kategori_ijin: currentRequestType === "IJIN" ? document.getElementById('requestKategoriIjin').value : null,
+        p_rencana_jam: currentRequestType === "IJIN" ? (document.getElementById('requestRencanaJam').value || null) : null
       });
       if (error) throw error;
 
@@ -2043,7 +2051,7 @@ async function submitPinInti() {
             </div>
             <div style="font-size:12px; font-weight:600; color:var(--charcoal); margin-bottom:2px;">${item.nama_pemohon || item.qrcodeid} <span style="font-weight:400; color:var(--text-muted);">(${item.kualifikasi || '-'})</span></div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
-              📅 ${(item.tipe === 'CUTI' || item.tipe === 'OFF') && item.tanggal_selesai ? (item.tanggal_mulai + ' s/d ' + item.tanggal_selesai) : (item.tanggal || '-')} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}<br>
+              📅 ${(item.tipe === 'CUTI' || item.tipe === 'OFF') && item.tanggal_selesai ? (item.tanggal_mulai + ' s/d ' + item.tanggal_selesai) : (item.tanggal || '-')} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}${item.rencana_jam ? ' • 🕒 rencana pulang ' + item.rencana_jam : ''}<br>
               📝 <em>"${item.alasan || '-'}"</em>
               ${item.tanggal_mulai_awal ? `<br><span style="color:#B45309;">✏️ Diubah dari ${item.tanggal_mulai_awal} s/d ${item.tanggal_selesai_awal} oleh ${escHtml(item.tanggal_diubah_oleh || '-')}: "${escHtml(item.tanggal_diubah_catatan || '')}"</span>` : ''}
               ${item.peringatan_kuota ? `<br><span style="color:#D9312E; font-weight:600;">⚠️ ${escHtml(item.peringatan_kuota)}</span>` : ''}

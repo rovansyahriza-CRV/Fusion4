@@ -2486,7 +2486,8 @@ function kategoriIjinBadge(item) {
   if (item.tipe !== 'IJIN' || !item.kategori_ijin) return '';
   const label = KATEGORI_IJIN_LABEL[item.kategori_ijin] || item.kategori_ijin;
   const color = item.kategori_ijin === 'PRIBADI' ? '#b45309' : '#0f766e';
-  return `<small style="display:block; color:${color}; font-weight:600;">${escapeHtml(label)}${item.kategori_ijin === 'PRIBADI' ? '' : ' - tidak potong cuti'}</small>`;
+  const jam = item.rencana_jam ? ` &middot; rencana pulang ${escapeHtml(item.rencana_jam)}` : '';
+  return `<small style="display:block; color:${color}; font-weight:600;">${escapeHtml(label)}${item.kategori_ijin === 'PRIBADI' ? '' : ' - tidak potong cuti'}${jam}</small>`;
 }
 
 let currentOtorisasiTab = 'queue';
