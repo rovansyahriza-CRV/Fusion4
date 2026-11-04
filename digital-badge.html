@@ -198,6 +198,9 @@
     <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">ID Voucher:<br><span id="voucherLemburId" style="font-size:13px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
     <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">Sisa Kuota:<br><span id="sisaCutiVal" style="font-size:13px; font-weight:700; color:#2B6CB0; font-family:monospace;">12 Hari</span></div>
   </div>
+  <div style="margin:10px 16px 0;">
+    <button id="btnGangguanMassal" style="display:none; width:100%; padding:12px; font-size:13px; font-weight:700; border:1.5px solid #b45309; border-radius:12px; background:#FFF8EE; color:#b45309; cursor:pointer;">🚨 GANGGUAN OPERASIONAL (massal per area)</button>
+  </div>
   <div style="margin:8px 16px 0; display:none;">
     <button id="btnAjukanOff" style="width:100%; padding:11px 4px; font-size:13px; font-weight:700; border:1.5px solid #0F766E; border-radius:12px; background:#fff; color:#0F766E; cursor:pointer;">🌴 AJUKAN OFF (Rotasi / Periode)</button>
   </div>
@@ -256,6 +259,32 @@
     <div id="sjPesan" style="display:none; margin-top:12px; font-size:13px; line-height:1.5; padding:10px; border-radius:8px; text-align:left;"></div>
     <button type="button" id="sjBtnLanjut" disabled style="width:100%; margin-top:14px; padding:13px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">Lanjut Tempel Jari</button>
     <div id="sjBtnBatal" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer;">Batal</div>
+  </div>
+</div>
+
+<div id="gangguanOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:flex-start; justify-content:center; z-index:110; padding:16px; overflow-y:auto;">
+  <div style="background:#fff; border-radius:18px; padding:20px; width:100%; max-width:420px; box-sizing:border-box; margin:auto;">
+    <h3 style="margin:0 0 4px; font-size:17px; color:#b45309;">🚨 Gangguan Operasional</h3>
+    <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">Personel = karyawan yang scan terakhirnya ada di area terpilih dan belum Absen Pulang. Diajukan ke Direktur; jam kerja dihitung penuh, tidak potong cuti.</div>
+    <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Tanggal kejadian</label>
+    <input type="date" id="gmTanggal" style="width:100%; font-size:14px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box; margin-bottom:10px;">
+    <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;">Area terdampak <span style="font-weight:400; color:var(--text-muted);">(angka = jumlah orang)</span></label>
+    <div id="gmLokasi" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
+    <button id="gmBtnCari" style="width:100%; padding:10px; font-size:13px; font-weight:700; border:1.5px solid #b45309; border-radius:10px; background:#fff; color:#b45309; cursor:pointer;">Tampilkan Personel</button>
+    <div id="gmPersonelBox" style="display:none; margin-top:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <strong id="gmCount" style="font-size:13px;">0 personel</strong>
+        <label style="font-size:12px;"><input type="checkbox" id="gmAll" checked> Pilih semua</label>
+      </div>
+      <div id="gmList" style="max-height:220px; overflow-y:auto; border:1.5px solid var(--border); border-radius:10px; padding:6px 10px; font-size:13px;"></div>
+      <label style="font-size:12px; font-weight:600; display:block; margin:10px 0 4px;">Jam pulang bersama</label>
+      <input type="time" id="gmJam" style="width:100%; font-size:14px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      <label style="font-size:12px; font-weight:600; display:block; margin:10px 0 4px;">Alasan</label>
+      <input type="text" id="gmAlasan" placeholder="Contoh: Mati lampu total di workshop" style="width:100%; font-size:14px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      <button id="gmBtnAjukan" style="width:100%; margin-top:12px; padding:13px; font-size:15px; font-weight:700; border:none; border-radius:12px; background:#b45309; color:#fff; cursor:pointer;">Ajukan ke Direktur</button>
+    </div>
+    <div id="gmMsg" style="display:none; margin-top:10px; font-size:12px; font-weight:600;"></div>
+    <button id="gmBtnTutup" style="width:100%; margin-top:10px; padding:12px; font-size:14px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Tutup</button>
   </div>
 </div>
 
@@ -1163,6 +1192,100 @@ async function submitPinInti() {
     }
   }
 
+  // ===== Gangguan Operasional massal (mobile) - khusus akun PIC OIL/ALL =====
+  let gmKandidat = [];
+  async function cekTombolGangguan(qrId) {
+    try {
+      const { data, error } = await supabaseClient.rpc('can_buat_gangguan', { p_qrcode: qrId });
+      bolehGangguan = !error && data === true;
+    } catch (e) { bolehGangguan = false; }
+    const b = document.getElementById('btnGangguanMassal');
+    if (b) b.style.display = bolehGangguan ? 'block' : 'none';
+  }
+  function gmMsg(text, ok) {
+    const m = document.getElementById('gmMsg');
+    m.style.color = ok ? '#178A4C' : '#D9312E';
+    m.innerText = text;
+    m.style.display = text ? 'block' : 'none';
+  }
+  function gmUpdateCount() {
+    const n = document.querySelectorAll('.gmChk:checked').length;
+    document.getElementById('gmCount').innerText = n + ' dari ' + gmKandidat.length + ' personel dipilih';
+  }
+  async function gmMuatLokasi() {
+    const tgl = document.getElementById('gmTanggal').value;
+    const box = document.getElementById('gmLokasi');
+    document.getElementById('gmPersonelBox').style.display = 'none';
+    box.innerHTML = '<span style="font-size:12px; color:var(--text-muted);">Memuat lokasi...</span>';
+    const { data, error } = await supabaseClient.rpc('get_lokasi_absensi_hari', { p_tanggal: tgl });
+    const rows = (!error && Array.isArray(data)) ? data : [];
+    box.innerHTML = rows.length ? rows.map(r => `
+      <label style="display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border:1.5px solid var(--border); border-radius:999px; font-size:12px; background:#fff;">
+        <input type="checkbox" class="gmLokChk" value="${escHtml(r.lokasi)}"> ${escHtml(r.lokasi)} <b style="color:#b45309;">${r.jumlah}</b>
+      </label>`).join('') : '<span style="font-size:12px; color:var(--text-muted);">Belum ada karyawan yang absen (dan belum pulang) pada tanggal ini.</span>';
+  }
+  async function gmOpen() {
+    const d = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    document.getElementById('gmTanggal').value = d;
+    document.getElementById('gmAlasan').value = '';
+    document.getElementById('gmJam').value = '';
+    gmMsg('', true);
+    document.getElementById('gangguanOverlay').style.display = 'flex';
+    await gmMuatLokasi();
+  }
+  document.getElementById('btnGangguanMassal').onclick = gmOpen;
+  document.getElementById('gmTanggal').onchange = gmMuatLokasi;
+  document.getElementById('gmBtnTutup').onclick = () => { document.getElementById('gangguanOverlay').style.display = 'none'; };
+  document.getElementById('gmAll').onchange = (e) => {
+    document.querySelectorAll('.gmChk').forEach(c => { c.checked = e.target.checked; });
+    gmUpdateCount();
+  };
+  document.getElementById('gmBtnCari').onclick = async () => {
+    const tgl = document.getElementById('gmTanggal').value;
+    const lokasi = Array.from(document.querySelectorAll('.gmLokChk:checked')).map(c => c.value);
+    if (!lokasi.length) { gmMsg('Pilih minimal satu area.', false); return; }
+    gmMsg('', true);
+    const { data, error } = await supabaseClient.rpc('get_kandidat_gangguan_operasional', { p_tanggal: tgl, p_lokasi: lokasi });
+    if (error) { gmMsg('Gagal memuat personel: ' + error.message, false); return; }
+    gmKandidat = Array.isArray(data) ? data : [];
+    document.getElementById('gmList').innerHTML = gmKandidat.length ? gmKandidat.map(p => `
+      <label style="display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border);">
+        <input type="checkbox" class="gmChk" data-qr="${escHtml(p.qrcodeid)}" checked>
+        <span><b>${escHtml(p.nama || '-')}</b> <span style="color:var(--text-muted); font-size:11px;">${escHtml(p.kualifikasi || '')} &middot; ${escHtml(p.lokasi || '')}</span></span>
+      </label>`).join('') : '<div style="padding:8px 0; color:var(--text-muted);">Tidak ada personel yang cocok.</div>';
+    document.querySelectorAll('.gmChk').forEach(c => { c.onchange = gmUpdateCount; });
+    document.getElementById('gmAll').checked = true;
+    document.getElementById('gmPersonelBox').style.display = 'block';
+    gmUpdateCount();
+  };
+  document.getElementById('gmBtnAjukan').onclick = async () => {
+    const tgl = document.getElementById('gmTanggal').value;
+    const lokasi = Array.from(document.querySelectorAll('.gmLokChk:checked')).map(c => c.value);
+    const qrs = Array.from(document.querySelectorAll('.gmChk:checked')).map(c => c.dataset.qr);
+    const alasan = document.getElementById('gmAlasan').value.trim();
+    const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || '';
+    const nama = (window.currentBadgeData && (window.currentBadgeData.nama || window.currentBadgeData.namaPersonnel)) || 'HR';
+    if (!alasan) { gmMsg('Alasan wajib diisi.', false); return; }
+    if (!qrs.length) { gmMsg('Pilih minimal satu personel.', false); return; }
+    if (!confirm('Ajukan gangguan operasional untuk ' + qrs.length + ' personel ke Direktur?')) return;
+    const btn = document.getElementById('gmBtnAjukan');
+    btn.disabled = true;
+    try {
+      const { data, error } = await supabaseClient.rpc('buat_gangguan_operasional', {
+        p_pembuat_qrcode: qrId, p_dibuat_oleh: nama, p_tanggal: tgl, p_lokasi: lokasi,
+        p_jam_pulang: document.getElementById('gmJam').value || '', p_alasan: alasan, p_qrcodes: qrs
+      });
+      if (error) throw error;
+      if (!data || data.status !== 'SUCCESS') throw new Error((data && data.message) || 'Gagal mengajukan.');
+      gmMsg(data.message, true);
+      document.getElementById('gmPersonelBox').style.display = 'none';
+    } catch (e) {
+      gmMsg('Gagal: ' + e.message, false);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
   // Opsi "Gangguan operasional" hanya untuk akun PIC OIL/ALL (dicek server lewat can_buat_gangguan)
   let gangguanOptEl = null;
   let bolehGangguan = null;
@@ -1650,6 +1773,7 @@ async function submitPinInti() {
   async function loadApprovalIssues(qrId) {
     const box = document.getElementById('approvalIssuesBox');
     if (!box || !qrId) return;
+    cekTombolGangguan(qrId);
 
     box.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:6px 0;">Memeriksa antrean approval...</div>';
 
