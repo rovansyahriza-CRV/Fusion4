@@ -2475,6 +2475,7 @@ const KATEGORI_IJIN_LABEL = {
   DUKA_SERUMAH: 'Keluarga serumah meninggal',
   KEWAJIBAN_NEGARA: 'Kewajiban negara',
   IBADAH: 'Ibadah agama',
+  GANGGUAN_OPERASIONAL: 'Gangguan operasional (mati lampu, dll)',
 };
 
 function offLabel(item) {
@@ -2494,6 +2495,15 @@ let activeApprovalItem = null;
 
 async function loadOtorisasiPage(tab = 'queue', tabBtn = null) {
   currentOtorisasiTab = tab;
+
+  const _mainCard = document.getElementById('otorisasiMainCard');
+  const _gCard = document.getElementById('gangguanCard');
+  if (_mainCard) _mainCard.style.display = tab === 'gangguan' ? 'none' : '';
+  if (_gCard) _gCard.style.display = tab === 'gangguan' ? 'block' : 'none';
+  if (tab === 'gangguan') {
+    document.getElementById('otorisasiTabs')?.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.otoTab === 'gangguan'));
+    return loadGangguanPage();
+  }
 
   // Set visual tab active
   const tabsContainer = document.getElementById('otorisasiTabs');
@@ -6195,4 +6205,159 @@ async function generateSemuaSlip() {
 async function fusionAdminRpc(name,params){
  if(!currentUser?.adminToken||Date.parse(currentUser.adminExpiresAt||'')<=Date.now())return {data:null,error:{message:'Silakan logout dan login kembali untuk menggunakan fitur admin yang diperbarui.'}};
  return supabaseClient.rpc(name+'_secure',{...params,p_session_token:currentUser.adminToken});
+}
+
+
+// ===================== GANGGUAN OPERASIONAL (MASSAL) =====================
+let gangguanKandidat = [];
+
+function gangguanTodayStr() {
+  const d = new Date(Date.now() + 8 * 3600 * 1000); // WITA
+  return d.toISOString().slice(0, 10);
+}
+
+async function gangguanMyQr() {
+  if (!currentUser || !currentUser.id) return '';
+  const { data } = await supabaseClient.from('karyawanTbl').select('QrCodeId').eq('Id', currentUser.id).maybeSingle();
+  return (data && data.QrCodeId) || '';
+}
+
+async function loadGangguanPage() {
+  const tgl = document.getElementById('gangguanTanggal');
+  if (tgl && !tgl.value) tgl.value = gangguanTodayStr();
+  document.getElementById('gangguanPersonelBox').style.display = 'none';
+  gangguanKandidat = [];
+  await Promise.all([gangguanMuatLokasi(), gangguanMuatRiwayat(), gangguanMuatPending()]);
+}
+
+async function gangguanMuatLokasi() {
+  const box = document.getElementById('gangguanLokasiList');
+  const tanggal = document.getElementById('gangguanTanggal')?.value;
+  if (!box || !tanggal) return;
+  document.getElementById('gangguanPersonelBox').style.display = 'none';
+  box.innerHTML = '<span style="color:#777; font-size:13px;">Memuat lokasi...</span>';
+  const { data, error } = await supabaseClient.rpc('get_lokasi_absensi_hari', { p_tanggal: tanggal });
+  if (error) { box.innerHTML = `<span style="color:red; font-size:13px;">Gagal: ${escapeHtml(error.message)}</span>`; return; }
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) { box.innerHTML = '<span style="color:#777; font-size:13px;">Belum ada karyawan yang absen (dan belum pulang) pada tanggal ini.</span>'; return; }
+  box.innerHTML = rows.map((r, i) => `
+    <label style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1.5px solid #e6ded9; border-radius:999px; font-size:13px; cursor:pointer; background:#fff;">
+      <input type="checkbox" class="gangguanLokChk" value="${escapeHtml(r.lokasi)}">
+      ${escapeHtml(r.lokasi)} <b style="color:#b45309;">${r.jumlah}</b>
+    </label>`).join('');
+}
+
+async function gangguanMuatPersonel() {
+  const tanggal = document.getElementById('gangguanTanggal')?.value;
+  const lokasi = Array.from(document.querySelectorAll('.gangguanLokChk:checked')).map(c => c.value);
+  if (!tanggal) return showToast('Pilih tanggal kejadian dulu.', 'error');
+  if (!lokasi.length) return showToast('Pilih minimal satu area.', 'error');
+  const { data, error } = await supabaseClient.rpc('get_kandidat_gangguan_operasional', { p_tanggal: tanggal, p_lokasi: lokasi });
+  if (error) return showToast('Gagal memuat personel: ' + error.message, 'error');
+  gangguanKandidat = Array.isArray(data) ? data : [];
+  const body = document.getElementById('gangguanPersonelBody');
+  body.innerHTML = gangguanKandidat.length ? gangguanKandidat.map((p, i) => `
+    <tr>
+      <td><input type="checkbox" class="gangguanPersChk" data-qr="${escapeHtml(p.qrcodeid)}" checked onchange="gangguanUpdateCount()"></td>
+      <td>${escapeHtml(p.nama || '-')}</td>
+      <td>${escapeHtml(p.kualifikasi || '-')}</td>
+      <td>${escapeHtml(p.lokasi || '-')}</td>
+      <td>${p.jam_scan_terakhir ? new Date(p.jam_scan_terakhir).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' }) : '-'}</td>
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center; color:#777;">Tidak ada personel yang cocok.</td></tr>';
+  document.getElementById('gangguanCheckAll').checked = true;
+  document.getElementById('gangguanPersonelBox').style.display = 'block';
+  gangguanUpdateCount();
+}
+
+function gangguanToggleAll(on) {
+  document.querySelectorAll('.gangguanPersChk').forEach(c => { c.checked = on; });
+  gangguanUpdateCount();
+}
+
+function gangguanUpdateCount() {
+  const n = document.querySelectorAll('.gangguanPersChk:checked').length;
+  const el = document.getElementById('gangguanPersonelCount');
+  if (el) el.textContent = `${n} dari ${gangguanKandidat.length} personel dipilih`;
+}
+
+async function gangguanAjukan() {
+  const tanggal = document.getElementById('gangguanTanggal').value;
+  const jam = document.getElementById('gangguanJamPulang').value;
+  const alasan = document.getElementById('gangguanAlasan').value.trim();
+  const lokasi = Array.from(document.querySelectorAll('.gangguanLokChk:checked')).map(c => c.value);
+  const qrs = Array.from(document.querySelectorAll('.gangguanPersChk:checked')).map(c => c.dataset.qr);
+  if (!alasan) return showToast('Alasan wajib diisi.', 'error');
+  if (!qrs.length) return showToast('Pilih minimal satu personel.', 'error');
+  if (!confirm(`Ajukan gangguan operasional untuk ${qrs.length} personel ke Direktur?`)) return;
+  const btn = document.getElementById('btnAjukanGangguan');
+  btn.disabled = true;
+  try {
+    const { data, error } = await supabaseClient.rpc('buat_gangguan_operasional', {
+      p_dibuat_oleh: currentUser?.nama || 'HR',
+      p_tanggal: tanggal, p_lokasi: lokasi, p_jam_pulang: jam || '', p_alasan: alasan, p_qrcodes: qrs
+    });
+    if (error) throw error;
+    if (!data || data.status !== 'SUCCESS') throw new Error((data && data.message) || 'Gagal mengajukan.');
+    showToast(data.message, 'success', 5000);
+    document.getElementById('gangguanAlasan').value = '';
+    document.getElementById('gangguanPersonelBox').style.display = 'none';
+    await Promise.all([gangguanMuatRiwayat(), gangguanMuatPending()]);
+  } catch (err) {
+    showToast('Gagal: ' + err.message, 'error', 5000);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function gangguanMuatRiwayat() {
+  const body = document.getElementById('gangguanRiwayatBody');
+  const { data, error } = await supabaseClient.rpc('get_riwayat_gangguan_operasional');
+  if (error) { body.innerHTML = `<tr><td colspan="7" style="color:red; text-align:center;">${escapeHtml(error.message)}</td></tr>`; return; }
+  const rows = Array.isArray(data) ? data : [];
+  const warna = { PENDING_DIREKTUR: '#b45309', APPROVED: '#178A4C', REJECTED: '#D9312E' };
+  const label = { PENDING_DIREKTUR: 'Menunggu Direktur', APPROVED: 'Disetujui', REJECTED: 'Ditolak' };
+  body.innerHTML = rows.length ? rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.tanggal)}</td>
+      <td>${escapeHtml((r.lokasi_list || []).join(', '))}</td>
+      <td>${escapeHtml(r.jam_pulang || '-')}</td>
+      <td>${escapeHtml(r.alasan)}</td>
+      <td>${r.jumlah_personel}</td>
+      <td><b style="color:${warna[r.status] || '#555'}">${label[r.status] || r.status}</b></td>
+      <td>${escapeHtml(r.approver || '-')}</td>
+    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center; color:#777;">Belum ada pengumuman.</td></tr>';
+}
+
+async function gangguanMuatPending() {
+  const card = document.getElementById('gangguanPendingCard');
+  const list = document.getElementById('gangguanPendingList');
+  const qr = await gangguanMyQr();
+  if (!qr) { card.style.display = 'none'; return; }
+  const { data } = await supabaseClient.rpc('get_pending_gangguan_by_qrcode', { p_qrcode: qr });
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  list.innerHTML = rows.map(r => `
+    <div style="border:1.5px solid #e6ded9; border-radius:10px; padding:12px; margin-bottom:10px;">
+      <div style="font-weight:700;">🚨 ${escapeHtml(r.alasan)}</div>
+      <div style="font-size:13px; color:#555; margin:4px 0;">${escapeHtml(r.tanggal)} &middot; ${escapeHtml((r.lokasi_list || []).join(', '))}${r.jam_pulang ? ' &middot; pulang bersama ' + escapeHtml(r.jam_pulang) : ''}</div>
+      <div style="font-size:13px; color:#555;">${r.jumlah_personel} personel: ${escapeHtml((r.personel || []).join(', '))}</div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button type="button" class="btn-primary" style="padding:7px 14px; font-size:13px;" onclick="gangguanPutuskan(${r.id}, 'APPROVE')">✅ Setujui</button>
+        <button type="button" style="padding:7px 14px; font-size:13px; border:1.5px solid #fca5a5; border-radius:8px; background:#fff; color:#b91c1c; cursor:pointer;" onclick="gangguanPutuskan(${r.id}, 'REJECT')">❌ Tolak</button>
+      </div>
+    </div>`).join('');
+}
+
+async function gangguanPutuskan(id, action) {
+  const qr = await gangguanMyQr();
+  let catatan = '';
+  if (action === 'REJECT') {
+    catatan = prompt('Alasan penolakan:') || '';
+    if (!catatan) return;
+  } else if (!confirm('Setujui? Ijin akan dibuat otomatis untuk semua personel di daftar.')) return;
+  const { data, error } = await supabaseClient.rpc('putuskan_gangguan_operasional', { p_id: id, p_qrcode: qr, p_action: action, p_catatan: catatan });
+  if (error || !data || data.status !== 'SUCCESS') return showToast('Gagal: ' + (error?.message || data?.message || 'tidak diketahui'), 'error', 5000);
+  showToast(data.message, 'success', 5000);
+  await Promise.all([gangguanMuatRiwayat(), gangguanMuatPending()]);
 }
