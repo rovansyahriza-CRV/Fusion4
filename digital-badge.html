@@ -1163,6 +1163,29 @@ async function submitPinInti() {
     }
   }
 
+  // Opsi "Gangguan operasional" hanya untuk akun PIC OIL/ALL (dicek server lewat can_buat_gangguan)
+  let gangguanOptEl = null;
+  let bolehGangguan = null;
+  async function aturOpsiGangguan() {
+    const sel = document.getElementById('requestKategoriIjin');
+    if (!sel) return;
+    const opt = sel.querySelector('option[value="GANGGUAN_OPERASIONAL"]');
+    if (!gangguanOptEl && opt) gangguanOptEl = opt;
+    if (!gangguanOptEl) return;
+    if (bolehGangguan === null) {
+      const qr = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || "";
+      try {
+        const { data, error } = await supabaseClient.rpc('can_buat_gangguan', { p_qrcode: qr });
+        bolehGangguan = !error && data === true;
+      } catch (e) { bolehGangguan = false; }
+    }
+    if (bolehGangguan) {
+      if (!sel.contains(gangguanOptEl)) sel.appendChild(gangguanOptEl);
+    } else if (sel.contains(gangguanOptEl)) {
+      gangguanOptEl.remove();
+    }
+  }
+
   async function openRequestForm(type) {
     currentRequestType = type;
     document.getElementById('requestTitle').innerText = type === "IJIN" ? "Ajukan Ijin Keluar" : "Ajukan Lembur (SPKL)";
@@ -1173,6 +1196,7 @@ async function submitPinInti() {
     document.getElementById('requestRencanaJam').value = "";
     document.getElementById('requestAlasan').value = "";
     document.getElementById('requestMsg').style.display = "none";
+    if (type === "IJIN") await aturOpsiGangguan();
     if (type === "LEMBUR") {
       await populateLokasiDropdown();
     }
@@ -2028,7 +2052,7 @@ async function submitPinInti() {
           if (item.tipe === 'IJIN' && item.kategori_ijin) {
             typeTitle += item.kategori_ijin === 'PRIBADI'
               ? ' <span style="font-size:11px; color:#B45309;">(pribadi, potong 1 hari cuti)</span>'
-              : ' <span style="font-size:11px; color:#0F766E;">(hak UU: ' + (document.querySelector('#requestKategoriIjin option[value="' + item.kategori_ijin + '"]')?.textContent || item.kategori_ijin) + ')</span>';
+              : ' <span style="font-size:11px; color:#0F766E;">(hak UU: ' + (item.kategori_ijin === 'GANGGUAN_OPERASIONAL' ? 'Gangguan operasional (mati lampu, dll)' : (document.querySelector('#requestKategoriIjin option[value="' + item.kategori_ijin + '"]')?.textContent || item.kategori_ijin)) + ')</span>';
           }
           if (item.tipe === 'LEMBUR') typeTitle = '⏱️ SPKL Lembur';
           else if (item.tipe === 'CUTI') typeTitle = '🏖️ Pengajuan Cuti (' + (item.jumlah_hari || 1) + ' Hari)';
