@@ -2497,6 +2497,13 @@ let activeApprovalItem = null;
 async function loadOtorisasiPage(tab = 'queue', tabBtn = null) {
   currentOtorisasiTab = tab;
 
+  const _gTabBtn = document.querySelector('#otorisasiTabs [data-oto-tab="gangguan"]');
+  if (_gTabBtn) _gTabBtn.style.display = canGangguanTab() ? '' : 'none';
+  if (tab === 'gangguan' && !canGangguanTab()) {
+    showToast('Tab Gangguan Operasional khusus akun dengan PIC OIL atau ALL.', 'error');
+    tab = 'queue';
+    currentOtorisasiTab = 'queue';
+  }
   const _mainCard = document.getElementById('otorisasiMainCard');
   const _gCard = document.getElementById('gangguanCard');
   if (_mainCard) _mainCard.style.display = tab === 'gangguan' ? 'none' : '';
@@ -6212,6 +6219,12 @@ async function fusionAdminRpc(name,params){
 // ===================== GANGGUAN OPERASIONAL (MASSAL) =====================
 let gangguanKandidat = [];
 
+// Tab Gangguan Operasional hanya untuk PIC OIL / ALL (super admin ikut). Server juga mengecek (can_buat_gangguan).
+function canGangguanTab() {
+  if (!currentUser) return false;
+  return isAccessSuperAdmin() || accessTokens(currentUser.pic).includes('OIL');
+}
+
 function gangguanTodayStr() {
   const d = new Date(Date.now() + 8 * 3600 * 1000); // WITA
   return d.toISOString().slice(0, 10);
@@ -6294,6 +6307,7 @@ async function gangguanAjukan() {
   btn.disabled = true;
   try {
     const { data, error } = await supabaseClient.rpc('buat_gangguan_operasional', {
+      p_pembuat_qrcode: await gangguanMyQr(),
       p_dibuat_oleh: currentUser?.nama || 'HR',
       p_tanggal: tanggal, p_lokasi: lokasi, p_jam_pulang: jam || '', p_alasan: alasan, p_qrcodes: qrs
     });
