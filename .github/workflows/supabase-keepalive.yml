@@ -2,38 +2,50 @@ name: Keep Supabase awake
 
 on:
   schedule:
-    # Run every three days, safely inside Supabase's seven-day pause window.
-    - cron: '17 2 */3 * *'
+    # Tiap 2 hari (aman di dalam jendela pause 7 hari Supabase free tier).
+    - cron: '17 2 */2 * *'
   workflow_dispatch:
 
 jobs:
   ping:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
+    strategy:
+      # Satu project gagal jangan sampai project lain ikut tidak di-ping.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Fusion4 SmartGate
+            url: https://nhmpwjriextmbotmvvbu.supabase.co
+            key: sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz
+            rpc: get_active_karyawan
+          - name: HSSE-Fusion4
+            # RPC read-only (baca departemenTbl) supaya benar-benar menyentuh database.
+            url: https://wvzajdnxmjegblqrvgfs.supabase.co
+            key: sb_publishable_BsYvIC-QEgxEfE2UP1siZg_85Rx0XYP
+            rpc: get_departemen_list
+    name: Ping ${{ matrix.name }}
     steps:
-      - name: Ping Supabase projects
+      - name: Panggil RPC ${{ matrix.rpc }}
         env:
-          SUPABASE_URL_1: https://nhmpwjriextmbotmvvbu.supabase.co
-          SUPABASE_KEY_1: sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz
-          SUPABASE_URL_2: https://wvzajdnxmjegblqrvgfs.supabase.co
-          SUPABASE_KEY_2: sb_publishable_BsYvIC-QEgxEfE2UP1siZg_85Rx0XYP
+          SB_URL: ${{ matrix.url }}
+          SB_KEY: ${{ matrix.key }}
+          SB_RPC: ${{ matrix.rpc }}
         run: |
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "apikey: ${SUPABASE_KEY_1}" \
-            --header "Authorization: Bearer ${SUPABASE_KEY_1}" \
-            --header "Content-Type: application/json" \
-            --data '{}' \
-            --output /dev/null \
-            "${SUPABASE_URL_1}/rest/v1/rpc/get_active_karyawan"
-
-          # HSSE-Fusion4: RPC read-only (baca departemenTbl) supaya benar-benar
-          # menyentuh database, bukan cuma cek layanan auth.
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "apikey: ${SUPABASE_KEY_2}" \
-            --header "Authorization: Bearer ${SUPABASE_KEY_2}" \
-            --header "Content-Type: application/json" \
-            --data '{}' \
-            --output /dev/null \
-            "${SUPABASE_URL_2}/rest/v1/rpc/get_departemen_list"
+          # Coba 3x (project yang baru bangun kadang lambat), gagal keras kalau tetap error.
+          for i in 1 2 3; do
+            code=$(curl --silent --show-error --max-time 60 \
+              --request POST \
+              --header "apikey: ${SB_KEY}" \
+              --header "Authorization: Bearer ${SB_KEY}" \
+              --header "Content-Type: application/json" \
+              --data '{}' \
+              --output /tmp/body --write-out '%{http_code}' \
+              "${SB_URL}/rest/v1/rpc/${SB_RPC}" || echo 000)
+            echo "Percobaan $i: HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            head -c 500 /tmp/body 2>/dev/null; echo
+            sleep 20
+          done
+          echo "::error::Ping ${SB_RPC} gagal (HTTP $code). Cek apakah project Supabase ter-pause."
+          exit 1
