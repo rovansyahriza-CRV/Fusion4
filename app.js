@@ -5001,6 +5001,8 @@ function switchKbTab(tab, btn) {
   document.getElementById('kbTabSimulator').style.display = tab === 'simulator' ? 'block' : 'none';
   document.getElementById('kbTabPola').style.display = tab === 'pola' ? 'block' : 'none';
   document.getElementById('kbTabProses').style.display = tab === 'proses' ? 'block' : 'none';
+  document.getElementById('kbTabDinas').style.display = tab === 'dinas' ? 'block' : 'none';
+  if (tab === 'dinas') loadKbDinasTab();
 }
 
 function populateKbGajiDivisiFilter() {
@@ -6380,4 +6382,205 @@ async function gangguanPutuskan(id, action) {
   if (error || !data || data.status !== 'SUCCESS') return showToast('Gagal: ' + (error?.message || data?.message || 'tidak diketahui'), 'error', 5000);
   showToast(data.message, 'success', 5000);
   await Promise.all([gangguanMuatRiwayat(), gangguanMuatPending()]);
+}
+
+// ===================== TARIF PERJALANAN DINAS & GRADE KARYAWAN =====================
+// Tab di Kompensasi & Benefit. Baca langsung dari tabel; tulis lewat RPC *_secure (PIC KB / ALL).
+// SQL: migrasi_tarif_perjalanan_dinas_admin.sql (butuh migrasi_perjalanan_dinas.sql).
+let kbDinasTarif = [];
+let kbDinasKaryawan = [];
+
+function kbDinasRp(n) {
+  return n == null ? '-' : 'Rp ' + Math.round(Number(n)).toLocaleString('id-ID');
+}
+
+async function loadKbDinasTab() {
+  const tBody = document.getElementById('kbDinasTarifBody');
+  const gBody = document.getElementById('kbDinasGradeBody');
+  if (tBody) tBody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#777; padding:18px;">Memuat...</td></tr>';
+  if (gBody) gBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#777; padding:18px;">Memuat...</td></tr>';
+  try {
+    const [tarifRes, karRes] = await Promise.all([
+      supabaseClient.from('tarifPerjalananDinasTbl').select('*').order('Grade').order('JarakMinKm'),
+      supabaseClient.from('karyawanTbl').select('Id, NamaPersonnel, QrCodeId, Kualifikasi, Departemen, Grade, IsActive').order('NamaPersonnel')
+    ]);
+    if (tarifRes.error) throw tarifRes.error;
+    if (karRes.error) throw karRes.error;
+    kbDinasTarif = tarifRes.data || [];
+    kbDinasKaryawan = (karRes.data || []).filter(k => k.IsActive !== false);
+    renderKbDinasTarifTable();
+    renderKbDinasGradeTable();
+  } catch (e) {
+    const msg = /tarifPerjalananDinasTbl|Grade/.test(e.message || '')
+      ? 'Tabel tarif belum ada. Jalankan migrasi_perjalanan_dinas.sql di Supabase dulu.'
+      : 'Gagal memuat: ' + e.message;
+    if (tBody) tBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#c0392b; padding:18px;">${escapeHtml(msg)}</td></tr>`;
+    if (gBody) gBody.innerHTML = '';
+  }
+}
+
+function kbDinasDaftarGrade() {
+  return [...new Set([
+    ...kbDinasTarif.map(t => String(t.Grade || '').toUpperCase()),
+    ...kbDinasKaryawan.map(k => String(k.Grade || '').toUpperCase())
+  ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
+}
+
+function renderKbDinasTarifTable() {
+  const tbody = document.getElementById('kbDinasTarifBody');
+  if (!tbody) return;
+  document.getElementById('kbDinasTarifCount').textContent = `${kbDinasTarif.length} tarif`;
+  const dl = document.getElementById('kbDinasGradeList');
+  if (dl) dl.innerHTML = kbDinasDaftarGrade().map(g => `<option value="${escapeHtml(g)}">`).join('');
+  if (!kbDinasTarif.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#777; padding:18px;">Belum ada tarif. Isi form di atas lalu klik + Tambah.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = kbDinasTarif.map(t => {
+    const contoh = Number(t.UangHarian || 0) * 3 + Number(t.UangPenginapan || 0) * 2;
+    const jarak = `${Number(t.JarakMinKm).toLocaleString('id-ID')} – ${t.JarakMaxKm == null ? '∞' : Number(t.JarakMaxKm).toLocaleString('id-ID')} km`;
+    return `<tr style="${t.IsAktif ? '' : 'opacity:0.55;'}">
+      <td><strong>${escapeHtml(t.Grade)}</strong></td>
+      <td style="white-space:nowrap;">${jarak}</td>
+      <td style="white-space:nowrap;">${kbDinasRp(t.UangHarian)}</td>
+      <td style="white-space:nowrap;">${kbDinasRp(t.UangPenginapan)}</td>
+      <td style="white-space:nowrap; color:#64748B;">${kbDinasRp(contoh)}</td>
+      <td>${escapeHtml(t.Keterangan || '-')}</td>
+      <td>${t.IsAktif ? '<span style="color:#178A4C; font-weight:700;">Aktif</span>' : '<span style="color:#8a94a3;">Nonaktif</span>'}</td>
+      <td style="white-space:nowrap;">
+        <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="editKbDinasTarif(${Number(t.Id)})">✏️</button>
+        <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px; color:#c0392b;" onclick="hapusKbDinasTarif(${Number(t.Id)})">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function editKbDinasTarif(id) {
+  const t = kbDinasTarif.find(x => Number(x.Id) === id);
+  if (!t) return;
+  document.getElementById('kbDinasEditId').value = t.Id;
+  document.getElementById('kbDinasGrade').value = t.Grade || '';
+  document.getElementById('kbDinasJarakMin').value = t.JarakMinKm ?? '';
+  document.getElementById('kbDinasJarakMax').value = t.JarakMaxKm ?? '';
+  document.getElementById('kbDinasHarian').value = Number(t.UangHarian || 0).toLocaleString('id-ID');
+  document.getElementById('kbDinasPenginapan').value = Number(t.UangPenginapan || 0).toLocaleString('id-ID');
+  document.getElementById('kbDinasKeterangan').value = t.Keterangan || '';
+  document.getElementById('kbDinasAktif').checked = !!t.IsAktif;
+  document.getElementById('kbDinasSubmitBtn').textContent = '💾 Simpan';
+  document.getElementById('kbDinasBatalBtn').style.display = '';
+  document.getElementById('kbDinasGrade').focus();
+}
+
+function batalEditKbDinasTarif() {
+  document.getElementById('kbDinasEditId').value = '';
+  ['kbDinasGrade', 'kbDinasJarakMin', 'kbDinasJarakMax', 'kbDinasHarian', 'kbDinasPenginapan', 'kbDinasKeterangan']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('kbDinasAktif').checked = true;
+  document.getElementById('kbDinasSubmitBtn').textContent = '+ Tambah';
+  document.getElementById('kbDinasBatalBtn').style.display = 'none';
+}
+
+async function simpanKbDinasTarif() {
+  const editId = document.getElementById('kbDinasEditId').value;
+  const grade = document.getElementById('kbDinasGrade').value.trim();
+  const minRaw = document.getElementById('kbDinasJarakMin').value;
+  const maxRaw = document.getElementById('kbDinasJarakMax').value;
+  if (!grade) { showToast('Isi Grade dulu.', 'error'); return; }
+  const btn = document.getElementById('kbDinasSubmitBtn');
+  btn.disabled = true;
+  try {
+    const { data, error } = await fusionAdminRpc('simpan_tarif_perjalanan_dinas', {
+      p_id: editId ? Number(editId) : null,
+      p_grade: grade,
+      p_jarak_min: minRaw === '' ? 0 : Number(minRaw),
+      p_jarak_max: maxRaw === '' ? null : Number(maxRaw),
+      p_uang_harian: parseRupiahInput(document.getElementById('kbDinasHarian')) || 0,
+      p_uang_penginapan: parseRupiahInput(document.getElementById('kbDinasPenginapan')) || 0,
+      p_keterangan: document.getElementById('kbDinasKeterangan').value.trim() || null,
+      p_is_aktif: document.getElementById('kbDinasAktif').checked
+    });
+    if (error) throw error;
+    if (data && data.status === 'SUCCESS') {
+      showToast(editId ? 'Tarif diperbarui.' : 'Tarif ditambahkan.', 'success');
+      batalEditKbDinasTarif();
+      await loadKbDinasTab();
+    } else {
+      showToast((data && data.message) || 'Gagal menyimpan tarif.', 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+}
+
+async function hapusKbDinasTarif(id) {
+  const t = kbDinasTarif.find(x => Number(x.Id) === id);
+  if (!t) return;
+  if (!confirm(`Hapus tarif Grade ${t.Grade} (${t.JarakMinKm} – ${t.JarakMaxKm ?? '∞'} km)? Pengajuan lama tidak berubah.`)) return;
+  try {
+    const { data, error } = await fusionAdminRpc('hapus_tarif_perjalanan_dinas', { p_id: id });
+    if (error) throw error;
+    if (data && data.status === 'SUCCESS') {
+      showToast('Tarif dihapus.', 'success');
+      await loadKbDinasTab();
+    } else {
+      showToast((data && data.message) || 'Gagal menghapus.', 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+function renderKbDinasGradeTable() {
+  const tbody = document.getElementById('kbDinasGradeBody');
+  if (!tbody) return;
+  const q = (document.getElementById('kbDinasGradeSearch')?.value || '').trim().toLowerCase();
+  const filter = document.getElementById('kbDinasGradeFilter')?.value || '';
+  const fsel = document.getElementById('kbDinasGradeFilter');
+  if (fsel) {
+    const grades = kbDinasDaftarGrade();
+    fsel.innerHTML = '<option value="">Semua karyawan aktif</option><option value="__KOSONG__">Belum punya Grade</option>'
+      + grades.map(g => `<option value="${escapeHtml(g)}">Grade ${escapeHtml(g)}</option>`).join('');
+    fsel.value = (filter === '' || filter === '__KOSONG__' || grades.includes(filter)) ? filter : '';
+  }
+  let rows = kbDinasKaryawan;
+  if (filter === '__KOSONG__') rows = rows.filter(k => !k.Grade);
+  else if (filter) rows = rows.filter(k => String(k.Grade || '').toUpperCase() === filter);
+  if (q) rows = rows.filter(k => `${k.NamaPersonnel || ''} ${k.QrCodeId || ''} ${k.Kualifikasi || ''} ${k.Departemen || ''}`.toLowerCase().includes(q));
+  const tanpa = kbDinasKaryawan.filter(k => !k.Grade).length;
+  document.getElementById('kbDinasGradeCount').textContent = `${rows.length} karyawan · ${tanpa} belum ber-Grade`;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#777; padding:18px;">Tidak ada karyawan yang cocok.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(k => `<tr>
+      <td><strong>${escapeHtml(k.NamaPersonnel || '-')}</strong></td>
+      <td style="font-family:monospace; font-size:12px;">${escapeHtml(k.QrCodeId || '-')}</td>
+      <td>${escapeHtml(k.Kualifikasi || '-')}</td>
+      <td>${escapeHtml(k.Departemen || '-')}</td>
+      <td><input type="text" id="kbDinasGradeInput-${Number(k.Id)}" list="kbDinasGradeList" maxlength="20" value="${escapeHtml(k.Grade || '')}" placeholder="-" style="width:100%; padding:6px 8px;"
+           onkeydown="if(event.key==='Enter'){simpanKbDinasGrade(${Number(k.Id)});}"></td>
+      <td><button type="button" class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="simpanKbDinasGrade(${Number(k.Id)})">💾 Simpan</button></td>
+    </tr>`).join('');
+}
+
+async function simpanKbDinasGrade(id) {
+  const input = document.getElementById('kbDinasGradeInput-' + id);
+  if (!input) return;
+  try {
+    const { data, error } = await fusionAdminRpc('set_grade_karyawan', { p_id: id, p_grade: input.value.trim() || null });
+    if (error) throw error;
+    if (data && data.status === 'SUCCESS') {
+      const k = kbDinasKaryawan.find(x => Number(x.Id) === id);
+      if (k) k.Grade = data.grade || null;
+      input.value = data.grade || '';
+      showToast(`Grade ${k ? k.NamaPersonnel : ''} disimpan${data.grade ? ': ' + data.grade : ' (dikosongkan)'}.`, 'success');
+      document.getElementById('kbDinasGradeCount').textContent =
+        `${document.querySelectorAll('#kbDinasGradeBody tr').length} karyawan · ${kbDinasKaryawan.filter(x => !x.Grade).length} belum ber-Grade`;
+    } else {
+      showToast((data && data.message) || 'Gagal menyimpan Grade.', 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
 }
