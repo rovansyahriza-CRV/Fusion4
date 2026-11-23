@@ -766,6 +766,7 @@
         <button type="button" class="tab-btn" data-kbtab="simulator" onclick="switchKbTab('simulator', this)">🧮 Simulator Payroll</button>
         <button type="button" class="tab-btn" data-kbtab="pola" onclick="switchKbTab('pola', this)">🕐 Pola Kerja &amp; Tarif Lembur</button>
         <button type="button" class="tab-btn" data-kbtab="proses" onclick="switchKbTab('proses', this)">📊 Proses Payroll Bulanan</button>
+        <button type="button" class="tab-btn" data-kbtab="dinas" onclick="switchKbTab('dinas', this)">✈️ Tarif Perjalanan Dinas</button>
       </div>
 
       <!-- TAB: Master Gaji & Tunjangan -->
@@ -1005,6 +1006,63 @@
             <table>
               <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Aksi</th></tr></thead>
               <tbody id="kbLiburTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Tarif Perjalanan Dinas (Grade x jarak) + Grade karyawan -->
+      <div id="kbTabDinas" style="display:none;">
+        <div class="card table-card">
+          <div class="card-header space-between">
+            <div>
+              <h3>✈️ Tarif Perjalanan Dinas per Grade &amp; Jarak</h3>
+              <p class="card-subtitle">Dipakai menghitung estimasi biaya saat karyawan mengajukan Perjalanan Dinas di Digital Badge. Dicatat saja, belum masuk payroll.</p>
+            </div>
+            <span class="badge-count" id="kbDinasTarifCount">0 tarif</span>
+          </div>
+          <input type="hidden" id="kbDinasEditId" value="">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; padding:0 4px 12px; align-items:flex-end;">
+            <div style="flex:1; min-width:90px;"><label for="kbDinasGrade" style="font-size:12px;">Grade</label><input type="text" id="kbDinasGrade" list="kbDinasGradeList" maxlength="20" placeholder="G1" style="width:100%;"></div>
+            <div style="flex:1; min-width:100px;"><label for="kbDinasJarakMin" style="font-size:12px;">Jarak min (km)</label><input type="number" id="kbDinasJarakMin" min="0" step="1" placeholder="0" style="width:100%;"></div>
+            <div style="flex:1; min-width:100px;"><label for="kbDinasJarakMax" style="font-size:12px;">Jarak maks (km)</label><input type="number" id="kbDinasJarakMax" min="0" step="1" placeholder="kosong = tanpa batas" style="width:100%;"></div>
+            <div style="flex:1.2; min-width:130px;"><label for="kbDinasHarian" style="font-size:12px;">Uang harian (Rp/hari)</label><input type="text" id="kbDinasHarian" inputmode="numeric" oninput="formatRupiahInput(this)" placeholder="0" style="width:100%;"></div>
+            <div style="flex:1.2; min-width:130px;"><label for="kbDinasPenginapan" style="font-size:12px;">Penginapan (Rp/malam)</label><input type="text" id="kbDinasPenginapan" inputmode="numeric" oninput="formatRupiahInput(this)" placeholder="0" style="width:100%;"></div>
+            <div style="flex:2; min-width:160px;"><label for="kbDinasKeterangan" style="font-size:12px;">Keterangan</label><input type="text" id="kbDinasKeterangan" maxlength="120" placeholder="Contoh: Antar pulau" style="width:100%;"></div>
+            <label style="font-size:12px; display:flex; align-items:center; gap:6px; padding-bottom:8px;"><input type="checkbox" id="kbDinasAktif" checked> Aktif</label>
+            <button type="button" class="btn-primary" id="kbDinasSubmitBtn" onclick="simpanKbDinasTarif()">+ Tambah</button>
+            <button type="button" class="btn-secondary" id="kbDinasBatalBtn" onclick="batalEditKbDinasTarif()" style="display:none;">Batal</button>
+          </div>
+          <datalist id="kbDinasGradeList"></datalist>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Grade</th><th>Rentang Jarak</th><th>Uang Harian</th><th>Penginapan</th><th>Contoh 3 hari</th><th>Keterangan</th><th>Status</th><th>Aksi</th></tr></thead>
+              <tbody id="kbDinasTarifBody"></tbody>
+            </table>
+          </div>
+          <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Jarak dicocokkan <strong>min &le; jarak &lt; maks</strong>. Estimasi = Uang Harian &times; hari + Penginapan &times; (hari &minus; 1).
+            Nilai tarif disalin ke pengajuan saat diajukan, jadi mengubah/menghapus tarif tidak mengubah pengajuan lama. Rentang jarak tarif aktif dalam satu Grade tidak boleh tumpang tindih.</p>
+        </div>
+
+        <div class="card table-card" style="margin-top:16px;">
+          <div class="card-header space-between">
+            <div>
+              <h3>🏷️ Grade Karyawan</h3>
+              <p class="card-subtitle">Grade menentukan tarif yang dipakai. Karyawan tanpa Grade tetap bisa mengajukan, tapi estimasi biayanya kosong.</p>
+            </div>
+            <span class="badge-count" id="kbDinasGradeCount">0 karyawan</span>
+          </div>
+          <div style="padding:0 4px 12px; display:flex; gap:10px; flex-wrap:wrap;">
+            <input type="text" id="kbDinasGradeSearch" placeholder="Cari nama / ID / jabatan..." oninput="renderKbDinasGradeTable()" style="flex:2; min-width:180px; padding:8px 12px; border-radius:8px; border:1.5px solid #e6ded9;">
+            <select id="kbDinasGradeFilter" onchange="renderKbDinasGradeTable()" style="flex:1; min-width:150px;">
+              <option value="">Semua karyawan aktif</option>
+              <option value="__KOSONG__">Belum punya Grade</option>
+            </select>
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Nama</th><th>ID</th><th>Jabatan</th><th>Departemen</th><th style="width:150px;">Grade</th><th>Aksi</th></tr></thead>
+              <tbody id="kbDinasGradeBody"></tbody>
             </table>
           </div>
         </div>
