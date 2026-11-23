@@ -2641,6 +2641,8 @@ function renderOtorisasiTable() {
         ? `<span style="color:#0369A1; font-weight:700;">🏖️ Cuti</span>`
         : item.tipe === 'OFF'
         ? `<span style="color:#0F766E; font-weight:700;">🌴 ${offLabel(item)}</span>${item.peringatan_kuota ? `<br><small style="color:#dc2626; font-weight:600;">⚠️ Melebihi jatah</small>` : ''}`
+        : item.tipe === 'PERJALANAN_DINAS'
+        ? `<span style="color:#6D28D9; font-weight:700;">✈️ Perjalanan Dinas</span><br><small style="color:#64748B;">${formatTglIndo(item.tanggal_mulai)} s/d ${formatTglIndo(item.tanggal_selesai)}</small>`
         : `<span style="color:#2563EB; font-weight:700;">⏱️ Lembur (SPKL)</span>`;
 
       const action = item.required_action || 'APPROVE';
@@ -2670,7 +2672,7 @@ function renderOtorisasiTable() {
           <td style="max-width:240px; white-space:normal;">${kategoriIjinBadge(item)}${escapeHtml(item.alasan || '-')}</td>
           <td>
             <div class="step-tracker-mini">
-              <span>${item.current_level === 0 ? 'Cek HR Admin' : `Level ${item.current_level} dari ${item.total_levels}`}</span>
+              <span>${item.current_level === 0 ? (item.tipe === 'PERJALANAN_DINAS' ? 'Verifikasi HR (tahap akhir)' : 'Cek HR Admin') : `Level ${item.current_level} dari ${item.total_levels}`}</span>
             </div>
           </td>
           <td style="text-align:center;">
@@ -2706,6 +2708,8 @@ function renderOtorisasiTable() {
         ? `<span style="color:#0369A1; font-weight:700;">🏖️ CUTI</span>`
         : item.tipe === 'OFF'
         ? `<span style="color:#0F766E; font-weight:700;">🌴 ${offLabel(item).toUpperCase()}</span>`
+        : item.tipe === 'PERJALANAN_DINAS'
+        ? `<span style="color:#6D28D9; font-weight:700;">✈️ DINAS</span>`
         : `<span style="color:#2563EB; font-weight:700;">⏱️ LEMBUR</span>`;
 
       let statusBadge = '';
@@ -2981,9 +2985,9 @@ function openModalApprovalAction(requestId, actionName, reqJsonStr) {
   if (bodyEl) {
     bodyEl.innerHTML = `
       <div style="display:grid; grid-template-columns:110px 1fr; gap:6px;">
-        <strong>Tipe:</strong> <span>${item.tipe === 'IJIN' ? '🚪 Ijin Pulang' : item.tipe === 'CUTI' ? '🏖️ Cuti' : item.tipe === 'OFF' ? '🌴 ' + offLabel(item) : '⏱️ Lembur (SPKL)'}</span>
+        <strong>Tipe:</strong> <span>${item.tipe === 'IJIN' ? '🚪 Ijin Pulang' : item.tipe === 'CUTI' ? '🏖️ Cuti' : item.tipe === 'OFF' ? '🌴 ' + offLabel(item) : item.tipe === 'PERJALANAN_DINAS' ? '✈️ Perjalanan Dinas' : '⏱️ Lembur (SPKL)'}</span>
         <strong>Pemohon:</strong> <span>${escapeHtml(item.nama_pemohon || item.qrcodeid)} (${escapeHtml(item.kualifikasi || '-')})</span>
-        <strong>Tanggal:</strong> <span>${item.tanggal_mulai && item.tanggal_selesai && (item.tipe === 'CUTI' || item.tipe === 'OFF')
+        <strong>Tanggal:</strong> <span>${item.tanggal_mulai && item.tanggal_selesai && (item.tipe === 'CUTI' || item.tipe === 'OFF' || item.tipe === 'PERJALANAN_DINAS')
           ? `${formatTglIndo(item.tanggal_mulai)} s/d ${formatTglIndo(item.tanggal_selesai)} (${item.jumlah_hari || 1} hari)`
           : formatTglIndo(item.tanggal)}</span>
         ${item.lokasi ? `<strong>Lokasi:</strong> <span>${escapeHtml(item.lokasi)}</span>` : ''}
@@ -5707,6 +5711,7 @@ const TIMESHEET_STATUS_STYLE = {
   PARSIAL: { color: SLIP_ORANGE, label: 'Parsial' },
   CUTI: { color: SLIP_BLUE, label: 'Cuti' },
   IJIN: { color: SLIP_BLUE, label: 'Ijin' },
+  DINAS: { color: SLIP_GREEN, label: 'Dinas (Hadir)' },
   LIBUR: { color: SLIP_GRAY, label: 'Libur' },
   TIDAK_HADIR: { color: SLIP_RED, label: 'Tidak Hadir' },
 };

@@ -204,6 +204,13 @@
   <div style="margin:8px 16px 0; display:none;">
     <button id="btnAjukanOff" style="width:100%; padding:11px 4px; font-size:13px; font-weight:700; border:1.5px solid #0F766E; border-radius:12px; background:#fff; color:#0F766E; cursor:pointer;">🌴 AJUKAN OFF (Rotasi / Periode)</button>
   </div>
+  <div id="pdTombolWrap" style="margin:8px 16px 0;">
+    <button id="btnAjukanPD" style="width:100%; padding:11px 4px; font-size:13px; font-weight:700; border:1.5px solid #6D28D9; border-radius:12px; background:#fff; color:#6D28D9; cursor:pointer;">✈️ AJUKAN PERJALANAN DINAS</button>
+  </div>
+  <div id="pdSayaWrap" style="display:none; background:#fff; border-radius:20px; margin:10px 16px 0; padding:16px; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <p class="card-label">✈️ Perjalanan Dinas Saya</p>
+    <div id="pdSayaBox"></div>
+  </div>
 
   <div style="background:#fff; border-radius:20px; margin:0 16px 16px; padding:20px; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
     <p class="card-label">Approval Issues</p>
@@ -392,6 +399,65 @@
     <button id="btnSubmitOff" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#0F766E; color:#fff; cursor:pointer;">Ajukan Off ke Atasan</button>
     <button id="btnCancelOff" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
     <div id="offMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
+  </div>
+</div>
+
+<div id="pdOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:100; padding:20px; overflow-y:auto;">
+  <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px; box-sizing:border-box; margin:auto;">
+    <h3 style="margin:0 0 6px; font-size:17px; color:var(--charcoal);">✈️ Ijin Perjalanan Dinas</h3>
+    <p style="margin:0 0 14px; font-size:12px; color:var(--text-muted);">Disetujui atasan berjenjang, lalu diverifikasi HR. Hari dinas otomatis dihitung hadir.</p>
+
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Berangkat</label>
+        <input type="date" id="pdTglMulai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Tgl Kembali</label>
+        <input type="date" id="pdTglSelesai" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+    </div>
+    <div id="pdDurasiInfo" style="font-size:12px; font-weight:600; color:#6D28D9; margin-bottom:10px; padding:8px 10px; background:#F5F3FF; border-radius:8px; display:none;"></div>
+
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Kota / Lokasi Tujuan</label>
+    <input type="text" id="pdTujuan" maxlength="120" placeholder="Contoh: Makassar - Site PLTU Punagaya" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box; margin-bottom:10px;">
+
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <div style="flex:1.3;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Transportasi</label>
+        <select id="pdTransportasi" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+          <option value="Pesawat">Pesawat</option>
+          <option value="Kapal Laut">Kapal Laut</option>
+          <option value="Darat (Bus/Travel)">Darat (Bus/Travel)</option>
+          <option value="Kendaraan Kantor">Kendaraan Kantor</option>
+          <option value="Kendaraan Pribadi">Kendaraan Pribadi</option>
+        </select>
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Jarak (km)</label>
+        <input type="number" id="pdJarak" min="0" max="20000" step="1" inputmode="numeric" placeholder="± km" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:9px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+      </div>
+    </div>
+    <p style="margin:-4px 0 10px; font-size:11px; color:var(--text-muted);">Jarak perkiraan sekali jalan. Dipakai mencocokkan tarif dinas sesuai Grade Anda.</p>
+
+    <label style="font-size:12px; font-weight:600; color:var(--charcoal); display:block; margin-bottom:4px;">Keperluan Dinas</label>
+    <textarea id="pdKeperluan" rows="3" placeholder="Contoh: Audit material & koordinasi dengan owner" style="width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; resize:vertical; box-sizing:border-box; margin-bottom:12px;"></textarea>
+
+    <button id="btnSubmitPD" style="width:100%; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:#6D28D9; color:#fff; cursor:pointer;">Ajukan ke Atasan</button>
+    <button id="btnCancelPD" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
+    <div id="pdMsg" style="margin-top:10px; font-size:13px; padding:10px; border-radius:8px; display:none;"></div>
+  </div>
+</div>
+
+<div id="pdQrOverlay" style="display:none; position:fixed; inset:0; background:rgba(28,35,33,0.85); align-items:center; justify-content:center; z-index:120; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:22px 18px; width:100%; max-width:340px; box-sizing:border-box; text-align:center;">
+    <div style="font-size:12px; font-weight:700; color:#6D28D9; letter-spacing:0.5px;">VOUCHER PERJALANAN DINAS</div>
+    <div id="pdQrNama" style="font-size:16px; font-weight:800; color:var(--charcoal); margin-top:4px;"></div>
+    <div id="pdQrInfo" style="font-size:12px; color:var(--text-muted); margin:4px 0 12px; line-height:1.5;"></div>
+    <img id="pdQrImg" alt="QR voucher perjalanan dinas" style="width:220px; height:220px; image-rendering:pixelated;">
+    <div id="pdQrKode" style="font-family:monospace; font-size:15px; font-weight:700; margin-top:8px; letter-spacing:1px;"></div>
+    <p style="font-size:11px; color:var(--text-muted); margin:8px 0 12px;">Minta petugas di tujuan scan QR ini dengan kamera HP untuk cek keaslian.</p>
+    <button id="btnTutupPdQr" style="width:100%; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Tutup</button>
   </div>
 </div>
 
@@ -594,6 +660,8 @@ function renderBadgeOffline(profile) {
     document.getElementById('btnAjukanIjin').parentElement,
     document.getElementById('voucherIjinId').parentElement.parentElement,
     document.getElementById('btnAjukanOff').parentElement,
+    document.getElementById('pdTombolWrap'),
+    document.getElementById('pdSayaWrap'),
     document.getElementById('approvalIssuesBox').parentElement,
     document.getElementById('attendanceStatusBox'),
     document.getElementById('payrollSlipBox')
@@ -1015,6 +1083,7 @@ async function tampilkanBadge(hasil, pin) {
     // Load data approval & voucher
     try { loadApprovalIssues(qrId); } catch (e) { console.warn("loadApprovalIssues error:", e); }
     try { loadMyVouchers(qrId); } catch (e) { console.warn("loadMyVouchers error:", e); }
+    try { loadPerjalananDinasSaya(); } catch (e) { console.warn("loadPerjalananDinasSaya error:", e); }
 
     // Siapkan / segarkan paket Absen Offline (wajah sendiri + lokasi + library & model wajah).
     // Sekalian perbarui profil lain yang dititipkan di HP ini.
@@ -1674,6 +1743,7 @@ async function submitPinInti() {
       alert((data && data.message) || 'Pengajuan berhasil diproses.');
       loadApprovalIssues(qrId);
       loadMyVouchers(qrId);
+      loadPerjalananDinasSaya();
     } catch (e) {
       alert('Gagal memproses approval: ' + e.message);
     }
@@ -2181,6 +2251,8 @@ async function submitPinInti() {
           if (item.tipe === 'LEMBUR') typeTitle = '⏱️ SPKL Lembur';
           else if (item.tipe === 'CUTI') typeTitle = '🏖️ Pengajuan Cuti (' + (item.jumlah_hari || 1) + ' Hari)';
           else if (item.tipe === 'OFF') typeTitle = '🌴 ' + (item.jenis_cuti === 'OFF_PERIODE' ? 'Off Periode' : 'Off Rotasi') + ' (' + (item.jumlah_hari || 1) + ' Hari)';
+          else if (item.tipe === 'PERJALANAN_DINAS') typeTitle = '✈️ Perjalanan Dinas (' + (item.jumlah_hari || 1) + ' Hari)';
+          const isPD = item.tipe === 'PERJALANAN_DINAS';
           const act = item.required_action || 'APPROVE';
           let btnLabel = '✅ Setujui (Approve)';
           let btnBg = 'var(--orange)';
@@ -2190,7 +2262,13 @@ async function submitPinInti() {
           } else if (act === 'REVIEW') {
             btnLabel = '🔍 Tinjau (Review)';
             btnBg = 'linear-gradient(135deg, #8B5CF6, #6D28D9)';
+          } else if (act === 'HR_CHECK' && isPD) {
+            btnLabel = '🛂 Verifikasi HR';
+            btnBg = 'linear-gradient(135deg, #8B5CF6, #6D28D9)';
           }
+          const pdInfo = isPD ? `<br>🚌 ${escHtml(item.pd_transportasi || '-')}${item.pd_jarak_km != null ? ' • ± ' + Number(item.pd_jarak_km).toLocaleString('id-ID') + ' km' : ''}`
+            + ` • 💰 ${item.pd_estimasi_biaya != null ? 'Estimasi Rp ' + Math.round(Number(item.pd_estimasi_biaya)).toLocaleString('id-ID') + (item.pd_grade ? ' (Grade ' + escHtml(item.pd_grade) + ')' : '') : '<span style="color:#B45309;">tarif belum ada' + (item.pd_grade ? ' (Grade ' + escHtml(item.pd_grade) + ')' : ' (Grade kosong)') + '</span>'}`
+            + (item.pd_atasan_selesai ? `<br><span style="color:#0F766E;">✅ Disetujui atasan: ${escHtml(item.pd_atasan_selesai)}</span>` : '') : '';
 
           row.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -2199,8 +2277,8 @@ async function submitPinInti() {
             </div>
             <div style="font-size:12px; font-weight:600; color:var(--charcoal); margin-bottom:2px;">${item.nama_pemohon || item.qrcodeid} <span style="font-weight:400; color:var(--text-muted);">(${item.kualifikasi || '-'})</span></div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
-              📅 ${(item.tipe === 'CUTI' || item.tipe === 'OFF') && item.tanggal_selesai ? (item.tanggal_mulai + ' s/d ' + item.tanggal_selesai) : (item.tanggal || '-')} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}${item.rencana_jam ? ' • 🕒 rencana pulang ' + item.rencana_jam : ''}<br>
-              📝 <em>"${item.alasan || '-'}"</em>
+              📅 ${(item.tipe === 'CUTI' || item.tipe === 'OFF' || isPD) && item.tanggal_selesai ? (item.tanggal_mulai + ' s/d ' + item.tanggal_selesai) : (item.tanggal || '-')} ${item.lokasi ? '• 📍 ' + item.lokasi : ''}${item.rencana_jam ? ' • 🕒 rencana pulang ' + item.rencana_jam : ''}<br>
+              📝 <em>"${item.alasan || '-'}"</em>${pdInfo}
               ${item.tanggal_mulai_awal ? `<br><span style="color:#B45309;">✏️ Diubah dari ${item.tanggal_mulai_awal} s/d ${item.tanggal_selesai_awal} oleh ${escHtml(item.tanggal_diubah_oleh || '-')}: "${escHtml(item.tanggal_diubah_catatan || '')}"</span>` : ''}
               ${item.peringatan_kuota ? `<br><span style="color:#D9312E; font-weight:600;">⚠️ ${escHtml(item.peringatan_kuota)}</span>` : ''}
             </div>
@@ -2624,6 +2702,174 @@ async function submitPinInti() {
 
     if (n === 0) return 'nol rupiah';
     return words(n) + ' rupiah';
+  }
+
+  // ===== PERJALANAN DINAS =====
+  // Ajukan (token sesi Badge), daftar milik sendiri + voucher QR, check-in GPS opsional.
+  // QR berisi link verifikasi-dinas.html?k=KODE, dibuka HP petugas di tujuan.
+  function pdTanggalId(tgl) {
+    if (!tgl) return '-';
+    const d = new Date(tgl + 'T00:00:00');
+    return isNaN(d) ? tgl : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function pdLinkVerifikasi(kode) {
+    return location.origin + location.pathname.replace(/[^/]*$/, '') + 'verifikasi-dinas.html?k=' + encodeURIComponent(kode);
+  }
+  function pdPesan(text, ok) {
+    const el = document.getElementById('pdMsg');
+    el.style.color = ok ? "var(--green, #178A4C)" : "var(--danger, #D9312E)";
+    el.innerText = (ok ? "✅ " : "⚠️ ") + text;
+    el.style.display = "block";
+  }
+  function updatePdDurasi() {
+    const m = document.getElementById('pdTglMulai').value, s = document.getElementById('pdTglSelesai').value;
+    const info = document.getElementById('pdDurasiInfo');
+    if (!m || !s || s < m) { info.style.display = 'none'; return; }
+    const hari = Math.round((new Date(s + 'T00:00:00') - new Date(m + 'T00:00:00')) / 86400000) + 1;
+    info.innerText = 'Total: ' + hari + ' hari dinas';
+    info.style.display = 'block';
+  }
+  document.getElementById('pdTglMulai').addEventListener('change', () => {
+    const m = document.getElementById('pdTglMulai'), s = document.getElementById('pdTglSelesai');
+    if (!s.value || s.value < m.value) s.value = m.value;
+    updatePdDurasi();
+  });
+  document.getElementById('pdTglSelesai').addEventListener('change', updatePdDurasi);
+
+  document.getElementById('btnAjukanPD').onclick = () => {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('pdTglMulai').value = today;
+    document.getElementById('pdTglSelesai').value = today;
+    ['pdTujuan', 'pdJarak', 'pdKeperluan'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('pdMsg').style.display = 'none';
+    updatePdDurasi();
+    document.getElementById('pdOverlay').style.display = 'flex';
+  };
+  document.getElementById('btnCancelPD').onclick = () => { document.getElementById('pdOverlay').style.display = 'none'; };
+
+  document.getElementById('btnSubmitPD').onclick = async () => {
+    const tglM = document.getElementById('pdTglMulai').value;
+    const tglS = document.getElementById('pdTglSelesai').value;
+    const tujuan = document.getElementById('pdTujuan').value.trim();
+    const keperluan = document.getElementById('pdKeperluan').value.trim();
+    const transport = document.getElementById('pdTransportasi').value;
+    const jarakRaw = document.getElementById('pdJarak').value;
+    if (!tglM || !tglS) return pdPesan('Tanggal berangkat dan kembali wajib diisi.');
+    if (tglS < tglM) return pdPesan('Tanggal kembali tidak boleh lebih awal dari tanggal berangkat.');
+    if (!tujuan) return pdPesan('Tujuan perjalanan wajib diisi.');
+    if (!keperluan) return pdPesan('Keperluan dinas wajib diisi.');
+    const token = badgeTokenGet();
+    if (!token) return pdPesan('Sesi Badge tidak ada. Tekan "Ganti PIN" lalu masuk lagi dengan PIN.');
+
+    const btn = document.getElementById('btnSubmitPD');
+    btn.disabled = true;
+    btn.innerText = 'Mengirim...';
+    document.getElementById('pdMsg').style.display = 'none';
+    try {
+      const { data: res, error } = await supabaseClient.rpc('submit_perjalanan_dinas', {
+        p_token: token,
+        p_tgl_mulai: tglM,
+        p_tgl_selesai: tglS,
+        p_tujuan: tujuan,
+        p_keperluan: keperluan,
+        p_transportasi: transport,
+        p_jarak_km: jarakRaw === '' ? null : Number(jarakRaw)
+      });
+      if (error) throw error;
+      if (!res || res.status !== 'SUCCESS') throw new Error((res && res.message) || 'Gagal mengajukan perjalanan dinas.');
+      let msg = res.message;
+      if (res.estimasiBiaya != null) msg += ' Estimasi biaya dinas: Rp ' + Math.round(Number(res.estimasiBiaya)).toLocaleString('id-ID') + '.';
+      pdPesan(msg, true);
+      loadPerjalananDinasSaya();
+      const qrId = (window.currentBadgeData && window.currentBadgeData.qrCodeId) || '';
+      if (qrId) loadApprovalIssues(qrId);
+      setTimeout(() => { document.getElementById('pdOverlay').style.display = 'none'; }, 2200);
+    } catch (e) {
+      pdPesan(e.message);
+    }
+    btn.disabled = false;
+    btn.innerText = 'Ajukan ke Atasan';
+  };
+
+  async function loadPerjalananDinasSaya() {
+    const wrap = document.getElementById('pdSayaWrap');
+    const box = document.getElementById('pdSayaBox');
+    const token = badgeTokenGet();
+    if (!wrap || !box || !token || !supabaseClient) return;
+    try {
+      const { data, error } = await supabaseClient.rpc('get_perjalanan_dinas_saya', { p_token: token });
+      if (error) throw error;
+      const items = (data && data.items) || [];
+      window.pdSayaItems = items;
+      if (!items.length) { wrap.style.display = 'none'; return; }
+      box.innerHTML = items.map(it => {
+        const warna = it.status === 'APPROVED' ? '#178A4C' : (it.status === 'REJECTED' ? '#D9312E' : '#B45309');
+        const bg = it.status === 'APPROVED' ? '#E8F4EE' : (it.status === 'REJECTED' ? '#FDECEC' : '#FEF3C7');
+        let aksi = '';
+        if (it.status === 'APPROVED' && it.kode) {
+          aksi = `<div style="display:flex; gap:6px; margin-top:8px;">
+              <button class="btnPdQr" data-id="${it.id}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:none; border-radius:8px; background:#6D28D9; color:#fff; cursor:pointer;">🔳 Tampilkan QR</button>
+              ${it.berlakuHariIni ? (it.checkinHariIni
+                ? `<span style="flex:1; padding:9px; font-size:12px; font-weight:700; border-radius:8px; background:#E8F4EE; color:#178A4C; text-align:center;">📍 Sudah check-in</span>`
+                : `<button class="btnPdCheckin" data-id="${it.id}" style="flex:1; padding:9px; font-size:12px; font-weight:700; border:1.5px solid #6D28D9; border-radius:8px; background:#fff; color:#6D28D9; cursor:pointer;">📍 Check-in (opsional)</button>`) : ''}
+            </div>`;
+        }
+        return `<div style="border:1.5px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+              <div style="font-size:13px; font-weight:700; color:var(--charcoal);">📍 ${escHtml(it.tujuan || '-')}</div>
+              <span style="font-size:10px; padding:2px 8px; border-radius:999px; background:${bg}; color:${warna}; font-weight:700; white-space:nowrap;">${escHtml(it.status === 'APPROVED' ? 'DISETUJUI' : (it.status === 'REJECTED' ? 'DITOLAK' : 'PROSES'))}</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); line-height:1.5; margin-top:2px;">
+              📅 ${pdTanggalId(it.tanggalMulai)} s/d ${pdTanggalId(it.tanggalSelesai)} (${it.jumlahHari || 1} hari) • ${escHtml(it.transportasi || '-')}<br>
+              <span style="color:${warna};">${escHtml(it.tahap || '')}</span>
+              ${it.estimasiBiaya != null ? `<br>💰 Estimasi Rp ${Math.round(Number(it.estimasiBiaya)).toLocaleString('id-ID')}` : ''}
+              ${it.jumlahKonfirmasiTujuan > 0 ? `<br>✅ Dikonfirmasi di tujuan ${it.jumlahKonfirmasiTujuan}x` : ''}
+            </div>
+            ${aksi}
+          </div>`;
+      }).join('');
+      wrap.style.display = 'block';
+      box.querySelectorAll('.btnPdQr').forEach(b => { b.onclick = () => tampilkanQrPerjalananDinas(Number(b.dataset.id)); });
+      box.querySelectorAll('.btnPdCheckin').forEach(b => { b.onclick = () => checkinPerjalananDinas(Number(b.dataset.id), b); });
+    } catch (e) {
+      console.warn('get_perjalanan_dinas_saya error:', e);
+    }
+  }
+
+  async function tampilkanQrPerjalananDinas(id) {
+    const it = (window.pdSayaItems || []).find(x => x.id === id);
+    if (!it || !it.kode) return;
+    const url = await generateQrDataUrl(pdLinkVerifikasi(it.kode), 440);
+    document.getElementById('pdQrNama').innerText = (window.currentBadgeData && window.currentBadgeData.nama) || '';
+    document.getElementById('pdQrInfo').innerText = it.tujuan + '\n' + pdTanggalId(it.tanggalMulai) + ' s/d ' + pdTanggalId(it.tanggalSelesai);
+    document.getElementById('pdQrKode').innerText = it.kode;
+    const img = document.getElementById('pdQrImg');
+    if (url) { img.src = url; img.style.display = 'inline-block'; } else { img.style.display = 'none'; }
+    document.getElementById('pdQrOverlay').style.display = 'flex';
+  }
+  document.getElementById('btnTutupPdQr').onclick = () => { document.getElementById('pdQrOverlay').style.display = 'none'; };
+
+  async function checkinPerjalananDinas(id, btn) {
+    const token = badgeTokenGet();
+    if (!token) { alert('Sesi Badge tidak ada. Masuk lagi dengan PIN.'); return; }
+    btn.disabled = true;
+    btn.innerText = '⏳ Ambil lokasi...';
+    // GPS opsional: kalau ditolak / gagal / lebih dari 15 detik, check-in tetap tercatat tanpa koordinat.
+    const pos = await new Promise(resolve => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(p => resolve(p.coords), () => resolve(null), { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    });
+    try {
+      const { data, error } = await supabaseClient.rpc('checkin_perjalanan_dinas', {
+        p_token: token, p_id: id,
+        p_lat: pos ? pos.latitude : null, p_lng: pos ? pos.longitude : null, p_akurasi: pos ? pos.accuracy : null
+      });
+      if (error) throw error;
+      alert((data && data.message) || 'Check-in tercatat.');
+    } catch (e) {
+      alert('Gagal check-in: ' + e.message);
+    }
+    loadPerjalananDinasSaya();
   }
 
   function generateQrDataUrl(text, size = 160) {

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verifikasi Perjalanan Dinas — BIMA</title>
+  <!--
+    Dibuka dari QR voucher Perjalanan Dinas di Digital Badge (verifikasi-dinas.html?k=PD-XXXX).
+    Publik, tanpa login: cek keaslian lewat RPC verifikasi_perjalanan_dinas, dan petugas di
+    tujuan bisa mencatat "personel sudah tiba" (GPS opsional) lewat konfirmasi_tiba_perjalanan_dinas.
+  -->
+  <link rel="icon" type="image/png" href="badge-favicon-32.png">
+  <meta name="theme-color" content="#6D28D9">
+  <meta name="robots" content="noindex">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --primary: #6D28D9;
+      --orange: #E04D23;
+      --bg: #F7F5F0;
+      --surface: #FFFFFF;
+      --border: #E6DED9;
+      --text: #2A2826;
+      --muted: #7A7571;
+      --ok: #178A4C; --ok-bg: #E8F4EE;
+      --warn: #B45309; --warn-bg: #FEF3C7;
+      --bad: #D9312E; --bad-bg: #FDECEC;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px; }
+    .wrap { max-width: 460px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+    .head { display: flex; align-items: center; gap: 10px; }
+    .head img { height: 34px; }
+    .head h1 { font-size: 15px; font-weight: 800; line-height: 1.25; }
+    .head small { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
+    .card { background: var(--surface); border-radius: 18px; padding: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.07); }
+    .status { text-align: center; padding: 18px; border-radius: 18px; font-weight: 800; }
+    .status .ikon { font-size: 42px; line-height: 1; }
+    .status .judul { font-size: 18px; margin-top: 6px; }
+    .status .sub { font-size: 13px; font-weight: 500; margin-top: 4px; }
+    .s-ok { background: var(--ok-bg); color: var(--ok); }
+    .s-warn { background: var(--warn-bg); color: var(--warn); }
+    .s-bad { background: var(--bad-bg); color: var(--bad); }
+    .orang { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+    .foto { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: #EEE; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; color: var(--muted); }
+    .nama { font-size: 17px; font-weight: 800; }
+    .kecil { font-size: 12px; color: var(--muted); }
+    .baris { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+    .baris b { font-weight: 600; color: var(--muted); flex-shrink: 0; }
+    .baris span { text-align: right; overflow-wrap: anywhere; }
+    label { font-size: 12px; font-weight: 600; display: block; margin: 10px 0 4px; }
+    input[type=text], textarea { width: 100%; font-family: inherit; font-size: 14px; padding: 10px; border-radius: 10px; border: 1.5px solid var(--border); background: #FAF7F3; }
+    .cek { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 10px; }
+    button { width: 100%; margin-top: 12px; padding: 13px; font-family: inherit; font-size: 14px; font-weight: 700; border: none; border-radius: 12px; background: var(--primary); color: #fff; cursor: pointer; }
+    button:disabled { opacity: 0.6; }
+    .pesan { margin-top: 10px; font-size: 13px; padding: 10px; border-radius: 8px; display: none; }
+    .muted-center { text-align: center; font-size: 12px; color: var(--muted); }
+    h2 { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <img src="logo-bima.png" alt="BIMA">
+    <h1>Verifikasi Perjalanan Dinas<small>PT. Bilal Mitra Aryatama</small></h1>
+  </div>
+
+  <div id="loading" class="card muted-center">Memeriksa voucher...</div>
+
+  <div id="formKode" class="card" style="display:none;">
+    <h2>Masukkan kode voucher</h2>
+    <p class="kecil">Kode tertulis di bawah QR pada Digital Badge, contoh PD-1A2B3C4D5E6F.</p>
+    <input type="text" id="inputKode" placeholder="PD-..." autocapitalize="characters" style="margin-top:10px;">
+    <button id="btnCekKode">Cek Voucher</button>
+  </div>
+
+  <div id="hasil" style="display:none; flex-direction:column; gap:14px;"></div>
+
+  <div id="konfirmasi" class="card" style="display:none;">
+    <h2>Konfirmasi kedatangan</h2>
+    <p class="kecil">Untuk petugas/penerima di lokasi tujuan. Mencatat bahwa personel ini sudah tiba.</p>
+    <label for="konfNama">Nama Anda (pemeriksa)</label>
+    <input type="text" id="konfNama" maxlength="80" placeholder="Nama & jabatan">
+    <label for="konfCatatan">Catatan (opsional)</label>
+    <textarea id="konfCatatan" rows="2" maxlength="300" placeholder="Contoh: tiba di site jam 09.30"></textarea>
+    <div class="cek"><input type="checkbox" id="konfGps" checked> <span>Sertakan lokasi GPS HP ini</span></div>
+    <button id="btnKonfirmasi">Catat Sudah Tiba</button>
+    <div id="konfPesan" class="pesan"></div>
+  </div>
+
+  <p class="muted-center">Data diambil langsung dari sistem Fusion4 SmartGate.</p>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://nhmpwjriextmbotmvvbu.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz';
+const sb = (typeof supabase !== 'undefined') ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+let kodeAktif = '';
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function tgl(t) {
+  if (!t) return '-';
+  const d = new Date(String(t).length <= 10 ? t + 'T00:00:00' : t);
+  return isNaN(d) ? t : d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+}
+function waktu(t) {
+  const d = new Date(t);
+  return isNaN(d) ? '' : d.toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+function fotoUrl(r) {
+  if (r.fotoFileId) return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(r.fotoFileId) + '&sz=w300';
+  const u = r.fotoUrl || '';
+  const m = u.match(/\/d\/([a-zA-Z0-9_-]+)/) || u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w300';
+  return /^https:\/\//.test(u) ? u : '';
+}
+
+async function cek(kode) {
+  kodeAktif = (kode || '').trim().toUpperCase();
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('formKode').style.display = 'none';
+  document.getElementById('hasil').style.display = 'none';
+  document.getElementById('konfirmasi').style.display = 'none';
+  let r;
+  try {
+    if (!sb) throw new Error('Tidak bisa terhubung ke server. Cek koneksi internet.');
+    const { data, error } = await sb.rpc('verifikasi_perjalanan_dinas', { p_kode: kodeAktif });
+    if (error) throw error;
+    r = data || {};
+  } catch (e) {
+    document.getElementById('loading').innerHTML = '⚠️ Gagal memeriksa: ' + esc(e.message) + '<br><br><a href="" style="color:var(--primary);font-weight:700;">Coba lagi</a>';
+    return;
+  }
+  document.getElementById('loading').style.display = 'none';
+  tampilkan(r);
+}
+
+function tampilkan(r) {
+  const box = document.getElementById('hasil');
+  let status;
+  if (!r.valid) {
+    status = `<div class="status s-bad"><div class="ikon">❌</div><div class="judul">TIDAK VALID</div><div class="sub">${esc(r.message || 'Voucher tidak ditemukan atau belum disetujui.')}</div></div>`;
+    box.innerHTML = status;
+    box.style.display = 'flex';
+    document.getElementById('formKode').style.display = 'block';
+    return;
+  }
+  if (r.statusBerlaku === 'BERLAKU') {
+    status = `<div class="status s-ok"><div class="ikon">✅</div><div class="judul">PERJALANAN DINAS SAH</div><div class="sub">Berlaku hari ini, ${esc(tgl(r.hariIni))}</div></div>`;
+  } else if (r.statusBerlaku === 'BELUM_BERLAKU') {
+    status = `<div class="status s-warn"><div class="ikon">⏳</div><div class="judul">SAH, BELUM BERLAKU</div><div class="sub">Mulai berlaku ${esc(tgl(r.tanggalMulai))}</div></div>`;
+  } else {
+    status = `<div class="status s-bad"><div class="ikon">⛔</div><div class="judul">SUDAH LEWAT</div><div class="sub">Berakhir ${esc(tgl(r.tanggalSelesai))}</div></div>`;
+  }
+  const foto = fotoUrl(r);
+  const inisial = esc((r.nama || '?').trim().charAt(0).toUpperCase());
+  const disetujui = (r.disetujui || []).filter(Boolean).map(esc).join('<br>') || '-';
+  const konf = (r.konfirmasiTujuan || []).map(k => `${esc(k.nama)} <span class="kecil">(${esc(waktu(k.waktu))})</span>`).join('<br>');
+  box.innerHTML = status + `
+    <div class="card">
+      <div class="orang">
+        ${foto ? `<img class="foto" src="${esc(foto)}" alt="Foto ${esc(r.nama)}" onerror="this.outerHTML='<div class=&quot;foto&quot;>${inisial}</div>'">` : `<div class="foto">${inisial}</div>`}
+        <div><div class="nama">${esc(r.nama)}</div><div class="kecil">${esc(r.kualifikasi || '-')}</div><div class="kecil">ID ${esc(r.qrCodeId || '-')}</div></div>
+      </div>
+      <div class="baris"><b>Tujuan</b><span>${esc(r.tujuan)}</span></div>
+      <div class="baris"><b>Tanggal</b><span>${esc(tgl(r.tanggalMulai))} s/d ${esc(tgl(r.tanggalSelesai))} (${esc(r.jumlahHari)} hari)</span></div>
+      <div class="baris"><b>Transportasi</b><span>${esc(r.transportasi || '-')}</span></div>
+      <div class="baris"><b>Keperluan</b><span>${esc(r.keperluan || '-')}</span></div>
+      <div class="baris"><b>Disetujui</b><span>${disetujui}</span></div>
+      <div class="baris"><b>Verifikasi HR</b><span>${esc(r.verifikasiHr || '-')}</span></div>
+      <div class="baris"><b>Kode</b><span style="font-family:monospace;">${esc(r.kode)}</span></div>
+      ${konf ? `<div class="baris"><b>Sudah dikonfirmasi</b><span>${konf}</span></div>` : ''}
+    </div>
+    <p class="muted-center">Cocokkan wajah di foto dengan orangnya.</p>`;
+  box.style.display = 'flex';
+  if (r.statusBerlaku === 'BERLAKU') document.getElementById('konfirmasi').style.display = 'block';
+}
+
+document.getElementById('btnCekKode').onclick = () => {
+  const k = document.getElementById('inputKode').value.trim();
+  if (!k) return;
+  history.replaceState(null, '', '?k=' + encodeURIComponent(k.toUpperCase()));
+  cek(k);
+};
+
+document.getElementById('btnKonfirmasi').onclick = async () => {
+  const nama = document.getElementById('konfNama').value.trim();
+  const catatan = document.getElementById('konfCatatan').value.trim();
+  const pesan = document.getElementById('konfPesan');
+  const tulis = (t, ok) => { pesan.style.display = 'block'; pesan.style.background = ok ? 'var(--ok-bg)' : 'var(--bad-bg)'; pesan.style.color = ok ? 'var(--ok)' : 'var(--bad)'; pesan.innerText = t; };
+  if (!nama) return tulis('Isi nama Anda dulu.');
+  const btn = document.getElementById('btnKonfirmasi');
+  btn.disabled = true;
+  btn.innerText = 'Menyimpan...';
+  let pos = null;
+  if (document.getElementById('konfGps').checked && navigator.geolocation) {
+    btn.innerText = 'Ambil lokasi...';
+    pos = await new Promise(res => navigator.geolocation.getCurrentPosition(p => res(p.coords), () => res(null), { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }));
+  }
+  try {
+    const { data, error } = await sb.rpc('konfirmasi_tiba_perjalanan_dinas', {
+      p_kode: kodeAktif, p_nama: nama, p_catatan: catatan || null,
+      p_lat: pos ? pos.latitude : null, p_lng: pos ? pos.longitude : null, p_akurasi: pos ? pos.accuracy : null
+    });
+    if (error) throw error;
+    if (!data || data.status !== 'SUCCESS') throw new Error((data && data.message) || 'Gagal menyimpan.');
+    tulis(data.message, true);
+    btn.style.display = 'none';
+  } catch (e) {
+    tulis('Gagal: ' + e.message);
+    btn.disabled = false;
+    btn.innerText = 'Catat Sudah Tiba';
+  }
+};
+
+const kodeUrl = new URLSearchParams(location.search).get('k');
+if (kodeUrl) {
+  cek(kodeUrl);
+} else {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('formKode').style.display = 'block';
+}
+</script>
+</body>
+</html>
