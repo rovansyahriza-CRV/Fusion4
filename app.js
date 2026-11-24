@@ -2499,18 +2499,22 @@ async function loadOtorisasiPage(tab = 'queue', tabBtn = null) {
 
   const _gTabBtn = document.querySelector('#otorisasiTabs [data-oto-tab="gangguan"]');
   if (_gTabBtn) _gTabBtn.style.display = canGangguanTab() ? '' : 'none';
-  if (tab === 'gangguan' && !canGangguanTab()) {
-    showToast('Tab Gangguan Operasional khusus akun dengan PIC OIL atau ALL.', 'error');
+  const _tTabBtn = document.querySelector('#otorisasiTabs [data-oto-tab="ttd"]');
+  if (_tTabBtn) _tTabBtn.style.display = canGangguanTab() ? '' : 'none';
+  if ((tab === 'gangguan' || tab === 'ttd') && !canGangguanTab()) {
+    showToast('Tab ini khusus akun dengan PIC OIL atau ALL.', 'error');
     tab = 'queue';
     currentOtorisasiTab = 'queue';
   }
   const _mainCard = document.getElementById('otorisasiMainCard');
   const _gCard = document.getElementById('gangguanCard');
-  if (_mainCard) _mainCard.style.display = tab === 'gangguan' ? 'none' : '';
+  const _tCard = document.getElementById('ttdCard');
+  if (_mainCard) _mainCard.style.display = (tab === 'gangguan' || tab === 'ttd') ? 'none' : '';
   if (_gCard) _gCard.style.display = tab === 'gangguan' ? 'block' : 'none';
-  if (tab === 'gangguan') {
-    document.getElementById('otorisasiTabs')?.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.otoTab === 'gangguan'));
-    return loadGangguanPage();
+  if (_tCard) _tCard.style.display = tab === 'ttd' ? 'block' : 'none';
+  if (tab === 'gangguan' || tab === 'ttd') {
+    document.getElementById('otorisasiTabs')?.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.otoTab === tab));
+    return tab === 'gangguan' ? loadGangguanPage() : loadTtdPage();
   }
 
   // Set visual tab active
@@ -6583,4 +6587,113 @@ async function simpanKbDinasGrade(id) {
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
+}
+
+
+// ===================== TANDA TANGAN DIGITAL (DAFTAR DOKUMEN) =====================
+let ttdKaryawan = [];
+let ttdSha = null;
+
+async function loadTtdPage() {
+  const tgl = document.getElementById('ttdTgl');
+  if (tgl && !tgl.value) tgl.value = gangguanTodayStr();
+  if (!ttdKaryawan.length) {
+    const { data } = await supabaseClient.from('karyawanTbl').select('Id, NamaPersonnel, Kualifikasi, IsActive').order('NamaPersonnel');
+    ttdKaryawan = (data || []).filter(k => k.IsActive !== false && k.NamaPersonnel);
+  }
+  if (!document.querySelector('#ttdSignerList .ttdRow')) { ttdTambahBaris('Disusun oleh'); ttdTambahBaris('Diperiksa oleh'); ttdTambahBaris('Disetujui oleh'); }
+  await ttdMuatRiwayat();
+}
+
+function ttdTambahBaris(peran) {
+  const box = document.getElementById('ttdSignerList');
+  if (!box) return;
+  const opts = ['<option value="">-- Pilih karyawan --</option>'].concat(
+    ttdKaryawan.map(k => `<option value="${k.Id}" data-jab="${escapeHtml(k.Kualifikasi || '')}">${escapeHtml(k.NamaPersonnel)}</option>`)).join('');
+  const row = document.createElement('div');
+  row.className = 'ttdRow';
+  row.style.cssText = 'display:grid; grid-template-columns:1.4fr 1fr 1.6fr auto; gap:8px; margin-bottom:8px; align-items:center;';
+  row.innerHTML = `
+    <select class="ttdKar" onchange="ttdIsiJabatan(this)" style="padding:8px; border-radius:8px; border:1.5px solid #e6ded9;">${opts}</select>
+    <input type="text" class="ttdPeran" maxlength="40" placeholder="Peran" value="${escapeHtml(typeof peran === 'string' ? peran : '')}" style="padding:8px; border-radius:8px; border:1.5px solid #e6ded9;">
+    <input type="text" class="ttdJab" maxlength="120" placeholder="Jabatan (tampil di verifikasi)" style="padding:8px; border-radius:8px; border:1.5px solid #e6ded9;">
+    <button type="button" onclick="this.closest('.ttdRow').remove()" title="Hapus" style="border:none; background:none; cursor:pointer; font-size:16px;">✖</button>`;
+  box.appendChild(row);
+}
+
+function ttdIsiJabatan(sel) {
+  const jab = sel.selectedOptions[0]?.dataset.jab || '';
+  const inp = sel.closest('.ttdRow').querySelector('.ttdJab');
+  if (inp && !inp.value) inp.value = jab;
+}
+
+async function ttdHitungSha() {
+  const f = document.getElementById('ttdFile')?.files?.[0];
+  const info = document.getElementById('ttdShaInfo');
+  ttdSha = null;
+  if (!f) { info.textContent = ''; return; }
+  info.textContent = 'Menghitung sidik dokumen...';
+  const buf = await f.arrayBuffer();
+  const dig = await crypto.subtle.digest('SHA-256', buf);
+  ttdSha = Array.from(new Uint8Array(dig)).map(b => b.toString(16).padStart(2, '0')).join('');
+  info.textContent = 'SHA-256: ' + ttdSha;
+}
+
+async function ttdDaftarkan() {
+  const judul = document.getElementById('ttdJudul').value.trim();
+  const versi = document.getElementById('ttdVersi').value.trim();
+  const tgl = document.getElementById('ttdTgl').value;
+  if (!judul || !versi || !tgl) return showToast('Judul, versi, dan tanggal terbit wajib diisi.', 'error');
+  const rows = Array.from(document.querySelectorAll('#ttdSignerList .ttdRow')).map(r => ({
+    karyawan_id: Number(r.querySelector('.ttdKar').value) || null,
+    peran: r.querySelector('.ttdPeran').value.trim(),
+    jabatan: r.querySelector('.ttdJab').value.trim()
+  }));
+  if (!rows.length || rows.some(r => !r.karyawan_id)) return showToast('Pilih karyawan untuk setiap baris penanda tangan.', 'error');
+  if (new Set(rows.map(r => r.karyawan_id)).size !== rows.length) return showToast('Satu karyawan hanya boleh sekali per dokumen.', 'error');
+  const btn = document.getElementById('btnDaftarTtd'); btn.disabled = true;
+  try {
+    const f = document.getElementById('ttdFile')?.files?.[0];
+    const { error } = await supabaseClient.rpc('daftarkan_ttd_dokumen', {
+      p_pembuat_qrcode: await gangguanMyQr(), p_dibuat_oleh: (currentUser && currentUser.nama) || 'HR',
+      p_judul: judul, p_versi: versi, p_tgl: tgl, p_file_nama: f ? f.name : null, p_sha256: ttdSha,
+      p_berurutan: document.getElementById('ttdBerurutan').checked, p_penandatangan: rows
+    });
+    if (error) throw error;
+    showToast('Dokumen terdaftar. Tiket tanda tangan sudah masuk ke Digital Badge penanda tangan.', 'success');
+    ['ttdJudul', 'ttdVersi', 'ttdFile'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('ttdShaInfo').textContent = ''; ttdSha = null;
+    document.getElementById('ttdSignerList').innerHTML = '';
+    ttdTambahBaris('Disusun oleh'); ttdTambahBaris('Diperiksa oleh'); ttdTambahBaris('Disetujui oleh');
+    await ttdMuatRiwayat();
+  } catch (e) {
+    showToast('Gagal mendaftarkan: ' + e.message, 'error');
+  } finally { btn.disabled = false; }
+}
+
+async function ttdMuatRiwayat() {
+  const body = document.getElementById('ttdRiwayatBody');
+  if (!body) return;
+  const { data, error } = await supabaseClient.rpc('list_ttd_dokumen', { p_qrcode: await gangguanMyQr() });
+  if (error) { body.innerHTML = `<tr><td colspan="5" style="color:red;">Gagal: ${escapeHtml(error.message)}</td></tr>`; return; }
+  const docs = Array.isArray(data) ? data : [];
+  if (!docs.length) { body.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#777;">Belum ada dokumen terdaftar.</td></tr>'; return; }
+  const ico = { MENUNGGU: '⏳', DITANDATANGANI: '✅', DICABUT: '⛔' };
+  body.innerHTML = docs.map(d => `
+    <tr>
+      <td><b>${escapeHtml(d.judul)}</b><small style="display:block; color:#777;">${escapeHtml(d.fileNama || 'tanpa file')}${d.ada_sha ? ' &middot; ada sidik' : ''}${d.berurutan ? ' &middot; berurutan' : ''}</small></td>
+      <td>${escapeHtml(d.versi)}</td>
+      <td>${(d.penandatangan || []).map(p => `<div style="font-size:12px;">${ico[p.status] || ''} ${escapeHtml(p.peran)}: <b>${escapeHtml(p.nama)}</b>${p.kode ? ` <code>${escapeHtml(p.kode)}</code>` : ''}${p.status === 'DITANDATANGANI' ? ` <button type="button" onclick="ttdCabut(${d.id}, ${p.id})" style="border:none; background:none; color:#D9312E; cursor:pointer; font-size:11px;">cabut</button>` : ''}</div>`).join('')}</td>
+      <td>${d.status === 'AKTIF' ? 'Aktif' : '<b style="color:#D9312E;">Dicabut</b>'}</td>
+      <td>${d.status === 'AKTIF' ? `<button type="button" onclick="ttdCabut(${d.id}, null)" style="padding:5px 10px; font-size:12px; border:1.5px solid #e6ded9; border-radius:8px; background:#fff; cursor:pointer;">Cabut dokumen</button>` : '-'}</td>
+    </tr>`).join('');
+}
+
+async function ttdCabut(dokId, penId) {
+  const alasan = prompt(penId ? 'Alasan mencabut tanda tangan ini:' : 'Alasan mencabut dokumen ini (semua tanda tangannya ikut tidak berlaku):');
+  if (!alasan || !alasan.trim()) return;
+  const { error } = await supabaseClient.rpc('cabut_ttd_dokumen', { p_qrcode: await gangguanMyQr(), p_dokumen_id: dokId, p_penandatangan_id: penId, p_alasan: alasan.trim() });
+  if (error) return showToast('Gagal mencabut: ' + error.message, 'error');
+  showToast('Berhasil dicabut.', 'success');
+  ttdMuatRiwayat();
 }

@@ -65,16 +65,36 @@ const tgl = t => { const d = new Date(String(t).length <= 10 ? t + 'T00:00:00' :
     return;
   }
   const aktif = r.status === 'AKTIF';
+  const waktu = t => { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleString('id-ID', { day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'Asia/Makassar' }) + ' WITA'; };
+  const ico = { DITANDATANGANI:'✅', MENUNGGU:'⏳', DICABUT:'⛔' };
   box.innerHTML =
     '<div class="status ' + (aktif ? 'ok' : 'bad') + '"><div class="ikon">' + (aktif ? '✅' : '⛔') + '</div>' +
-    '<div class="judul">' + (aktif ? 'Tanda tangan terdaftar' : 'Tanda tangan dicabut') + '</div>' +
+    '<div class="judul">' + (aktif ? 'Tanda tangan sah' : 'Tanda tangan dicabut') + '</div>' +
     '<div class="sub">' + (aktif ? 'Terdaftar di sistem Fusion4 SmartGate' : 'Tanda tangan ini tidak berlaku lagi') + '</div></div>' +
     '<div class="card"><div class="nama">' + esc(r.nama) + '</div><div class="kecil" style="margin-bottom:12px;">' + esc(r.jabatan) + '</div>' +
     '<div class="baris"><b>Peran</b><span>' + esc(r.peran) + '</span></div>' +
     '<div class="baris"><b>Dokumen</b><span>' + esc(r.dokumen) + '</span></div>' +
     '<div class="baris"><b>Versi</b><span>' + esc(r.versi) + '</span></div>' +
     '<div class="baris"><b>Tanggal terbit</b><span>' + tgl(r.tglTerbit) + '</span></div>' +
-    '<div class="baris"><b>Kode</b><span style="font-family:monospace;">' + esc(kode) + '</span></div></div>';
+    (r.ditandatanganiPada ? '<div class="baris"><b>Ditandatangani</b><span>' + esc(waktu(r.ditandatanganiPada)) + '</span></div>' : '') +
+    '<div class="baris"><b>Kode</b><span style="font-family:monospace;">' + esc(kode) + '</span></div></div>' +
+    (Array.isArray(r.penandatangan) && r.penandatangan.length ? '<div class="card"><div class="nama" style="font-size:14px; margin-bottom:6px;">Penanda tangan dokumen</div>' +
+      r.penandatangan.map(x => '<div class="baris"><b>' + esc(x.peran) + '</b><span>' + (ico[x.status] || '') + ' ' + esc(x.nama) + '</span></div>').join('') + '</div>' : '') +
+    (r.fileSha256 ? '<div class="card"><div class="nama" style="font-size:14px;">Cek keaslian file</div>' +
+      '<p class="kecil" style="margin:4px 0 10px;">Pilih file dokumen (versi tanpa QR) untuk mencocokkan dengan sidik yang didaftarkan.' + (r.fileNama ? ' Nama terdaftar: ' + esc(r.fileNama) + '.' : '') + '</p>' +
+      '<input type="file" id="cekFile" style="width:100%; font-size:13px;"><div id="cekHasil" style="margin-top:10px; font-size:13px; font-weight:700;"></div></div>' : '');
+  if (r.fileSha256) {
+    document.getElementById('cekFile').addEventListener('change', async ev => {
+      const f = ev.target.files[0], out = document.getElementById('cekHasil');
+      if (!f) { out.textContent = ''; return; }
+      out.style.color = 'var(--m)'; out.textContent = 'Menghitung...';
+      const dig = await crypto.subtle.digest('SHA-256', await f.arrayBuffer());
+      const hex = Array.from(new Uint8Array(dig)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const cocok = hex === r.fileSha256;
+      out.style.color = cocok ? 'var(--ok)' : 'var(--bad)';
+      out.textContent = cocok ? '✅ File identik dengan yang didaftarkan.' : '❌ File berbeda dari yang didaftarkan. Isi dokumen mungkin telah diubah.';
+    });
+  }
 })();
 </script>
 </body>
