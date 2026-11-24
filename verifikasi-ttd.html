@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verifikasi Tanda Tangan Digital — BIMA</title>
+  <!--
+    Dibuka dari QR di kolom tanda tangan dokumen (verifikasi-ttd.html?k=TTD-XXXXXXXXXX).
+    Publik, tanpa login: cek keaslian lewat RPC verifikasi_ttd_dokumen.
+  -->
+  <link rel="icon" type="image/png" href="badge-favicon-32.png">
+  <meta name="theme-color" content="#E8562C">
+  <meta name="robots" content="noindex">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root { --o:#E8562C; --bg:#F4EFE9; --b:#E5DED4; --t:#3D3D3D; --m:#7A746B; --ok:#178A4C; --okb:#E8F4EE; --bad:#D9312E; --badb:#FDECEC; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',-apple-system,'Segoe UI',sans-serif; background:var(--bg); color:var(--t); min-height:100vh; padding:16px; }
+    .wrap { max-width:460px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
+    .head { display:flex; align-items:center; gap:10px; }
+    .head img { height:34px; }
+    .head h1 { font-size:15px; font-weight:800; line-height:1.25; }
+    .head small { display:block; font-size:12px; color:var(--m); font-weight:500; }
+    .card { background:#fff; border-radius:18px; padding:18px; box-shadow:0 8px 24px rgba(0,0,0,.07); }
+    .status { text-align:center; padding:18px; border-radius:18px; font-weight:800; }
+    .status .ikon { font-size:42px; line-height:1; }
+    .status .judul { font-size:18px; margin-top:6px; }
+    .status .sub { font-size:13px; font-weight:500; margin-top:4px; }
+    .ok { background:var(--okb); color:var(--ok); }
+    .bad { background:var(--badb); color:var(--bad); }
+    .nama { font-size:18px; font-weight:800; }
+    .kecil { font-size:12px; color:var(--m); }
+    .baris { display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-top:1px solid var(--b); font-size:13px; }
+    .baris b { font-weight:600; color:var(--m); flex-shrink:0; }
+    .baris span { text-align:right; overflow-wrap:anywhere; }
+    .muted { text-align:center; font-size:12px; color:var(--m); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <img src="logo-bima.png" alt="BIMA">
+    <h1>Verifikasi Tanda Tangan Digital<small>PT. Bilal Mitra Aryatama</small></h1>
+  </div>
+  <div id="loading" class="card muted">Memeriksa tanda tangan...</div>
+  <div id="hasil" style="display:none; flex-direction:column; gap:14px;"></div>
+  <p class="muted">Data diambil langsung dari sistem Fusion4 SmartGate.</p>
+</div>
+<script>
+const sb = (typeof supabase !== 'undefined') ? supabase.createClient('https://nhmpwjriextmbotmvvbu.supabase.co', 'sb_publishable_XNqLw7iz873TtrLn9ag8dQ_AkL2rImz') : null;
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tgl = t => { const d = new Date(String(t).length <= 10 ? t + 'T00:00:00' : t); return isNaN(d) ? t : d.toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'}); };
+(async function () {
+  const kode = (new URLSearchParams(location.search).get('k') || '').trim().toUpperCase();
+  const box = document.getElementById('hasil'), load = document.getElementById('loading');
+  let r = {};
+  try {
+    if (!sb) throw new Error('Tidak bisa terhubung ke server. Cek koneksi internet.');
+    if (!kode) { r = { ditemukan: false }; }
+    else { const { data, error } = await sb.rpc('verifikasi_ttd_dokumen', { p_kode: kode }); if (error) throw error; r = data || {}; }
+  } catch (e) { load.textContent = 'Gagal memeriksa: ' + e.message; return; }
+  load.style.display = 'none'; box.style.display = 'flex';
+  if (!r.ditemukan) {
+    box.innerHTML = '<div class="status bad"><div class="ikon">❌</div><div class="judul">Tidak ditemukan</div><div class="sub">Kode tidak terdaftar di sistem. Dokumen ini tidak dapat diverifikasi.</div></div>';
+    return;
+  }
+  const aktif = r.status === 'AKTIF';
+  box.innerHTML =
+    '<div class="status ' + (aktif ? 'ok' : 'bad') + '"><div class="ikon">' + (aktif ? '✅' : '⛔') + '</div>' +
+    '<div class="judul">' + (aktif ? 'Tanda tangan terdaftar' : 'Tanda tangan dicabut') + '</div>' +
+    '<div class="sub">' + (aktif ? 'Terdaftar di sistem Fusion4 SmartGate' : 'Tanda tangan ini tidak berlaku lagi') + '</div></div>' +
+    '<div class="card"><div class="nama">' + esc(r.nama) + '</div><div class="kecil" style="margin-bottom:12px;">' + esc(r.jabatan) + '</div>' +
+    '<div class="baris"><b>Peran</b><span>' + esc(r.peran) + '</span></div>' +
+    '<div class="baris"><b>Dokumen</b><span>' + esc(r.dokumen) + '</span></div>' +
+    '<div class="baris"><b>Versi</b><span>' + esc(r.versi) + '</span></div>' +
+    '<div class="baris"><b>Tanggal terbit</b><span>' + tgl(r.tglTerbit) + '</span></div>' +
+    '<div class="baris"><b>Kode</b><span style="font-family:monospace;">' + esc(kode) + '</span></div></div>';
+})();
+</script>
+</body>
+</html>
