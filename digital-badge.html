@@ -189,23 +189,21 @@
   <div id="payrollSlipBox" style="margin:10px 16px 0; display:none;"></div>
 
   <div style="display:flex; gap:8px; margin:10px 16px 0;">
-    <button id="btnAjukanIjin" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer; text-align:center;">🏃 IJIN</button>
-    <button id="btnAjukanLembur" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer; text-align:center;">⚡ LEMBUR</button>
-    <button id="btnAjukanCuti" style="flex:1; padding:12px 4px; font-size:13px; font-weight:700; border:1.5px solid #2B6CB0; border-radius:12px; background:#fff; color:#2B6CB0; cursor:pointer; text-align:center;">🏖️ CUTI</button>
+    <button id="btnAjukanIjin" style="flex:1; display:flex; align-items:center; justify-content:center; text-align:center; gap:6px; min-height:46px; padding:8px 4px; font-size:12.5px; font-weight:700; line-height:1.2; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">🏃 IJIN</button>
+    <button id="btnAjukanLembur" style="flex:1; display:flex; align-items:center; justify-content:center; text-align:center; gap:6px; min-height:46px; padding:8px 4px; font-size:12.5px; font-weight:700; line-height:1.2; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">⚡ LEMBUR</button>
+    <button id="btnAjukanCuti" style="flex:1; display:flex; align-items:center; justify-content:center; text-align:center; gap:6px; min-height:46px; padding:8px 4px; font-size:12.5px; font-weight:700; line-height:1.2; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">🏖️ CUTI</button>
   </div>
   <div style="display:flex; gap:8px; margin:8px 16px 0;">
     <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">ID Voucher:<br><span id="voucherIjinId" style="font-size:13px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
     <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">ID Voucher:<br><span id="voucherLemburId" style="font-size:13px; font-weight:700; color:var(--charcoal); font-family:monospace;">-</span></div>
-    <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">Sisa Kuota:<br><span id="sisaCutiVal" style="font-size:13px; font-weight:700; color:#2B6CB0; font-family:monospace;">12 Hari</span></div>
+    <div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">Sisa Kuota:<br><span id="sisaCutiVal" style="font-size:13px; font-weight:700; color:var(--orange); font-family:monospace;">12 Hari</span></div>
   </div>
-  <div style="margin:10px 16px 0;">
-    <button id="btnGangguanMassal" style="display:none; width:100%; padding:12px; font-size:13px; font-weight:700; border:1.5px solid #b45309; border-radius:12px; background:#FFF8EE; color:#b45309; cursor:pointer;">🚨 GANGGUAN OPERASIONAL (massal per area)</button>
+  <div style="margin:10px 16px 0; display:none;">
+    <button id="btnAjukanOff" style="width:100%; display:flex; align-items:center; justify-content:center; text-align:center; gap:6px; min-height:46px; padding:8px 4px; font-size:12.5px; font-weight:700; line-height:1.2; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">🌴 AJUKAN OFF (Rotasi / Periode)</button>
   </div>
-  <div style="margin:8px 16px 0; display:none;">
-    <button id="btnAjukanOff" style="width:100%; padding:11px 4px; font-size:13px; font-weight:700; border:1.5px solid #0F766E; border-radius:12px; background:#fff; color:#0F766E; cursor:pointer;">🌴 AJUKAN OFF (Rotasi / Periode)</button>
-  </div>
-  <div id="pdTombolWrap" style="margin:8px 16px 0;">
-    <button id="btnAjukanPD" style="width:100%; padding:11px 4px; font-size:13px; font-weight:700; border:1.5px solid #6D28D9; border-radius:12px; background:#fff; color:#6D28D9; cursor:pointer;">✈️ AJUKAN PERJALANAN DINAS</button>
+  <div id="pdTombolWrap" style="display:flex; gap:8px; margin:10px 16px 0;">
+    <button id="btnGangguanMassal" style="display:none; flex:1; align-items:center; justify-content:center; text-align:center; gap:6px; min-height:46px; padding:8px 4px; font-size:12.5px; font-weight:700; line-height:1.2; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">🚨<span>GANGGUAN<br>OPERASIONAL</span></button>
+    <button id="btnAjukanPD" style="flex:1; display:flex; align-items:center; justify-content:center; text-align:center; gap:6px; min-height:46px; padding:8px 4px; font-size:12.5px; font-weight:700; line-height:1.2; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">✈️<span>PERJALANAN<br>DINAS</span></button>
   </div>
   <div id="pdSayaWrap" style="display:none; background:#fff; border-radius:20px; margin:10px 16px 0; padding:16px; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
     <p class="card-label">✈️ Perjalanan Dinas Saya</p>
@@ -1269,7 +1267,7 @@ async function submitPinInti() {
       bolehGangguan = !error && data === true;
     } catch (e) { bolehGangguan = false; }
     const b = document.getElementById('btnGangguanMassal');
-    if (b) b.style.display = bolehGangguan ? 'block' : 'none';
+    if (b) b.style.display = bolehGangguan ? 'flex' : 'none';
   }
   function gmMsg(text, ok) {
     const m = document.getElementById('gmMsg');
