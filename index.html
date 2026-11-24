@@ -1168,6 +1168,7 @@
         <button type="button" class="tab-btn" data-oto-tab="all" onclick="loadOtorisasiPage('all', this)">📝 Semua Pengajuan</button>
         <button type="button" class="tab-btn" data-oto-tab="vouchers" onclick="loadOtorisasiPage('vouchers', this)">🎫 Voucher &amp; Kode Aktif</button>
         <button type="button" class="tab-btn" data-oto-tab="gangguan" onclick="loadOtorisasiPage('gangguan', this)">🚨 Gangguan Operasional</button>
+        <button type="button" class="tab-btn" data-oto-tab="ttd" onclick="loadOtorisasiPage('ttd', this)">✍️ Tanda Tangan Digital</button>
       </div>
 
       <div class="card table-card" id="otorisasiMainCard" style="margin-top:14px;">
@@ -1196,6 +1197,46 @@
               <tr><td style="text-align:center; color:#777;">Memuat data...</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div id="ttdCard" style="display:none; margin-top:14px;">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>✍️ Daftarkan Dokumen untuk Tanda Tangan Digital</h3>
+              <p class="card-subtitle">Penanda tangan menerima tiket di Digital Badge, menandatangani dengan PIN, lalu kode dan QR terbit. Sidik dokumen dihitung di browser dari file TANPA QR; file tidak diunggah, hanya sidiknya yang disimpan.</p>
+            </div>
+          </div>
+          <div style="padding:0 4px 14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;">
+            <div><label style="font-size:12px; font-weight:600;">Judul dokumen</label>
+              <input type="text" id="ttdJudul" maxlength="150" placeholder="Contoh: Guideline Book Digital Badge" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid #e6ded9; box-sizing:border-box;"></div>
+            <div><label style="font-size:12px; font-weight:600;">Versi</label>
+              <input type="text" id="ttdVersi" maxlength="20" placeholder="1.0" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid #e6ded9; box-sizing:border-box;"></div>
+            <div><label style="font-size:12px; font-weight:600;">Tanggal terbit</label>
+              <input type="date" id="ttdTgl" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid #e6ded9; box-sizing:border-box;"></div>
+            <div><label style="font-size:12px; font-weight:600;">File dokumen (tanpa QR, opsional)</label>
+              <input type="file" id="ttdFile" onchange="ttdHitungSha()" style="width:100%; font-size:12px;">
+              <div id="ttdShaInfo" style="font-size:11px; color:#777; margin-top:3px; word-break:break-all;"></div></div>
+          </div>
+          <div style="padding:0 4px 8px;">
+            <label style="font-size:13px;"><input type="checkbox" id="ttdBerurutan" checked> Tanda tangan berurutan (orang berikutnya baru bisa setelah yang sebelumnya selesai)</label>
+          </div>
+          <div style="padding:0 4px 6px;"><strong style="font-size:13px;">Penanda tangan (urut dari atas)</strong></div>
+          <div id="ttdSignerList" style="padding:0 4px;"></div>
+          <div style="padding:6px 4px 14px; display:flex; gap:10px; align-items:center;">
+            <button type="button" onclick="ttdTambahBaris()" style="padding:7px 14px; font-size:12px; font-weight:700; border:1.5px solid #e6ded9; border-radius:8px; background:#fff; cursor:pointer;">+ Tambah penanda tangan</button>
+            <button type="button" class="btn-primary" id="btnDaftarTtd" onclick="ttdDaftarkan()" style="padding:9px 18px; font-size:13px; font-weight:700;">Daftarkan dokumen</button>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px;">
+          <div class="card-header"><h3>📚 Dokumen Terdaftar</h3></div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Dokumen</th><th>Versi</th><th>Penanda tangan</th><th>Status</th><th>Aksi</th></tr></thead>
+              <tbody id="ttdRiwayatBody"><tr><td colspan="5" style="text-align:center; color:#777;">Memuat...</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </div>
 

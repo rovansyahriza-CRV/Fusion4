@@ -209,6 +209,10 @@
     <p class="card-label">✈️ Perjalanan Dinas Saya</p>
     <div id="pdSayaBox"></div>
   </div>
+  <div id="ttdSayaWrap" style="display:none; background:#fff; border-radius:20px; margin:10px 16px 0; padding:16px; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <p class="card-label">✍️ Tanda Tangan Saya</p>
+    <div id="ttdSayaBox"></div>
+  </div>
 
   <div style="background:#fff; border-radius:20px; margin:16px 16px 16px; padding:20px; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
     <p class="card-label">Approval Issues</p>
@@ -459,6 +463,29 @@
   </div>
 </div>
 
+<div id="ttdPinOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:130; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:22px 20px; width:100%; max-width:340px; box-sizing:border-box; text-align:center;">
+    <h3 style="margin:0 0 4px; font-size:17px; color:var(--charcoal);">✍️ Tanda tangani dokumen</h3>
+    <div id="ttdPinInfo" style="font-size:13px; color:var(--text-muted); margin-bottom:12px; line-height:1.5;"></div>
+    <input type="password" id="ttdPinInput" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="Masukkan PIN Anda" style="width:100%; text-align:center; letter-spacing:6px; font-size:20px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:#FAF7F3; box-sizing:border-box;">
+    <div id="ttdPinMsg" style="display:none; margin-top:10px; font-size:12px; font-weight:600; color:#D9312E;"></div>
+    <button id="ttdPinOk" style="width:100%; margin-top:12px; padding:13px; font-size:14px; font-weight:700; border:none; border-radius:12px; background:var(--orange); color:#fff; cursor:pointer;">Tanda tangani</button>
+    <button id="ttdPinBatal" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Batal</button>
+  </div>
+</div>
+
+<div id="ttdQrOverlay" style="display:none; position:fixed; inset:0; background:rgba(28,35,33,0.85); align-items:center; justify-content:center; z-index:130; padding:20px;">
+  <div style="background:#fff; border-radius:18px; padding:22px 20px; width:100%; max-width:340px; box-sizing:border-box; text-align:center;">
+    <div style="font-size:12px; font-weight:700; color:var(--orange); letter-spacing:0.5px;">TANDA TANGAN DIGITAL</div>
+    <div id="ttdQrNama" style="font-size:16px; font-weight:800; color:var(--charcoal); margin-top:4px;"></div>
+    <div id="ttdQrInfo" style="font-size:12px; color:var(--text-muted); margin:4px 0 12px; line-height:1.5;"></div>
+    <div id="ttdQrHolder" style="display:inline-block;"></div>
+    <div id="ttdQrKode" style="font-family:monospace; font-size:15px; font-weight:700; margin-top:8px; letter-spacing:1px;"></div>
+    <button id="ttdQrUnduh" style="width:100%; margin-top:12px; padding:11px; font-size:13px; font-weight:700; border:1.5px solid var(--orange); border-radius:12px; background:#fff; color:var(--orange); cursor:pointer;">Unduh QR</button>
+    <button id="ttdQrTutup" style="width:100%; margin-top:8px; padding:11px; font-size:13px; font-weight:600; border:1.5px solid var(--border); border-radius:12px; background:#fff; color:var(--text-muted); cursor:pointer;">Tutup</button>
+  </div>
+</div>
+
 <div id="ubahTglOverlay" style="display:none; position:fixed; inset:0; background:rgba(61,61,61,0.55); align-items:center; justify-content:center; z-index:110; padding:20px;">
   <div style="background:#fff; border-radius:18px; padding:24px 20px; width:100%; max-width:360px; box-sizing:border-box;">
     <h3 style="margin:0 0 6px; font-size:17px; color:var(--charcoal);">✏️ Ubah Tanggal Pengajuan</h3>
@@ -660,6 +687,7 @@ function renderBadgeOffline(profile) {
     document.getElementById('btnAjukanOff').parentElement,
     document.getElementById('pdTombolWrap'),
     document.getElementById('pdSayaWrap'),
+    document.getElementById('ttdSayaWrap'),
     document.getElementById('approvalIssuesBox').parentElement,
     document.getElementById('attendanceStatusBox'),
     document.getElementById('payrollSlipBox')
@@ -1082,6 +1110,7 @@ async function tampilkanBadge(hasil, pin) {
     try { loadApprovalIssues(qrId); } catch (e) { console.warn("loadApprovalIssues error:", e); }
     try { loadMyVouchers(qrId); } catch (e) { console.warn("loadMyVouchers error:", e); }
     try { loadPerjalananDinasSaya(); } catch (e) { console.warn("loadPerjalananDinasSaya error:", e); }
+    try { loadTtdSaya(); } catch (e) { console.warn("loadTtdSaya error:", e); }
 
     // Siapkan / segarkan paket Absen Offline (wajah sendiri + lokasi + library & model wajah).
     // Sekalian perbarui profil lain yang dititipkan di HP ini.
@@ -1767,6 +1796,77 @@ async function submitPinInti() {
     }
   }
 
+  // ===== TANDA TANGAN DIGITAL =====
+  // Tiket muncul di Approval Issues; menandatangani butuh sesi Badge + PIN. Kode/QR terbit per penandatangan.
+  function escTtd(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  let ttdAktifId = null, ttdAktifQr = '';
+  function ttdBukaPin(id, judul, peran, qrId) {
+    ttdAktifId = Number(id); ttdAktifQr = qrId;
+    document.getElementById('ttdPinInfo').innerHTML = escTtd(judul) + '<br>sebagai <b>' + escTtd(peran) + '</b>. Masukkan PIN untuk mengonfirmasi.';
+    document.getElementById('ttdPinInput').value = '';
+    document.getElementById('ttdPinMsg').style.display = 'none';
+    document.getElementById('ttdPinOverlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('ttdPinInput').focus(), 50);
+  }
+  document.getElementById('ttdPinBatal').onclick = () => { document.getElementById('ttdPinOverlay').style.display = 'none'; };
+  document.getElementById('ttdPinOk').onclick = async () => {
+    const pin = document.getElementById('ttdPinInput').value.trim();
+    const msg = document.getElementById('ttdPinMsg');
+    if (!/^[0-9]{4,6}$/.test(pin)) { msg.innerText = 'Masukkan PIN Anda.'; msg.style.display = 'block'; return; }
+    const btn = document.getElementById('ttdPinOk'); btn.disabled = true;
+    try {
+      const { data, error } = await supabaseClient.rpc('ttd_tanda_tangani', { p_token: badgeTokenGet(), p_id: ttdAktifId, p_pin: pin });
+      if (error) throw error;
+      document.getElementById('ttdPinOverlay').style.display = 'none';
+      loadApprovalIssues(ttdAktifQr);
+      await loadTtdSaya();
+      if (data && data.kode) ttdBukaQr({ kode: data.kode, judul: '', versi: '', peran: '', nama: (window.currentBadgeData && window.currentBadgeData.nama) || '' });
+    } catch (e) {
+      msg.innerText = e.message || 'Gagal menandatangani.'; msg.style.display = 'block';
+    } finally { btn.disabled = false; }
+  };
+  function ttdLink(kode) { return location.origin + location.pathname.replace(/[^/]*$/, '') + 'verifikasi-ttd.html?k=' + encodeURIComponent(kode); }
+  function ttdBukaQr(it) {
+    document.getElementById('ttdQrNama').innerText = it.nama || '';
+    document.getElementById('ttdQrInfo').innerText = [it.peran, it.judul ? it.judul + (it.versi ? ' v' + it.versi : '') : ''].filter(Boolean).join(' · ');
+    document.getElementById('ttdQrKode').innerText = it.kode;
+    const holder = document.getElementById('ttdQrHolder'); holder.innerHTML = '';
+    new QRCode(holder, { text: ttdLink(it.kode), width: 220, height: 220, colorDark: '#3D3D3D', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    document.getElementById('ttdQrOverlay').style.display = 'flex';
+  }
+  document.getElementById('ttdQrTutup').onclick = () => { document.getElementById('ttdQrOverlay').style.display = 'none'; };
+  document.getElementById('ttdQrUnduh').onclick = () => {
+    const cv = document.querySelector('#ttdQrHolder canvas');
+    const img = document.querySelector('#ttdQrHolder img');
+    const url = cv ? cv.toDataURL('image/png') : (img ? img.src : '');
+    if (!url) return;
+    const a = document.createElement('a'); a.href = url; a.download = 'qr-' + document.getElementById('ttdQrKode').innerText + '.png'; a.click();
+  };
+  async function loadTtdSaya() {
+    const wrap = document.getElementById('ttdSayaWrap'), box = document.getElementById('ttdSayaBox');
+    const token = badgeTokenGet();
+    if (!wrap || !box || !token || !supabaseClient) return;
+    try {
+      const { data, error } = await supabaseClient.rpc('ttd_saya', { p_token: token });
+      if (error) throw error;
+      const items = Array.isArray(data) ? data : [];
+      if (!items.length) { wrap.style.display = 'none'; return; }
+      wrap.style.display = 'block';
+      box.innerHTML = '';
+      items.forEach(it => {
+        const row = document.createElement('div');
+        const aktif = it.status === 'AKTIF';
+        row.style.cssText = 'border:1.5px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px;';
+        const waktu = it.waktu ? new Date(it.waktu).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' }) : '';
+        row.innerHTML = `<div style="font-size:13px; font-weight:700;">${escTtd(it.judul)} <span style="font-weight:500; color:var(--text-muted);">v${escTtd(it.versi)}</span></div>
+          <div style="font-size:12px; color:var(--text-muted); margin:2px 0 8px;">${escTtd(it.peran)} &middot; ${escTtd(waktu)} &middot; ${aktif ? '✅ aktif' : '⛔ dicabut'}</div>
+          <button style="width:100%; padding:9px; font-size:12px; font-weight:700; border:1.5px solid var(--orange); border-radius:10px; background:#fff; color:var(--orange); cursor:pointer;">Lihat QR</button>`;
+        row.querySelector('button').onclick = () => ttdBukaQr(it);
+        box.appendChild(row);
+      });
+    } catch (e) { console.warn('loadTtdSaya:', e.message); }
+  }
+
   async function safeRpc(fnName, params) {
     try {
       const { data, error } = await supabaseClient.rpc(fnName, params);
@@ -1847,7 +1947,7 @@ async function submitPinInti() {
 
     try {
       // Ambil semua data approval dari Supabase secara aman & paralel
-      let [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData, attendanceData, deliveryTriggerData, payrollSlipData, gangguanData] = await Promise.all([
+      let [empReqData, ijinLemburData, requestData, vendorData, rfqData, poData, attendanceData, deliveryTriggerData, payrollSlipData, gangguanData, ttdData] = await Promise.all([
         safeRpc('get_pending_employee_requests_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_ijin_lembur_approvals_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_pending_approvals_by_qrcode', { p_qrcode: qrId }),
@@ -1857,7 +1957,8 @@ async function submitPinInti() {
         safeRpc('get_today_attendance_status', { p_qrcode: qrId }),
         safeRpc('get_delivery_trigger_by_qrcode', { p_qrcode: qrId }),
         safeRpc('get_payroll_slip_by_qrcode', { p_qrcode: qrId }),
-        safeRpc('get_pending_gangguan_by_qrcode', { p_qrcode: qrId })
+        safeRpc('get_pending_gangguan_by_qrcode', { p_qrcode: qrId }),
+        safeRpc('get_pending_ttd', { p_token: badgeTokenGet() })
       ]);
 
       renderAttendanceStatus(attendanceData);
@@ -2057,8 +2158,9 @@ async function submitPinInti() {
       const hasPo = poData && poData.length > 0;
       const hasDeliveryTrigger = deliveryTriggerData && deliveryTriggerData.length > 0;
       const hasGangguan = Array.isArray(gangguanData) && gangguanData.length > 0;
+      const hasTtd = Array.isArray(ttdData) && ttdData.length > 0;
 
-      if (!hasEmpReq && !hasIjinLembur && !hasRequest && !hasVendor && !hasRfq && !hasPo && !hasDeliveryTrigger && !hasGangguan) {
+      if (!hasEmpReq && !hasIjinLembur && !hasRequest && !hasVendor && !hasRfq && !hasPo && !hasDeliveryTrigger && !hasGangguan && !hasTtd) {
         box.style.display = "flex";
         box.style.flexDirection = "row";
         box.innerHTML = "Belum ada pengajuan yang perlu diverifikasi.";
@@ -2204,6 +2306,23 @@ async function submitPinInti() {
         });
         box.querySelectorAll('.btnRejectEmpReq').forEach(btn => {
           btn.onclick = () => handleEmpReqApprovalDecision(btn.dataset.id, btn.dataset.action, qrId, btn.dataset.stage);
+        });
+      }
+
+      // 0. Render tiket Tanda Tangan Digital (dokumen yang menunggu tanda tangan Anda)
+      if (hasTtd) {
+        ttdData.forEach(t => {
+          const row = document.createElement('div');
+          row.style.cssText = "border:1.5px solid var(--orange); border-radius:12px; padding:12px; margin-bottom:10px; text-align:left; background:#FFF8EE;";
+          row.innerHTML = `
+            <div style="font-size:13px; font-weight:700; color:var(--orange);">✍️ Tanda Tangan Digital</div>
+            <div style="font-size:14px; font-weight:700; margin:4px 0;">${escTtd(t.judul)} <span style="font-weight:500; color:var(--text-muted);">v${escTtd(t.versi)}</span></div>
+            <div style="font-size:12px; color:var(--text-muted);">Peran Anda: <b>${escTtd(t.peran)}</b> &middot; urutan ${t.urut} dari ${t.total}${t.fileNama ? ' &middot; ' + escTtd(t.fileNama) : ''}</div>
+            <button class="btnTtdTanda" data-id="${t.id}" data-judul="${escTtd(t.judul)}" data-peran="${escTtd(t.peran)}" style="width:100%; margin-top:10px; padding:10px; font-size:13px; font-weight:700; border:none; border-radius:8px; background:var(--orange); color:#fff; cursor:pointer;">✍️ Tanda tangani</button>`;
+          box.appendChild(row);
+        });
+        box.querySelectorAll('.btnTtdTanda').forEach(btn => {
+          btn.onclick = () => ttdBukaPin(btn.dataset.id, btn.dataset.judul, btn.dataset.peran, qrId);
         });
       }
 
