@@ -6641,6 +6641,8 @@ async function ttdHitungSha() {
 
 async function ttdDaftarkan() {
   const judul = document.getElementById('ttdJudul').value.trim();
+  const noDok = (document.getElementById('ttdNo').value || '').trim().toUpperCase();
+  if (noDok && !/^[0-9]{3}-(0[1-9]|10)-D\.[1-8]-[0-9]{3}$/.test(noDok)) return showToast('Format No. Dokumen tidak valid. Contoh: 001-09-D.1-001', 'error');
   const versi = document.getElementById('ttdVersi').value.trim();
   const tgl = document.getElementById('ttdTgl').value;
   if (!judul || !versi || !tgl) return showToast('Judul, versi, dan tanggal terbit wajib diisi.', 'error');
@@ -6656,12 +6658,12 @@ async function ttdDaftarkan() {
     const f = document.getElementById('ttdFile')?.files?.[0];
     const { error } = await supabaseClient.rpc('daftarkan_ttd_dokumen', {
       p_pembuat_qrcode: await gangguanMyQr(), p_dibuat_oleh: (currentUser && currentUser.nama) || 'HR',
-      p_judul: judul, p_versi: versi, p_tgl: tgl, p_file_nama: f ? f.name : null, p_sha256: ttdSha,
+      p_no_dokumen: noDok || null, p_judul: judul, p_versi: versi, p_tgl: tgl, p_file_nama: f ? f.name : null, p_sha256: ttdSha,
       p_berurutan: document.getElementById('ttdBerurutan').checked, p_penandatangan: rows
     });
     if (error) throw error;
     showToast('Dokumen terdaftar. Tiket tanda tangan sudah masuk ke Digital Badge penanda tangan.', 'success');
-    ['ttdJudul', 'ttdVersi', 'ttdFile'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['ttdNo', 'ttdJudul', 'ttdVersi', 'ttdFile'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     document.getElementById('ttdShaInfo').textContent = ''; ttdSha = null;
     document.getElementById('ttdSignerList').innerHTML = '';
     ttdTambahBaris('Disusun oleh'); ttdTambahBaris('Diperiksa oleh'); ttdTambahBaris('Disetujui oleh');
@@ -6681,7 +6683,7 @@ async function ttdMuatRiwayat() {
   const ico = { MENUNGGU: '⏳', DITANDATANGANI: '✅', DICABUT: '⛔' };
   body.innerHTML = docs.map(d => `
     <tr>
-      <td><b>${escapeHtml(d.judul)}</b><small style="display:block; color:#777;">${escapeHtml(d.fileNama || 'tanpa file')}${d.ada_sha ? ' &middot; ada sidik' : ''}${d.berurutan ? ' &middot; berurutan' : ''}</small></td>
+      <td>${d.noDokumen ? `<code style="font-size:11px;">${escapeHtml(d.noDokumen)}</code><br>` : ''}<b>${escapeHtml(d.judul)}</b><small style="display:block; color:#777;">${escapeHtml(d.fileNama || 'tanpa file')}${d.ada_sha ? ' &middot; ada sidik' : ''}${d.berurutan ? ' &middot; berurutan' : ''}</small></td>
       <td>${escapeHtml(d.versi)}</td>
       <td>${(d.penandatangan || []).map(p => `<div style="font-size:12px;">${ico[p.status] || ''} ${escapeHtml(p.peran)}: <b>${escapeHtml(p.nama)}</b>${p.kode ? ` <code>${escapeHtml(p.kode)}</code>` : ''}${p.status === 'DITANDATANGANI' ? ` <button type="button" onclick="ttdCabut(${d.id}, ${p.id})" style="border:none; background:none; color:#D9312E; cursor:pointer; font-size:11px;">cabut</button>` : ''}</div>`).join('')}</td>
       <td>${d.status === 'AKTIF' ? 'Aktif' : '<b style="color:#D9312E;">Dicabut</b>'}</td>

@@ -73,6 +73,7 @@ const tgl = t => { const d = new Date(String(t).length <= 10 ? t + 'T00:00:00' :
     '<div class="sub">' + (aktif ? 'Terdaftar di sistem Fusion4 SmartGate' : 'Tanda tangan ini tidak berlaku lagi') + '</div></div>' +
     '<div class="card"><div class="nama">' + esc(r.nama) + '</div><div class="kecil" style="margin-bottom:12px;">' + esc(r.jabatan) + '</div>' +
     '<div class="baris"><b>Peran</b><span>' + esc(r.peran) + '</span></div>' +
+    (r.noDokumen ? '<div class="baris"><b>No. Dokumen</b><span>' + esc(r.noDokumen) + '</span></div>' : '') +
     '<div class="baris"><b>Dokumen</b><span>' + esc(r.dokumen) + '</span></div>' +
     '<div class="baris"><b>Versi</b><span>' + esc(r.versi) + '</span></div>' +
     '<div class="baris"><b>Tanggal terbit</b><span>' + tgl(r.tglTerbit) + '</span></div>' +
