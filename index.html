@@ -1023,7 +1023,8 @@
           </div>
           <input type="hidden" id="kbDinasEditId" value="">
           <div style="display:flex; gap:8px; flex-wrap:wrap; padding:0 4px 12px; align-items:flex-end;">
-            <div style="flex:1; min-width:90px;"><label for="kbDinasGrade" style="font-size:12px;">Grade</label><input type="text" id="kbDinasGrade" list="kbDinasGradeList" maxlength="20" placeholder="G1" style="width:100%;"></div>
+            <div style="flex:1; min-width:80px;"><label for="kbDinasGradeMin" style="font-size:12px;">Grade dari</label><input type="number" id="kbDinasGradeMin" min="0" max="99" step="1" placeholder="1" style="width:100%;"></div>
+            <div style="flex:1; min-width:80px;"><label for="kbDinasGradeMax" style="font-size:12px;">Grade sampai</label><input type="number" id="kbDinasGradeMax" min="0" max="99" step="1" placeholder="3 (kosong = 1 Grade)" style="width:100%;"></div>
             <div style="flex:1; min-width:100px;"><label for="kbDinasJarakMin" style="font-size:12px;">Jarak min (km)</label><input type="number" id="kbDinasJarakMin" min="0" step="1" placeholder="0" style="width:100%;"></div>
             <div style="flex:1; min-width:100px;"><label for="kbDinasJarakMax" style="font-size:12px;">Jarak maks (km)</label><input type="number" id="kbDinasJarakMax" min="0" step="1" placeholder="kosong = tanpa batas" style="width:100%;"></div>
             <div style="flex:1.2; min-width:130px;"><label for="kbDinasHarian" style="font-size:12px;">Uang harian (Rp/hari)</label><input type="text" id="kbDinasHarian" inputmode="numeric" oninput="formatRupiahInput(this)" placeholder="0" style="width:100%;"></div>
@@ -1036,12 +1037,12 @@
           <datalist id="kbDinasGradeList"></datalist>
           <div class="table-responsive">
             <table>
-              <thead><tr><th>Grade</th><th>Rentang Jarak</th><th>Uang Harian</th><th>Penginapan</th><th>Contoh 3 hari</th><th>Keterangan</th><th>Status</th><th>Aksi</th></tr></thead>
+              <thead><tr><th>Rentang Grade</th><th>Rentang Jarak</th><th>Uang Harian</th><th>Penginapan</th><th>Contoh 3 hari</th><th>Keterangan</th><th>Status</th><th>Aksi</th></tr></thead>
               <tbody id="kbDinasTarifBody"></tbody>
             </table>
           </div>
           <p style="font-size:11px; color:#8a94a3; padding:8px 4px 0;">Jarak dicocokkan <strong>min &le; jarak &lt; maks</strong>. Estimasi = Uang Harian &times; hari + Penginapan &times; (hari &minus; 1).
-            Nilai tarif disalin ke pengajuan saat diajukan, jadi mengubah/menghapus tarif tidak mengubah pengajuan lama. Rentang jarak tarif aktif dalam satu Grade tidak boleh tumpang tindih.</p>
+            Nilai tarif disalin ke pengajuan saat diajukan, jadi mengubah/menghapus tarif tidak mengubah pengajuan lama. Satu tarif bisa berlaku untuk rentang Grade (contoh: Grade 1 sampai 3). Tarif aktif yang rentang Grade dan jaraknya sama-sama tumpang tindih tidak boleh ada. Grade karyawan cukup diisi angka (3, G3, atau Grade 3 dibaca sama).</p>
         </div>
 
         <div class="card table-card" style="margin-top:16px;">
