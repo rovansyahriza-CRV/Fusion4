@@ -35,6 +35,7 @@
     font-family: 'Inter', 'Segoe UI', sans-serif; background: var(--bg); color: var(--charcoal);
     margin: 0; padding: 0; min-height: 100vh; -webkit-tap-highlight-color: transparent;
   }
+  button, input, select, textarea { font-family: inherit; }
   .page { max-width: 420px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
 
   .topbar { display:flex; align-items:center; justify-content:space-between; padding:20px 20px 4px; }
@@ -509,6 +510,9 @@
 </div>
 
 <script>
+  // Tanggal hari ini dalam WITA (UTC+8), bukan UTC, supaya default form benar setelah tengah malam WITA
+  function todayWita() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); }
+
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCZxGfKdCtCA1O8SzdJuxPPM-UVpWtk3QXQJpLZEBXFPGYPnGbq36b5WBDEruzr95iiQ/exec";
 const RFQ_EMAIL_URL = "https://script.google.com/macros/s/AKfycbww8VikG_wpAvQro1-9vLC_llnvKFigFotzKXS-T_kaIHKA4q2QGbYXqZObEF5j_1Hr/exec";
 const DRIVE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbwfq5bqNWx0fO9LuEyQasUzkLP91gA8G-rqRKpPOIJ9r7WNN0G_klH8jXxXhY96ArlC/exec";
@@ -1454,7 +1458,7 @@ async function submitPinInti() {
     msgEl.style.display = "none";
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayWita();
       const durasi = currentRequestType === "LEMBUR" ? 2 : 0;
 
       const { data: hasil, error } = await supabaseClient.rpc('submit_pengajuan_ijin_lembur', {
@@ -1520,7 +1524,7 @@ async function submitPinInti() {
   document.getElementById('cutiTglSelesai').onchange = updateCutiDurasi;
 
   document.getElementById('btnAjukanCuti').onclick = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayWita();
     document.getElementById('cutiTglMulai').value = today;
     document.getElementById('cutiTglSelesai').value = today;
     document.getElementById('cutiAlasan').value = '';
@@ -1636,7 +1640,7 @@ async function submitPinInti() {
   document.getElementById('offTglSelesai').onchange = updateOffDurasi;
 
   document.getElementById('btnAjukanOff').onclick = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayWita();
     document.getElementById('offJenis').value = window.hakOffDefault || 'OFF_ROTASI';
     document.getElementById('offTglMulai').value = today;
     document.getElementById('offTglSelesai').value = today;
@@ -2854,7 +2858,7 @@ async function submitPinInti() {
   document.getElementById('pdTglSelesai').addEventListener('change', updatePdDurasi);
 
   document.getElementById('btnAjukanPD').onclick = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayWita();
     document.getElementById('pdTglMulai').value = today;
     document.getElementById('pdTglSelesai').value = today;
     ['pdTujuan', 'pdJarak', 'pdKeperluan'].forEach(id => { document.getElementById(id).value = ''; });
