@@ -6423,9 +6423,22 @@ async function loadKbDinasTab() {
   }
 }
 
+// Label rentang Grade, contoh "Grade 1 – 3" / "Grade 5". Baris lama tanpa GradeMin memakai teks Grade apa adanya.
+function kbDinasLabelGrade(t) {
+  if (t.GradeMin == null) return 'Grade ' + (t.Grade || '-');
+  const mx = t.GradeMax == null ? t.GradeMin : t.GradeMax;
+  return mx === t.GradeMin ? 'Grade ' + t.GradeMin : `Grade ${t.GradeMin} – ${mx}`;
+}
+
 function kbDinasDaftarGrade() {
+  const dariTarif = [];
+  kbDinasTarif.forEach(t => {
+    if (t.GradeMin == null) { if (t.Grade) dariTarif.push(String(t.Grade).toUpperCase()); return; }
+    const mx = t.GradeMax == null ? t.GradeMin : t.GradeMax;
+    for (let g = t.GradeMin; g <= mx && g <= 99; g++) dariTarif.push(String(g));
+  });
   return [...new Set([
-    ...kbDinasTarif.map(t => String(t.Grade || '').toUpperCase()),
+    ...dariTarif,
     ...kbDinasKaryawan.map(k => String(k.Grade || '').toUpperCase())
   ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
 }
@@ -6444,7 +6457,7 @@ function renderKbDinasTarifTable() {
     const contoh = Number(t.UangHarian || 0) * 3 + Number(t.UangPenginapan || 0) * 2;
     const jarak = `${Number(t.JarakMinKm).toLocaleString('id-ID')} – ${t.JarakMaxKm == null ? '∞' : Number(t.JarakMaxKm).toLocaleString('id-ID')} km`;
     return `<tr style="${t.IsAktif ? '' : 'opacity:0.55;'}">
-      <td><strong>${escapeHtml(t.Grade)}</strong></td>
+      <td><strong>${escapeHtml(kbDinasLabelGrade(t))}</strong></td>
       <td style="white-space:nowrap;">${jarak}</td>
       <td style="white-space:nowrap;">${kbDinasRp(t.UangHarian)}</td>
       <td style="white-space:nowrap;">${kbDinasRp(t.UangPenginapan)}</td>
@@ -6463,7 +6476,8 @@ function editKbDinasTarif(id) {
   const t = kbDinasTarif.find(x => Number(x.Id) === id);
   if (!t) return;
   document.getElementById('kbDinasEditId').value = t.Id;
-  document.getElementById('kbDinasGrade').value = t.Grade || '';
+  document.getElementById('kbDinasGradeMin').value = t.GradeMin ?? (String(t.Grade || '').match(/[0-9]+/) || [''])[0];
+  document.getElementById('kbDinasGradeMax').value = t.GradeMax ?? '';
   document.getElementById('kbDinasJarakMin').value = t.JarakMinKm ?? '';
   document.getElementById('kbDinasJarakMax').value = t.JarakMaxKm ?? '';
   document.getElementById('kbDinasHarian').value = Number(t.UangHarian || 0).toLocaleString('id-ID');
@@ -6472,12 +6486,12 @@ function editKbDinasTarif(id) {
   document.getElementById('kbDinasAktif').checked = !!t.IsAktif;
   document.getElementById('kbDinasSubmitBtn').textContent = '💾 Simpan';
   document.getElementById('kbDinasBatalBtn').style.display = '';
-  document.getElementById('kbDinasGrade').focus();
+  document.getElementById('kbDinasGradeMin').focus();
 }
 
 function batalEditKbDinasTarif() {
   document.getElementById('kbDinasEditId').value = '';
-  ['kbDinasGrade', 'kbDinasJarakMin', 'kbDinasJarakMax', 'kbDinasHarian', 'kbDinasPenginapan', 'kbDinasKeterangan']
+  ['kbDinasGradeMin', 'kbDinasGradeMax', 'kbDinasJarakMin', 'kbDinasJarakMax', 'kbDinasHarian', 'kbDinasPenginapan', 'kbDinasKeterangan']
     .forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('kbDinasAktif').checked = true;
   document.getElementById('kbDinasSubmitBtn').textContent = '+ Tambah';
@@ -6486,16 +6500,19 @@ function batalEditKbDinasTarif() {
 
 async function simpanKbDinasTarif() {
   const editId = document.getElementById('kbDinasEditId').value;
-  const grade = document.getElementById('kbDinasGrade').value.trim();
+  const gMinRaw = document.getElementById('kbDinasGradeMin').value;
+  const gMaxRaw = document.getElementById('kbDinasGradeMax').value;
   const minRaw = document.getElementById('kbDinasJarakMin').value;
   const maxRaw = document.getElementById('kbDinasJarakMax').value;
-  if (!grade) { showToast('Isi Grade dulu.', 'error'); return; }
+  if (gMinRaw === '') { showToast('Isi Grade dari dulu.', 'error'); return; }
+  if (gMaxRaw !== '' && Number(gMaxRaw) < Number(gMinRaw)) { showToast('Grade sampai tidak boleh lebih kecil dari Grade dari.', 'error'); return; }
   const btn = document.getElementById('kbDinasSubmitBtn');
   btn.disabled = true;
   try {
     const { data, error } = await fusionAdminRpc('simpan_tarif_perjalanan_dinas', {
       p_id: editId ? Number(editId) : null,
-      p_grade: grade,
+      p_grade_min: Number(gMinRaw),
+      p_grade_max: gMaxRaw === '' ? null : Number(gMaxRaw),
       p_jarak_min: minRaw === '' ? 0 : Number(minRaw),
       p_jarak_max: maxRaw === '' ? null : Number(maxRaw),
       p_uang_harian: parseRupiahInput(document.getElementById('kbDinasHarian')) || 0,
@@ -6520,7 +6537,7 @@ async function simpanKbDinasTarif() {
 async function hapusKbDinasTarif(id) {
   const t = kbDinasTarif.find(x => Number(x.Id) === id);
   if (!t) return;
-  if (!confirm(`Hapus tarif Grade ${t.Grade} (${t.JarakMinKm} – ${t.JarakMaxKm ?? '∞'} km)? Pengajuan lama tidak berubah.`)) return;
+  if (!confirm(`Hapus tarif ${kbDinasLabelGrade(t)} (${t.JarakMinKm} – ${t.JarakMaxKm ?? '∞'} km)? Pengajuan lama tidak berubah.`)) return;
   try {
     const { data, error } = await fusionAdminRpc('hapus_tarif_perjalanan_dinas', { p_id: id });
     if (error) throw error;
