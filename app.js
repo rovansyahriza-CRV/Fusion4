@@ -2808,7 +2808,7 @@ async function openModalBuatPengajuan() {
   if (!modal) return;
 
   const tglInput = document.getElementById('pengajuanTanggal');
-  if (tglInput) tglInput.value = new Date().toISOString().split('T')[0];
+  if (tglInput) tglInput.value = gangguanTodayStr();
 
   // Populate Karyawan
   const selectKar = document.getElementById('pengajuanKaryawan');
@@ -4270,7 +4270,7 @@ function bukaFormHasilInterview(kandidatId, namaKandidat, reqId) {
   document.getElementById('hiReqId').value = reqId;
   document.getElementById('hasilInterviewSubtitle').textContent = `Kandidat: ${namaKandidat}`;
   document.getElementById('hiInterviewerNama').value = '';
-  document.getElementById('hiTanggalPelaksanaan').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('hiTanggalPelaksanaan').value = gangguanTodayStr();
   document.getElementById('hiCatatan').value = '';
   document.getElementById('hiSkorFinal').value = '';
   document.getElementById('hiRataRata').textContent = '-';
