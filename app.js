@@ -2755,6 +2755,7 @@ function renderOtorisasiTable() {
           <td>${voucherHtml}</td>
           <td style="text-align:center;">
             <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick='openModalApprovalAction(${item.id}, "VIEW", ${JSON.stringify(JSON.stringify(item))})'>Detail</button>
+            ${item.tipe === 'PERJALANAN_DINAS' && item.status === 'APPROVED' ? `<button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px; margin-top:4px; color:#6D28D9; border-color:#6D28D9;" onclick="unduhLaporanDinasAdmin(${item.id}, this)">📄 PDF</button>` : ''}
           </td>
         </tr>
       `;
@@ -6226,6 +6227,24 @@ async function fusionAdminRpc(name,params){
  return supabaseClient.rpc(name+'_secure',{...params,p_session_token:currentUser.adminToken});
 }
 
+
+// Laporan PDF Perjalanan Dinas (QR tanda tangan approval) dari Admin Portal. Wewenang: PIC OIL / ALL.
+async function unduhLaporanDinasAdmin(id, btn) {
+  const teks = btn ? btn.innerText : '';
+  if (btn) { btn.disabled = true; btn.innerText = 'Menyusun...'; }
+  try {
+    const { data, error } = await fusionAdminRpc('laporan_perjalanan_dinas', { p_id: id });
+    if (error) throw error;
+    if (!data || data.status !== 'OK') throw new Error((data && data.message) || 'Gagal menyusun laporan.');
+    if (typeof generatePerjalananDinasReportPdf !== 'function') throw new Error('Modul laporan belum dimuat, muat ulang halaman (Ctrl+Shift+R).');
+    const doc = await generatePerjalananDinasReportPdf(data.data, 'https://rovansyahriza-crv.github.io/Fusion4/');
+    doc.save('Laporan_Perjalanan_Dinas_' + data.data.kode + '.pdf');
+  } catch (e) {
+    showToast('Laporan PDF gagal: ' + (e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = teks; }
+  }
+}
 
 // ===================== GANGGUAN OPERASIONAL (MASSAL) =====================
 let gangguanKandidat = [];
