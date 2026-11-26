@@ -118,6 +118,7 @@ function fotoUrl(r) {
   return /^https:\/\//.test(u) ? u : '';
 }
 
+const ttdAktif = (new URLSearchParams(location.search).get('s') || '').trim().toUpperCase() || null;
 async function cek(kode) {
   kodeAktif = (kode || '').trim().toUpperCase();
   document.getElementById('loading').style.display = 'block';
@@ -127,7 +128,7 @@ async function cek(kode) {
   let r;
   try {
     if (!sb) throw new Error('Tidak bisa terhubung ke server. Cek koneksi internet.');
-    const { data, error } = await sb.rpc('verifikasi_perjalanan_dinas', { p_kode: kodeAktif });
+    const { data, error } = await sb.rpc('verifikasi_perjalanan_dinas', { p_kode: kodeAktif, p_ttd: ttdAktif });
     if (error) throw error;
     r = data || {};
   } catch (e) {
@@ -169,6 +170,7 @@ function tampilkan(r) {
       <div class="baris"><b>Tanggal</b><span>${esc(tgl(r.tanggalMulai))} s/d ${esc(tgl(r.tanggalSelesai))} (${esc(r.jumlahHari)} hari)</span></div>
       <div class="baris"><b>Transportasi</b><span>${esc(r.transportasi || '-')}</span></div>
       <div class="baris"><b>Keperluan</b><span>${esc(r.keperluan || '-')}</span></div>
+      ${r.penandatangan ? `<div class="baris"><b>Tanda tangan ini</b><span>${esc(r.penandatangan.peran)}: <b>${esc(r.penandatangan.nama)}</b><br><span class="kecil">${esc(r.penandatangan.jabatan || '')}${r.penandatangan.otomatis ? ' (otomatis)' : ''} · ${esc(waktu(r.penandatangan.waktu))}</span></span></div>` : ''}
       <div class="baris"><b>Disetujui</b><span>${disetujui}</span></div>
       <div class="baris"><b>Verifikasi HR</b><span>${esc(r.verifikasiHr || '-')}</span></div>
       <div class="baris"><b>Kode</b><span style="font-family:monospace;">${esc(r.kode)}</span></div>
