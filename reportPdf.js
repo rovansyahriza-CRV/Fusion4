@@ -173,7 +173,7 @@ async function buildReportPdf(config) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(...hexToRgb(C.INK));
-  doc.text("SMMS BIMA", marginX + 20, y + 5);
+  doc.text(config.brand || "SMMS BIMA", marginX + 20, y + 5);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
@@ -345,6 +345,7 @@ async function buildReportPdf(config) {
   // ---- Tanda tangan digital (QR) ----
   y = drawSectionTitle(doc, "Tanda Tangan Digital", marginX, y, pageW, marginX);
   const sigColW = (pageW - marginX * 2) / config.signatures.length;
+  let sigExtra = 0;
   for (let i = 0; i < config.signatures.length; i++) {
     const s = config.signatures[i];
     const cx = marginX + i * sigColW + sigColW / 2;
@@ -383,9 +384,12 @@ async function buildReportPdf(config) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(...hexToRgb(C.INK_SOFT));
-    doc.text(s.sub || "", cx, y + 30, { align: "center" });
+    const subLines = doc.splitTextToSize(String(s.sub || "").replace(/\n/g, " \n "), sigColW - 4)
+      .join("\n").split("\n").map((t) => t.trim()).filter(Boolean);
+    subLines.forEach((t, li) => doc.text(t, cx, y + 30 + li * 3.4, { align: "center" }));
+    sigExtra = Math.max(sigExtra, Math.max(subLines.length - 1, 0) * 3.4);
   }
-  y += 38;
+  y += 38 + sigExtra;
 
   // ---- Footer ----
   doc.setDrawColor(...hexToRgb(C.LINE));
@@ -393,7 +397,7 @@ async function buildReportPdf(config) {
   doc.line(marginX, y, pageW - marginX, y);
   doc.setFontSize(7);
   doc.setTextColor(...hexToRgb(C.INK_SOFT));
-  doc.text("Dicetak otomatis oleh sistem SMMS BIMA", marginX, y + 5);
+  doc.text(config.footer || "Dicetak otomatis oleh sistem SMMS BIMA", marginX, y + 5);
   doc.text("Dicetak: " + new Date().toLocaleString("id-ID"), pageW - marginX, y + 5, { align: "right" });
 
   return doc;
@@ -658,6 +662,72 @@ async function generateVendorSelectionReportPdf(data) {
     ],
   };
 
+  return buildReportPdf(config);
+}
+
+// ---- 6. Report Perjalanan Dinas (SmartGate) ----
+// data = isi `data` dari RPC laporan_perjalanan_dinas. baseUrl = alamat folder halaman verifikasi
+// (QR tiap penandatangan -> verifikasi-dinas.html?k=KODE&s=P|1|2|3|H).
+async function generatePerjalananDinasReportPdf(data, baseUrl) {
+  const rp = (n) => (n == null || n === "" ? "-" : "Rp " + Math.round(Number(n)).toLocaleString("id-ID"));
+  const tglId = (v) => {
+    if (!v) return "-";
+    const d = new Date(String(v).length <= 10 ? v + "T00:00:00" : v);
+    return isNaN(d) ? String(v) : d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  };
+  const waktuId = (v) => {
+    const d = v ? new Date(v) : null;
+    return d && !isNaN(d) ? d.toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  };
+  const hari = Number(data.jumlahHari) || 1;
+  const malam = Math.max(hari - 1, 0);
+  const link = (kode) => baseUrl + "verifikasi-dinas.html?k=" + encodeURIComponent(data.kode) + "&s=" + encodeURIComponent(kode);
+
+  const rows = [];
+  if (data.uangHarian != null) {
+    rows.push(["Uang harian", { text: rp(data.uangHarian), align: "right" }, { text: hari + " hari", align: "right" }, { text: rp(Number(data.uangHarian) * hari), align: "right" }]);
+    rows.push(["Uang penginapan", { text: rp(data.uangPenginapan), align: "right" }, { text: malam + " malam", align: "right" }, { text: rp(Number(data.uangPenginapan || 0) * malam), align: "right" }]);
+    rows.push(["Estimasi total", "", "", { text: rp(data.estimasiBiaya), align: "right" }]);
+  } else {
+    rows.push(["Tarif belum tersedia untuk Grade / jarak ini", "", "", { text: "-", align: "right" }]);
+  }
+
+  const signatures = (data.penandatangan || []).map((p) => ({
+    role: p.peran,
+    name: p.nama || "—",
+    sub: [[p.jabatan, p.otomatis ? "(otomatis)" : ""].filter(Boolean).join(" "), waktuId(p.waktu)].filter(Boolean).join("\n"),
+    qrPayload: link(p.kode),
+  }));
+
+  const config = {
+    brand: "SmartGate Fusion4",
+    footer: "Dicetak otomatis oleh sistem SmartGate Fusion4. Pindai QR untuk memverifikasi tanda tangan.",
+    eyebrow: "Perjalanan dinas",
+    title: "Laporan Perjalanan Dinas",
+    infoRows: [
+      ["No. Voucher", data.kode],
+      ["Nama", data.nama],
+      ["ID Karyawan", data.qrCodeId || "-"],
+      ["Jabatan", data.kualifikasi || "-"],
+      ["Grade", data.grade || "-"],
+      ["Transportasi", data.transportasi || "-"],
+      ["Tanggal berangkat", tglId(data.tanggalMulai)],
+      ["Tanggal kembali", tglId(data.tanggalSelesai)],
+      ["Lama", hari + " hari"],
+      ["Jarak", data.jarakKm != null ? data.jarakKm + " km" : "-"],
+    ],
+    noteBlocks: [
+      { label: "Tujuan", text: data.tujuan },
+      { label: "Keperluan", text: data.keperluan },
+    ],
+    itemsTitle: "Estimasi Biaya Dinas",
+    itemsHead: ["Komponen", { text: "Tarif", align: "right" }, { text: "Jumlah", align: "right" }, { text: "Subtotal", align: "right" }],
+    itemsColWidths: [68, 36, 32, 42],
+    itemsRows: rows,
+    extraTable: null,
+    photo: null,
+    signatures,
+  };
   return buildReportPdf(config);
 }
 
